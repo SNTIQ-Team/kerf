@@ -981,6 +981,30 @@ def select_version(versions: list[NormVersion], on: str,
             "note": "the official source served this text as the current "
                     "consolidation on the requested date; its legal "
                     "validity interval is not verified"}
+    # Between two observations of the same wording, or after the newest
+    # observation: the text is known, its validity on ``on`` is not.
+    for version in versions:
+        firsts = [s.first_observed_at for s in version.states
+                  if s.first_observed_at]
+        lasts = [s.last_observed_at or s.first_observed_at
+                 for s in version.states if s.first_observed_at]
+        if firsts and min(firsts) <= on <= max(lasts):
+            return "temporally_unresolved", version, {
+                "resolution": "bracketed_by_observations",
+                "observed_from": min(firsts), "observed_until": max(lasts),
+                "note": "the official source served this wording before and "
+                        "after the requested date; its legal validity on "
+                        "that date is not verified"}
+    latest_state = chain.states[-1] if chain.states else None
+    last_seen = max((s.last_observed_at or s.first_observed_at or ""
+                     for s in chain.states), default="")
+    if versions and latest_state is not None and last_seen and \
+            on > last_seen and versions[-1].last_state is latest_state:
+        return "temporally_unresolved", versions[-1], {
+            "resolution": "after_last_observation",
+            "last_observed_at": last_seen,
+            "note": f"latest wording Lexgraph observed (last on {last_seen}); "
+                    "later changes may not be recorded yet"}
     earliest = min((s.first_observed_at or s.valid_from or "9999"
                     for v in versions for s in v.states), default=None)
     if earliest and on < earliest and not any(
