@@ -212,18 +212,76 @@ def cmd_running(args) -> int:
 
 def cmd_classify(args) -> int:
     from .polarity import assess_decision
+    from .writer import Maintenance, checkpoint
     if not space_ok("classify"):
         return 4
     conn = connect()
     init_db(conn)
+    maintenance = Maintenance(conn, every_items=500)
     sql, params = "SELECT id FROM decisions", []
     if args.source:
         sql, params = sql + " WHERE source_id = ?", [args.source]
     total = proposals = 0
     for (decision_id,) in conn.execute(sql, params).fetchall():
+        problems = maintenance.tick()
+        if problems:
+            print(json.dumps({"status": "stopped", "problems": problems, "decisions": total}), file=sys.stderr)
+            return 4
         proposals += assess_decision(conn, decision_id)
         total += 1
+    checkpoint(conn)
     print(json.dumps({"decisions": total, "proposals": proposals}))
+    return 0
+
+
+def cmd_migrate_schema(args) -> int:
+    """v3 -> v4 of the live corpus: build a verified copy next to it, then swap (the v3 file is kept)."""
+    import os
+    import sqlite3 as _sqlite3
+    from .schema_v4 import build_copy, verify
+    from .store import create_schema
+    home, source = data_home(), db_path()
+    probe = _sqlite3.connect(f"file:{source}", uri=True)
+    version = probe.execute("PRAGMA user_version").fetchone()[0]
+    if version == 4:
+        print(json.dumps({"status": "ok", "detail": "already schema v4"}))
+        return 0
+    if version != 3:
+        print(json.dumps({"status": "failed", "detail": f"schema v{version}, expected v3"}))
+        return 1
+    busy, _, _ = probe.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    probe.close()
+    if busy:
+        print(json.dumps({"status": "failed", "detail": "the v3 WAL could not be checkpointed (a reader is open)"}))
+        return 1
+    size = source.stat().st_size
+    stat = os.statvfs(home)
+    margin_ok = os.environ.get("SNTIQ_COURTS_SPACE_GUARD") == "off" or stat.f_bavail * stat.f_frsize >= size + 50 * 1000 ** 3
+    if not space_ok("migrate-schema") or not margin_ok:
+        print(json.dumps({"status": "waiting_for_space", "detail": f"needs {size / 1e9:.1f} GB + 50 GB free"}))
+        return 4
+    target = home / "courts.sqlite.v4-building"
+    target.unlink(missing_ok=True)
+    log = lambda message: print(message, file=sys.stderr, flush=True)  # noqa: E731
+    counts = build_copy(source, target, create_schema, log=log)
+    report = verify(source, target, log=log)
+    report["copied"] = counts
+    report["bytes_v3"], report["bytes_v4"] = size, target.stat().st_size
+    (home / "logs").mkdir(exist_ok=True)
+    (home / "logs" / "migrate-v3-v4-report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False))
+    if report["problems"] or args.no_swap:
+        print(json.dumps({"status": "failed" if report["problems"] else "built", "problems": report["problems"],
+                          "target": str(target), "report": str(home / "logs" / "migrate-v3-v4-report.json")}))
+        return 1 if report["problems"] else 0
+    backup = home / "courts.sqlite.v3"
+    os.replace(source, backup)
+    os.replace(target, source)
+    for suffix in ("-wal", "-shm"):
+        (home / f"courts.sqlite{suffix}").unlink(missing_ok=True)
+    conn = connect()
+    init_db(conn)
+    print(json.dumps({"status": "ok", "bytes_v3": size, "bytes_v4": source.stat().st_size, "v3_kept_as": str(backup),
+                      "report": str(home / "logs" / "migrate-v3-v4-report.json")}))
     return 0
 
 
@@ -363,7 +421,7 @@ def cmd_cites(args) -> int:
 
 
 WRITING_COMMANDS = {cmd_sync, cmd_reparse, cmd_migrate_captures, cmd_compact, cmd_classify, cmd_correct,
-                    cmd_verify, cmd_courts_map}
+                    cmd_verify, cmd_courts_map, cmd_migrate_schema}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -387,6 +445,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="also re-examine skipped duplicates (store from their capture, or re-queue them when the "
                         "decision they collided with changed id or is unnumbered)")
     p.set_defaults(func=cmd_reparse)
+    p = sub.add_parser("migrate-schema", help="v3 -> v4: build a verified copy of the corpus, then swap")
+    p.add_argument("--no-swap", action="store_true", help="build and verify only; leave the v3 file in place")
+    p.set_defaults(func=cmd_migrate_schema)
     p = sub.add_parser("migrate-captures", help="move legacy raw/*.gz captures into packs and verify")
     p.add_argument("--delete-legacy", action="store_true", help="delete legacy files after full verification")
     p.add_argument("--verify-only", action="store_true", help="only verify packs against the index")

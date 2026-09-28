@@ -181,13 +181,13 @@ def test_get_decision_paragraph_and_citing(conn, fixture):
 
 def test_paragraph_integrity_check(conn, fixture):
     seed(conn, fixture)
-    conn.execute("UPDATE paragraphs SET text = text || ' manipulated' WHERE id = ?", (f"{ECLI}#rn-1",))
+    conn.execute("UPDATE paragraphs SET text = text || ' manipulated' WHERE decision_id = ? AND anchor = 'rn-1'", (ECLI,))
     assert get_paragraph(open_db(), f"{ECLI}#rn-1")["status"] == "integrity_check_failed"
 
 
 def test_procedural_reference_from_editorial_vorinstanz_is_relinked(conn, fixture):
     seed(conn, fixture)
-    rows = conn.execute("SELECT relation, target_id, origin FROM relations WHERE paragraph_id IS NULL "
+    rows = conn.execute("SELECT relation, target_id, origin FROM relations WHERE paragraph_ordinal IS NULL "
                         "AND target_kind='decision'").fetchall()
     assert ("procedural_reference", "court:vgh-bw/2015-12-01/A_11_S_490-15", "editorial_metadata") in \
         [tuple(r) for r in rows]
@@ -198,7 +198,7 @@ def test_coverage_report(conn, fixture):
     report = coverage(open_db())
     rows = {s["source_id"]: s for s in report["sources"]}
     assert rows["rii"]["decisions"] == 1 and rows["rii"]["date_from"] == "2016-03-16"
-    assert report["schema_version"] == 3 and report["paragraphs"] > 0
+    assert report["schema_version"] == 4 and report["paragraphs"] > 0
     assert rows["rii"]["robots_policy"] == "respect" and rows["rii"]["policy_decided_at"] is None
 
 
@@ -306,14 +306,18 @@ def test_local_disk_full_stops_the_run_and_leaves_items_pending(conn, fixture, m
 
 def test_blocks_are_offsets_into_text_and_contexts_are_derived(conn, fixture):
     seed(conn, fixture)
-    raw = conn.execute("SELECT blocks, text FROM paragraphs WHERE id=?", (f"{ECLI}#rn-10",)).fetchone()
-    blocks = json.loads(raw["blocks"])
+    from courts.paragraphs import decode_blocks
+    raw = conn.execute("SELECT blocks, text, ordinal FROM paragraphs WHERE decision_id=? AND anchor='rn-10'",
+                       (ECLI,)).fetchone()
+    compact = json.loads(raw["blocks"])                                           # v4: [[length, locator(, kind)]]
+    assert all(isinstance(b[0], int) and isinstance(b[1], str) and len(b) in (2, 3) for b in compact)
+    blocks = decode_blocks(raw["blocks"])
     assert all(set(b) == {"start", "end", "locator", "kind"} for b in blocks)      # no duplicated text
     assert "\n\n".join(raw["text"][b["start"]:b["end"]] for b in blocks) == raw["text"]
     p = get_paragraph(open_db(), f"{ECLI}#rn-10")["evidence"][0]
     assert p["blocks"][2]["text"].startswith("rechtfertigt diese ebenfalls nicht")
-    stored = conn.execute("SELECT quoted_context FROM relations WHERE paragraph_id=? AND target_id=?",
-                          (f"{ECLI}#rn-10", "de/bund/vwgo/para/75")).fetchone()[0]
+    stored = conn.execute("SELECT quoted_context FROM relations WHERE decision_id=? AND paragraph_ordinal=? "
+                          "AND target_id=?", (ECLI, raw["ordinal"], "de/bund/vwgo/para/75")).fetchone()[0]
     assert stored == ""                                                            # derived at read time
     rel = next(r for r in p["relations"] if r["target_id"] == "de/bund/vwgo/para/75")
     assert "Untätigkeitsklage" in rel["evidence"]["quoted_context"]
