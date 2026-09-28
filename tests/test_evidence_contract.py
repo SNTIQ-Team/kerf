@@ -193,3 +193,18 @@ def test_bundled_toc_covers_the_deep_corpus():
     assert payload["acts"]["gg"]["norms"]["art/1"] == "art_1.html"
     assert payload["acts"]["sgb_14"]["norms"]["para/37"] == "__37.html"
     assert not payload["failures"]
+
+
+def test_head_markdown_front_matter_names_its_source():
+    from api.act_archive import render_markdown_snapshot
+    act = {"id": "fed_x", "jurabk": "X", "juris": "DE", "title": "X-Gesetz",
+           "source_url": "https://www.gesetze-im-internet.de/x/",
+           "build": "20260630", "stand": "Stand: zuletzt geändert durch Art. 1",
+           "norms": [{"enbez": "§ 1", "titel": "", "text": "(1) Text."}],
+           "versions": [], "official_states": []}
+    result = render_markdown_snapshot(act, fallback_head="2026-09-28")
+    front, _ = main.parse_front_matter(result["markdown"])
+    assert front["source"] == "GII"
+    assert front["source_url"] == "https://www.gesetze-im-internet.de/x/"
+    assert front["source_build"] == "20260630"
+    assert "retrieval" in front["date_basis"]
