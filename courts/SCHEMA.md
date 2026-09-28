@@ -97,6 +97,8 @@ Typed citation statements. Never a generic "cites".
 | `derived_by`, `legal_effect_verified`, `confidence` | `derived_by` ∈ `parser, model, user`. `legal_effect_verified` is 0 for everything the parser writes. |
 | `detail` | JSON: act, act_key, act_resolution (`gii_catalog, alias, land_affix, eu, eu_citation, international, unresolved`), chain, `in_conjunction_with` (i.V.m.), `following` (`f`/`ff`), `via_range`, `pinpoint_extra` (Alt./Hs.), court/date/case_number for decisions. |
 
+Indexes: `decision_id`, `paragraph_id` (added 2026-09-28, additive), `target_id`, `target_decision_id`, `(target_court_id, target_date, target_case_key)`.
+
 Norm prefix query (segment-exact, index-friendly): `target_id = :n OR (target_id >= :n || '/' AND target_id < :n || '0')`. This matches `…/para/75` and `…/para/75/abs/1`, but not `…/para/750`.
 
 ### `captures`

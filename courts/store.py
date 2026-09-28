@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS relations(
 CREATE INDEX IF NOT EXISTS relations_target ON relations(target_id);
 CREATE INDEX IF NOT EXISTS relations_target_decision ON relations(target_decision_id);
 CREATE INDEX IF NOT EXISTS relations_decision ON relations(decision_id);
+CREATE INDEX IF NOT EXISTS relations_paragraph ON relations(paragraph_id);
 CREATE INDEX IF NOT EXISTS relations_target_case ON relations(target_court_id, target_date, target_case_key);
 CREATE TABLE IF NOT EXISTS sync_runs(
   id INTEGER PRIMARY KEY,
