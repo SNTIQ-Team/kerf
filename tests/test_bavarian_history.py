@@ -383,3 +383,19 @@ def test_predecessor_edition_is_split_off():
     undated = {**base, "fassung": None, "captured_at": "2021-09-18T21:55:38Z"}
     keep, other = bh.split_editions("by_dvasyl", [old, new, undated])
     assert keep == [new, undated] and other == [old]
+
+
+def test_editorial_note_is_not_a_norm_change():
+    # DVAsyl § 3 Abs. 1 Satz 1 as served 2025-08-12 and 2025-12-14 (verbatim)
+    old = ("(1) 1Bei Entscheidungen nach Teil 2 und 3 dieser Verordnung sind folgende Quoten "
+           "Maßstab bei der Verteilung auf die Regierungsbezirke: 1. Oberbayern 35,6 %, "
+           "2. Niederbayern 9,5 %")
+    new = ("(1) 1Bei Entscheidungen nach Teil 2 und 3 dieser Verordnung sind folgende Quoten "
+           "Maßstab bei der Verteilung auf die Regierungsbezirke: [Redaktioneller Hinweis: Die "
+           "Quoten wurden mWv 1.8.2025 auf der Grundlage von § 29 der "
+           "Asyldurchführungsverordnung (DVAsyl) v. 16.8.20216 (GVBl. S. 258) fortgeschrieben, "
+           "siehe Bek. v. 16.7.2025 (BayMBl. Nr. 310). 1. Oberbayern 35,6 %, "
+           "2. Niederbayern 9,5 %")
+    notes = bh.editorial_notes_only(old, new)
+    assert notes and notes[0].startswith("[Redaktioneller Hinweis: Die Quoten wurden mWv 1.8.2025")
+    assert bh.editorial_notes_only(old, old.replace("35,6", "36,1")) is None

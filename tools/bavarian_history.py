@@ -24,7 +24,6 @@ document (signature line, issue date, Inkrafttreten clause).
 """
 from __future__ import annotations
 
-import copy
 import gzip
 import hashlib
 import io
@@ -38,19 +37,33 @@ import zipfile
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterator
 
 try:  # the shared helper lands with the hist-wayback workstream
     from api.history_identity import norm_identity  # type: ignore
 except ImportError:  # pragma: no cover - exercised until that merge
-    def norm_identity(enbez: str, titel: str, text: str) -> str:
-        """Copied verbatim from the phase-4 spec (norm text identity)."""
-        def nfc(value: str) -> str:
-            return unicodedata.normalize("NFC", value or "")
-        body = re.sub(r"\s+", "", nfc(text).replace("\xa0", " ")
-                      .replace("­", ""))
-        raw = nfc(enbez) + "\x1f" + nfc(titel) + "\x1f" + body
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    # Byte-identical copy of api/history_identity.py on branch hist-wayback
+    # (commit 92ab93d), which implements the phase-4 spec identity.
+    _WS = re.compile(r"\s+")
+
+    def normalize_text_for_identity(value: str | None) -> str:
+        """Norm body: NFC, nbsp folded, soft hyphens dropped, all whitespace removed."""
+        text = unicodedata.normalize("NFC", str(value or ""))
+        text = text.replace("\xa0", " ").replace("\xad", "")
+        return _WS.sub("", text)
+
+    def normalize_label_for_identity(value: str | None) -> str:
+        """Designator/title: NFC, nbsp as space, whitespace runs collapsed."""
+        text = unicodedata.normalize("NFC", str(value or ""))
+        text = text.replace("\xa0", " ").replace("\xad", "")
+        return _WS.sub(" ", text).strip()
+
+    def norm_identity(enbez: str | None, titel: str | None, text: str | None) -> str:
+        """sha256 identity of one norm version (hex)."""
+        payload = "\x1f".join((normalize_label_for_identity(enbez),
+                               normalize_label_for_identity(titel),
+                               normalize_text_for_identity(text)))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 ROOT = Path(__file__).resolve().parent.parent
 MAIN_CHECKOUT = Path(os.environ.get(
@@ -332,7 +345,9 @@ def html_norm_text(blocks: list) -> str:
     paragraph ``(n)``; list blocks and continuations stay on the line."""
     lines: list[str] = []
     for block in blocks:
-        text = re.sub(GLUE + r"\s*", "", _collapse(_render(block)))
+        # the page keeps the XML's own blank after a sentence number
+        # ("1 Art. 32" vs "2Art. 33"); only the marker goes
+        text = _collapse(_render(block).replace(GLUE, ""))
         if not text:
             continue
         classes = block.get("class") or [] if hasattr(block, "get") else []
@@ -599,13 +614,36 @@ def _gvbl_lines(text_html) -> list[dict]:
     return lines
 
 
+def _follows(previous: str | None, number: str) -> bool:
+    """Amending acts number their own articles 1, 2, 3 … (maybe 1a): a heading
+    that breaks the sequence belongs to quoted new wording."""
+    if previous is None:
+        return True
+    p = re.fullmatch(r"(\d+)([a-z]?)", previous)
+    n = re.fullmatch(r"(\d+)([a-z]?)", number)
+    if not p or not n:
+        return False
+    pn, nn = int(p.group(1)), int(n.group(1))
+    return nn == pn + 1 and not n.group(2) or (nn == pn and n.group(2) > p.group(2))
+
+
 def gvbl_sections(lines: list[dict]) -> list[dict]:
-    """Split GVBl text lines into article sections (``§ 1 …``/``Art. 1 …``)."""
+    """Split GVBl text lines into article sections (``§ 1 …``/``Art. 1 …``).
+
+    Only headings in the document's own unit and numbering sequence open a
+    section; quoted new provisions ("Art. 66a Inklusionsamt" inside § 1)
+    stay inside the article that inserts them."""
     sections, current, preamble = [], None, []
+    own_prefix = None
     i = 0
     while i < len(lines):
         line = lines[i]
         match = HEADING_ART_RE.match(line["text"]) if line["heading"] else None
+        if match and own_prefix is None:
+            own_prefix = match.group(1)
+        if match and (match.group(1) != own_prefix or not _follows(
+                current["number"] if current else None, match.group(2))):
+            match = None
         if match:
             title = match.group(3)
             # old pages put "§ 1" and "Änderung …" into two centred lines
@@ -1383,6 +1421,32 @@ def command_targets(head: str, prefix: str, default_predicate: str = "") -> list
     return targets
 
 
+STRUCTURE_RE = re.compile(r"^(?:Der\s+|Die\s+|Das\s+|Nach\s+|Vor\s+|Dem\s+)?(?:bisherige[rn]?\s+)?"
+                          r"(?:Teil|Abschnitt|Kapitel|Unterabschnitt|Gliederung)\b")
+
+
+def structural_targets(head: str, lines: list[str], prefix: str) -> list[dict]:
+    """"Teil 7a wird wie folgt gefasst: „… Art. 66a Inklusionsamt …“" names
+    no norm itself; the norms are the headings of the quoted new wording."""
+    text = _unquoted(_collapse(head))
+    if not STRUCTURE_RE.match(text):
+        return []
+    insert = bool(re.search(r"\b(?:eingefügt|angefügt|vorangestellt)\b", text))
+    rewrite = bool(re.search(r"wie\s+folgt\s+gefasst|folgende\s+Fassung|durch\s+folgende", text))
+    if not (insert or rewrite):
+        return []
+    targets, seen = [], set()
+    for line in lines[1:]:
+        match = re.match(rf"^„?\s*({re.escape(prefix)})\s*(\d+[a-z]?)(?:\s+[A-ZÄÖÜ(][^.]*)?$",
+                         line)
+        if match and match.group(2) not in seen:
+            seen.add(match.group(2))
+            change = "eingefügt" if insert else "neugefasst"
+            targets.append({"norm": f"{prefix} {match.group(2)}", "change_type": change,
+                            "operation": f"{change} (als Teil der neu gefassten Gliederungseinheit)"})
+    return targets
+
+
 def _container(section_lines: list[str], nummer: str | None,
                absatz: str | None) -> tuple[list[str], int] | None:
     """Lines amending the target act inside one GVBl article section and the
@@ -1417,16 +1481,18 @@ def extract_commands(section: dict, prefix: str, nummer: str | None = None,
     if found is None:
         return {"status": "container_not_found", "commands": []}
     lines, level = found
-    lines = _command_lines(lines)
     items, intro = [], []
+    depth = 0
     for line in lines:
-        lv = _level(line)
+        # an item starts only outside quoted new wording
+        lv = _level(line) if depth == 0 else None
         if lv and lv[0] == level:
             items.append({"marker": lv[1], "lines": [line]})
         elif items:
             items[-1]["lines"].append(line)
         else:
             intro.append(line)
+        depth = max(0, depth + line.count("„") - line.count("“"))
     # "Art. 5 des Gesetzes … wird wie folgt geändert: 1. Abs. 1a …": the
     # intro names the norm, the items only its sub-units
     intro_targets = (command_targets(intro[0], prefix)
@@ -1453,7 +1519,7 @@ def extract_commands(section: dict, prefix: str, nummer: str | None = None,
         if in_sequence:
             expected += 1
         head = re.sub(r"^\S+\s+", "", item["lines"][0], count=1)
-        targets = command_targets(head, prefix)
+        targets = command_targets(head, prefix) or structural_targets(head, item["lines"], prefix)
         if not targets and intro_targets:
             targets = [{"norm": t["norm"], "change_type": "geändert",
                         "operation": "geändert (Teil)", "inherited": True}
@@ -1591,7 +1657,7 @@ def parsed_capture(row: dict, root=None, refresh: bool = False) -> dict:
     return record
 
 
-PARSER_VERSION = "2026-09-28.14"
+PARSER_VERSION = "2026-09-28.16"
 
 
 def wayback_observations(act_id: str, root=None) -> tuple[list[dict], list[dict]]:
@@ -1688,8 +1754,12 @@ def current_act(act_id: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def validate_against_current(act_id: str, observations: list[dict]) -> dict:
-    """Match rate of the newest archived capture of each norm vs today's text."""
+def validate_against_current(act_id: str, observations: list[dict],
+                             changes: list[dict] | None = None) -> dict:
+    """Match rate of the newest archived capture of each norm vs today's text.
+
+    A mismatch is "explained" when the version log dates a change of that
+    norm after what the capture showed (the capture predates the change)."""
     act = current_act(act_id)
     current = {nid: row for nid, row in norm_ids(act_id, act["norms"])}
     latest: dict[str, dict] = {}
@@ -1711,12 +1781,23 @@ def validate_against_current(act_id: str, observations: list[dict]) -> dict:
         exact += (obs["text"] == row["text"] and obs["titel"] == row["titel"]
                   and obs["enbez"] == row["enbez"])
         if not same_identity:
+            shown = obs.get("consolidation_date") or obs["known_at"]
+            later = [c["amending_act"]["citation"] for c in changes or []
+                     if c["norm_id"] == norm_id and any(
+                         d and d > shown for d in (c["dates"]["in_force"]["date"],
+                                                   c["dates"]["promulgated"]["date"]))]
             mismatches.append({"norm_id": norm_id, "captured_at": obs["captured_at"],
-                               "archive_url": obs["archive_url"]})
+                               "archive_url": obs["archive_url"],
+                               "explained_by_later_change": later})
+    explained = sum(1 for m in mismatches if m["explained_by_later_change"])
+    unchanged = compared - explained
     return {"act_id": act_id, "compared": compared, "exact": exact,
             "identity": identity, "current_norms": len(current),
             "exact_rate": round(exact / compared, 4) if compared else None,
             "identity_rate": round(identity / compared, 4) if compared else None,
+            "explained_by_later_change": explained,
+            "identity_rate_unchanged_norms": round(identity / unchanged, 4) if unchanged else None,
+            "exact_rate_unchanged_norms": round(exact / unchanged, 4) if unchanged else None,
             "mismatches": mismatches}
 
 
@@ -1753,6 +1834,24 @@ def _pdf_pages_cached(row: dict, root=None) -> list[str]:
     return pages
 
 
+def _gvbl_detail_cached(row: dict, root=None) -> dict:
+    """Parse (and keep, per raw object) one GVBl detail page."""
+    act_id = row.get("act_id") or "gvbl"
+    cached = get_parsed("gvbl", act_id, row["sha256"], root)
+    if cached and cached.get("parser_version") == PARSER_VERSION:
+        return cached["document"]
+    doc = parse_gvbl_detail(get_raw("gvbl", row["sha256"], row.get("ext") or "html", root))
+    doc.pop("lines", None)
+    put_parsed({"schema": PARSED_SCHEMA, "parser": doc["parser"],
+                "parser_version": PARSER_VERSION, "source": "gvbl", "act_id": act_id,
+                "sha256": row["sha256"], "captured_at": row.get("captured_at"),
+                "original_url": row["original_url"], "archive_url": None,
+                "title": doc.get("title"), "complete": bool(doc.get("sections")),
+                "norm_count": 0, "norms": [], "document": doc,
+                "warnings": doc.get("warnings") or []}, root)
+    return doc
+
+
 def _linked_pdf(detail: dict, index: dict, hint_iso: str | None, root=None) -> dict | None:
     """The issue PDF a detail page links to (``…/gvbl-2018-13.pdf#page=5``)."""
     link = detail.get("pdf_url") or ""
@@ -1786,7 +1885,7 @@ def resolve_gvbl(entry: dict, index: dict, root=None) -> dict | None:
         year, page = cand["year"], cand["page"]
         row = index["detail"].get((year, page))
         if row:
-            doc = parse_gvbl_detail(get_raw("gvbl", row["sha256"], row.get("ext") or "html", root))
+            doc = _gvbl_detail_cached(row, root)
             printed = {doc.get("platform_date"), doc.get("title_date"),
                        doc.get("decision_date"), (doc.get("signature") or {}).get("date")}
             if hints & printed:
@@ -2273,34 +2372,55 @@ def link_changes(changes: list[dict], versions: dict[str, list[dict]],
             if day > as_of:
                 effect["reason"] = "pending change (not yet in force)"
                 continue
-            before = [o for o in obs if _cons(o) < day]
-            after = [o for o in obs if o.get("consolidation_date") and o["consolidation_date"] >= day]
-            weak = False
-            if not after:
-                after = [o for o in obs if not o.get("consolidation_date") and o["known_at"] >= day]
-                weak = bool(after)
-            last_before = max(before, key=lambda o: (_cons(o), o["known_at"])) if before else None
-            first_after = min(after, key=lambda o: (_cons(o), o["known_at"])) if after else None
+            promulgated = change["dates"]["promulgated"]["date"]
+            retroactive = bool(promulgated and day < promulgated)
+            if retroactive:
+                # a retroactive change reaches the consolidation only after its
+                # promulgation: order observations by when they were served
+                pos = lambda o: o["known_at"]  # noqa: E731
+                before = [o for o in obs if o["known_at"] < promulgated]
+                after = [o for o in obs if o["known_at"] >= promulgated]
+                weak = True
+            else:
+                pos = _cons
+                before = [o for o in obs if _cons(o) < day]
+                after = [o for o in obs if o.get("consolidation_date")
+                         and o["consolidation_date"] >= day]
+                weak = False
+                if not after:
+                    after = [o for o in obs if not o.get("consolidation_date")
+                             and o["known_at"] >= day]
+                    weak = bool(after)
+            last_before = max(before, key=lambda o: (pos(o), o["known_at"])) if before else None
+            first_after = min(after, key=lambda o: (pos(o), o["known_at"])) if after else None
             if first_after is None:
                 effect["reason"] = "no observation of the consolidation after the in-force date"
                 if last_before:
                     effect["before_version_id"] = vid[last_before["identity"]].get("version_id")
                 continue
-            lower = _cons(last_before) if last_before else "0000-00-00"
-            upper = _cons(first_after)
+            lower = pos(last_before) if last_before else "0000-00-00"
+            upper = pos(first_after)
+
+            def effective(c):
+                d, p = c["dates"]["in_force"]["date"], c["dates"]["promulgated"]["date"]
+                return p if retroactive and p else d
             rivals = [c for c in dated if c is not change
-                      and lower < c["dates"]["in_force"]["date"] <= upper]
+                      and lower < effective(c) <= upper]
             effect["window"] = {"after_last_observation_before": lower,
                                 "first_observation_after": upper,
-                                "basis": "consolidation dates of the bracketing observations"
-                                         + (" (capture dates, no consolidation date)" if weak else "")}
-            effect["after_version_id"] = vid[first_after["identity"]].get("version_id")
-            if last_before:
-                effect["before_version_id"] = vid[last_before["identity"]].get("version_id")
+                                "basis": ("capture dates around the promulgation of a "
+                                          "retroactive change" if retroactive else
+                                          "consolidation dates of the bracketing observations"
+                                          + (" (capture dates, no consolidation date)"
+                                             if weak else ""))}
             if rivals:
+                # several changes share the window: no single one owns the texts
                 effect["reason"] = (f"{len(rivals)} other dated change(s) to this norm fall "
                                     "between the bracketing observations")
                 continue
+            effect["after_version_id"] = vid[first_after["identity"]].get("version_id")
+            if last_before:
+                effect["before_version_id"] = vid[last_before["identity"]].get("version_id")
             if last_before is None:
                 effect["reason"] = "no observation before the change"
                 continue
@@ -2446,12 +2566,24 @@ def text_difference_findings(act_id: str, versions: dict[str, list[dict]],
                 lower, upper = upper, lower
 
             def within(c):
-                d = c["dates"]["in_force"]["date"] or c["dates"]["promulgated"]["date"]
-                return d is not None and lower < d <= max(upper, cur["known_at"])
+                days = [c["dates"]["in_force"]["date"], c["dates"]["promulgated"]["date"]]
+                top = max(upper, cur["known_at"])
+                return any(d is not None and lower < d <= top for d in days)
             explained = [c for c in by_norm.get(norm_id, []) if within(c)]
             if explained:
                 continue
             maybe = [c["amending_act"]["citation"] for c in act_level if within(c)]
+            notes = editorial_notes_only(prev["text"], cur["text"])
+            if notes is not None:
+                findings.append({
+                    "act_id": act_id, "norm_id": norm_id, "kind": "editorial_note_change",
+                    "detail": (f"between {prev['known_at']} ({prev.get('consolidation_raw')}) and "
+                               f"{cur['known_at']} ({cur.get('consolidation_raw')}) BAYERN.RECHT "
+                               f"changed only editorial notes: {notes}"),
+                    "notes": notes,
+                    "evidence": [prev.get("archive_url") or prev.get("snapshot"),
+                                 cur.get("archive_url") or cur.get("snapshot")]})
+                continue
             findings.append({
                 "act_id": act_id, "norm_id": norm_id,
                 "kind": "text_difference_without_version_log_change",
@@ -2480,6 +2612,27 @@ def split_editions(act_id: str, wayback: list[dict]) -> tuple[list[dict], list[d
     return keep, other
 
 
+EDITORIAL_START = re.compile(r"^\[(?:Redaktioneller Hinweis|Red\. Anm\.|Amtl\. Anm\.)")
+
+
+def editorial_notes_only(old: str, new: str) -> list[str] | None:
+    """The editorial notes (``[Redaktioneller Hinweis: …``) inserted or
+    removed, if the two texts differ in nothing else; else None."""
+    import difflib
+    a, b = old.split(), new.split()
+    notes = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if op == "equal":
+            continue
+        if op == "replace":
+            return None
+        chunk = " ".join(b[j1:j2] if op == "insert" else a[i1:i2])
+        if not EDITORIAL_START.match(chunk):
+            return None
+        notes.append(chunk if op == "insert" else f"(entfernt) {chunk}")
+    return notes or None
+
+
 def build_act_history(act_id: str, root=None, as_of: str = AS_OF) -> dict:
     wayback, stands = wayback_observations(act_id, root)
     wayback, predecessor = split_editions(act_id, wayback)
@@ -2501,7 +2654,7 @@ def build_act_history(act_id: str, root=None, as_of: str = AS_OF) -> dict:
                        f"act's version chains"),
             "evidence": sorted({o["archive_url"] for o in predecessor})[:5]})
     records = version_records(act_id, versions, changes, findings)
-    validation = validate_against_current(act_id, wayback)
+    validation = validate_against_current(act_id, wayback, changes)
     return {"act_id": act_id, "versions": records, "changes": changes,
             "amending_acts": amending_acts, "findings": findings,
             "validation": validation,
