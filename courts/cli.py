@@ -6,6 +6,7 @@ import contextlib
 import json
 import re
 import sys
+import time
 
 from .config import data_home, db_path
 from .space import check as check_space
@@ -43,22 +44,66 @@ def http_for(adapter) -> PoliteHttp:
                       respect_robots=adapter.robots_policy == "respect")
 
 
+MAX_PARALLEL_SOURCES = 6
+
+
 def cmd_sync(args) -> int:
-    adapter = get_adapter(args.source)
+    """One writer process: each source is a thread (its own polite HTTP session, network in parallel);
+    all share one connection whose transaction lock serialises the short write transactions, and one
+    Maintenance checkpoints the WAL and runs the space guard (courts.writer)."""
+    import threading
+    from .sync import STOP_AFTER_ITEM
+    from .writer import Maintenance, SharedConnection
+    # A source may carry its own court restriction: "sn:ovg" (several: "sn:ovg+vg").
+    specs = {}
+    for spec in (args.source + "," + (args.then or "")).split(","):
+        if spec.strip():
+            source_id, _, restriction = spec.strip().partition(":")
+            specs[source_id] = [c for c in restriction.split("+") if c] or None
+    sources = [s.strip().partition(":")[0] for s in args.source.split(",") if s.strip()]
+    queued = [s.strip().partition(":")[0] for s in (args.then or "").split(",") if s.strip()]
+    if len(sources) > MAX_PARALLEL_SOURCES:
+        print(json.dumps({"status": "invalid_argument",
+                          "detail": f"at most {MAX_PARALLEL_SOURCES} sources per writer process"}), file=sys.stderr)
+        return 2
+    adapters = [get_adapter(s) for s in sources]
+    waiting = [get_adapter(s) for s in queued]
     if not space_ok(f"sync {args.source}"):
         return 4
-    conn = connect()
+    conn = SharedConnection(connect(threads=True))
     init_db(conn)
-    http = http_for(adapter)
+    maintenance = Maintenance(conn)
     courts = [c.strip() for c in args.court.split(",")] if args.court else None
-    try:
-        result = sync_source(adapter, conn, http, since=args.since, limit=args.limit, courts=courts,
-                             retry_failed=args.retry_failed)
-    except SourceBusy as exc:
-        print(json.dumps({"status": "busy", "detail": str(exc)}), file=sys.stderr)
-        return 3
-    print(json.dumps(result, ensure_ascii=False))
-    return 0 if result["status"] in ("ok", "partial") else 1
+    results: dict[str, dict] = {}
+
+    def run(adapter):
+        try:
+            results[adapter.source_id] = sync_source(adapter, conn, http_for(adapter), since=args.since,
+                                                     limit=args.limit, courts=specs.get(adapter.source_id) or courts,
+                                                     retry_failed=args.retry_failed, maintenance=maintenance)
+        except SourceBusy as exc:
+            results[adapter.source_id] = {"status": "busy", "detail": str(exc)}
+        except Exception as exc:  # one source's defect must not take the others down
+            results[adapter.source_id] = {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"[:500]}
+    def start(adapter):
+        thread = threading.Thread(target=run, args=(adapter,), name=f"sync-{adapter.source_id}", daemon=True)
+        thread.start()
+        return thread
+    # At most len(--source) threads at a time; a --then source starts when a slot frees up (batch order).
+    threads = [start(a) for a in adapters]
+    while threads:
+        time.sleep(1.0)  # the main thread keeps receiving SIGTERM
+        alive = [t for t in threads if t.is_alive()]
+        while waiting and len(alive) < len(adapters) and not STOP_AFTER_ITEM.is_set() and not maintenance.stopped:
+            alive.append(start(waiting.pop(0)))
+        threads = alive
+    for adapter in waiting:
+        results[adapter.source_id] = {"status": "not_started",
+                                      "detail": "stopped before its turn (SIGTERM or space/WAL guard)"}
+    from .writer import checkpoint
+    checkpoint(conn)
+    print(json.dumps(results if len(results) > 1 else results[sources[0]], ensure_ascii=False))
+    return 0 if all(r.get("status") in ("ok", "partial") for r in results.values()) else 1
 
 
 def cmd_reparse(args) -> int:
@@ -172,23 +217,90 @@ def cmd_running(args) -> int:
                 state, pid = "running", handle.read().strip() or "?"
         rows.append([lock.stem, state, pid])
     print(_table(rows))
+    writer = data_home() / ".writer.lock"
+    if writer.exists():
+        with open(writer, "r+") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(handle, fcntl.LOCK_UN)
+                print("writer: none")
+            except BlockingIOError:
+                print(f"writer: {handle.read().strip() or '?'}")
     return 0
 
 
 def cmd_classify(args) -> int:
     from .polarity import assess_decision
+    from .writer import Maintenance, checkpoint
     if not space_ok("classify"):
         return 4
     conn = connect()
     init_db(conn)
+    maintenance = Maintenance(conn, every_items=500)
     sql, params = "SELECT id FROM decisions", []
     if args.source:
         sql, params = sql + " WHERE source_id = ?", [args.source]
     total = proposals = 0
     for (decision_id,) in conn.execute(sql, params).fetchall():
+        problems = maintenance.tick()
+        if problems:
+            print(json.dumps({"status": "stopped", "problems": problems, "decisions": total}), file=sys.stderr)
+            return 4
         proposals += assess_decision(conn, decision_id)
         total += 1
+    checkpoint(conn)
     print(json.dumps({"decisions": total, "proposals": proposals}))
+    return 0
+
+
+def cmd_migrate_schema(args) -> int:
+    """v3 -> v4 of the live corpus: build a verified copy next to it, then swap (the v3 file is kept)."""
+    import os
+    import sqlite3 as _sqlite3
+    from .schema_v4 import build_copy, verify
+    from .store import create_schema
+    home, source = data_home(), db_path()
+    probe = _sqlite3.connect(f"file:{source}", uri=True)
+    version = probe.execute("PRAGMA user_version").fetchone()[0]
+    if version == 4:
+        print(json.dumps({"status": "ok", "detail": "already schema v4"}))
+        return 0
+    if version != 3:
+        print(json.dumps({"status": "failed", "detail": f"schema v{version}, expected v3"}))
+        return 1
+    busy, _, _ = probe.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    probe.close()
+    if busy:
+        print(json.dumps({"status": "failed", "detail": "the v3 WAL could not be checkpointed (a reader is open)"}))
+        return 1
+    size = source.stat().st_size
+    stat = os.statvfs(home)
+    margin_ok = os.environ.get("SNTIQ_COURTS_SPACE_GUARD") == "off" or stat.f_bavail * stat.f_frsize >= size + 50 * 1000 ** 3
+    if not space_ok("migrate-schema") or not margin_ok:
+        print(json.dumps({"status": "waiting_for_space", "detail": f"needs {size / 1e9:.1f} GB + 50 GB free"}))
+        return 4
+    target = home / "courts.sqlite.v4-building"
+    target.unlink(missing_ok=True)
+    log = lambda message: print(message, file=sys.stderr, flush=True)  # noqa: E731
+    counts = build_copy(source, target, create_schema, log=log)
+    report = verify(source, target, log=log)
+    report["copied"] = counts
+    report["bytes_v3"], report["bytes_v4"] = size, target.stat().st_size
+    (home / "logs").mkdir(exist_ok=True)
+    (home / "logs" / "migrate-v3-v4-report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False))
+    if report["problems"] or args.no_swap:
+        print(json.dumps({"status": "failed" if report["problems"] else "built", "problems": report["problems"],
+                          "target": str(target), "report": str(home / "logs" / "migrate-v3-v4-report.json")}))
+        return 1 if report["problems"] else 0
+    backup = home / "courts.sqlite.v3"
+    os.replace(source, backup)
+    os.replace(target, source)
+    for suffix in ("-wal", "-shm"):
+        (home / f"courts.sqlite{suffix}").unlink(missing_ok=True)
+    conn = connect()
+    init_db(conn)
+    print(json.dumps({"status": "ok", "bytes_v3": size, "bytes_v4": source.stat().st_size, "v3_kept_as": str(backup),
+                      "report": str(home / "logs" / "migrate-v3-v4-report.json")}))
     return 0
 
 
@@ -327,15 +439,23 @@ def cmd_cites(args) -> int:
     return 0
 
 
+WRITING_COMMANDS = {cmd_sync, cmd_reparse, cmd_migrate_captures, cmd_compact, cmd_classify, cmd_correct,
+                    cmd_verify, cmd_courts_map, cmd_migrate_schema}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m courts", description="Local German court decision corpus")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("sync", help="incremental sync of one source")
-    p.add_argument("--source", required=True, help="rii | nrw | by | <land> (" + ", ".join(sorted(registry())) + ")")
+    p = sub.add_parser("sync", help="incremental sync of one or more sources (one writer process)")
+    p.add_argument("--source", required=True, help="comma list, at most 6 (a court restriction per source: "
+                   "sn:ovg): rii | nrw | by | <land> ("
+                   + ", ".join(sorted(registry())) + ")")
     p.add_argument("--since", type=_date, help="only decisions dated on/after YYYY-MM-DD")
     p.add_argument("--limit", type=_positive, help="fetch at most N decisions (priority order)")
     p.add_argument("--court", help="comma list of court ids/prefixes to restrict (e.g. bsg,bverwg)")
     p.add_argument("--retry-failed", action="store_true", help="also retry previously failed items")
+    p.add_argument("--then", help="comma list of sources to sync next, each starting when a --source thread "
+                                  "finishes (at most len(--source) at a time)")
     p.set_defaults(func=cmd_sync)
     p = sub.add_parser("reparse", help="re-parse stored raw captures with the current parser (offline)")
     p.add_argument("--source", help="one source (default: all)")
@@ -347,6 +467,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="also re-examine skipped duplicates (store from their capture, or re-queue them when the "
                         "decision they collided with changed id or is unnumbered)")
     p.set_defaults(func=cmd_reparse)
+    p = sub.add_parser("migrate-schema", help="v3 -> v4: build a verified copy of the corpus, then swap")
+    p.add_argument("--no-swap", action="store_true", help="build and verify only; leave the v3 file in place")
+    p.set_defaults(func=cmd_migrate_schema)
     p = sub.add_parser("migrate-captures", help="move legacy raw/*.gz captures into packs and verify")
     p.add_argument("--delete-legacy", action="store_true", help="delete legacy files after full verification")
     p.add_argument("--verify-only", action="store_true", help="only verify packs against the index")
@@ -427,8 +550,15 @@ def main(argv: list[str] | None = None) -> int:
             return
         raise KeyboardInterrupt(f"signal {signum}")
     signal.signal(signal.SIGTERM, _terminate)
+    from .writer import WriterBusy, writer_lock
     try:
+        if args.func in WRITING_COMMANDS:
+            with writer_lock(f"{args.command} " + " ".join(argv or sys.argv[1:])):
+                return args.func(args)
         return args.func(args)
+    except WriterBusy as exc:
+        print(json.dumps({"status": "writer_busy", "detail": str(exc)}), file=sys.stderr)
+        return 3
     except KeyboardInterrupt:
         print(json.dumps({"status": "interrupted"}), file=sys.stderr)
         return 130

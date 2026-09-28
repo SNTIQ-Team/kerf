@@ -22,7 +22,7 @@ from .courtids import resolve as resolve_court
 from .errors import UpstreamFailure
 from .model import ParsedDecision
 from .ledger import SCHEMA as LEDGER_SCHEMA
-from .paragraphs import assemble
+from .paragraphs import BLOCK_SEPARATOR, assemble, anchor_of, decode_blocks, encode_blocks, split_paragraph_id
 from .polarity import SCHEMA as POLARITY_SCHEMA
 from .verify import SCHEMA as VERIFY_SCHEMA
 from .courtmap import SCHEMA as COURTMAP_SCHEMA, canonical_court_id
@@ -137,19 +137,19 @@ CREATE TABLE IF NOT EXISTS sections(
 );
 CREATE TABLE IF NOT EXISTS paragraphs(
   rowid INTEGER PRIMARY KEY,
-  id TEXT NOT NULL UNIQUE,
   decision_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL,
+  anchor TEXT NOT NULL,
   section TEXT NOT NULL,
   authorship TEXT NOT NULL,
-  ordinal INTEGER NOT NULL,
   rn TEXT,
   numbering TEXT NOT NULL CHECK(numbering IN ('rn','none')),
   block_count INTEGER NOT NULL,
   blocks TEXT NOT NULL,
   text TEXT NOT NULL,
-  text_hash TEXT NOT NULL
+  text_hash BLOB NOT NULL CHECK(length(text_hash) = 32),
+  UNIQUE(decision_id, ordinal)
 );
-CREATE INDEX IF NOT EXISTS paragraphs_decision ON paragraphs(decision_id, ordinal);
 CREATE VIRTUAL TABLE IF NOT EXISTS paragraphs_fts USING fts5(
   text, content='paragraphs', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2');
 CREATE TRIGGER IF NOT EXISTS paragraphs_ai AFTER INSERT ON paragraphs BEGIN
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS relations(
   target_date TEXT,
   target_case_key TEXT,
   target_raw TEXT NOT NULL,
-  paragraph_id TEXT,
+  paragraph_ordinal INTEGER,
   span_start INTEGER,
   span_end INTEGER,
   quoted_context TEXT NOT NULL,
@@ -184,8 +184,7 @@ CREATE TABLE IF NOT EXISTS relations(
 );
 CREATE INDEX IF NOT EXISTS relations_target ON relations(target_id);
 CREATE INDEX IF NOT EXISTS relations_target_decision ON relations(target_decision_id);
-CREATE INDEX IF NOT EXISTS relations_decision ON relations(decision_id);
-CREATE INDEX IF NOT EXISTS relations_paragraph ON relations(paragraph_id);
+CREATE INDEX IF NOT EXISTS relations_paragraph ON relations(decision_id, paragraph_ordinal);
 CREATE INDEX IF NOT EXISTS relations_target_case ON relations(target_court_id, target_date, target_case_key);
 CREATE TABLE IF NOT EXISTS sync_runs(
   id INTEGER PRIMARY KEY,
@@ -246,15 +245,18 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def connect(path: Path | None = None, *, readonly: bool = False) -> sqlite3.Connection:
+def connect(path: Path | None = None, *, readonly: bool = False, threads: bool = False) -> sqlite3.Connection:
+    """``threads``: the connection is shared by the source threads of the one writer process
+    (wrap it in courts.writer.SharedConnection)."""
     path = path or db_path()
     if readonly:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=60)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(path, timeout=120)
+        conn = sqlite3.connect(path, timeout=120, check_same_thread=not threads)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA journal_size_limit=268435456")  # the WAL left after a checkpoint (courts.writer)
     conn.isolation_level = None  # explicit BEGIN/COMMIT only
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=120000")
@@ -286,9 +288,39 @@ def init_db(conn: sqlite3.Connection) -> None:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
+def schema_statements() -> list[str]:
+    """Every DDL statement of the corpus schema, in order (triggers kept whole)."""
+    statements, current = [], ""
+    for script in (SCHEMA, POLARITY_SCHEMA, LEDGER_SCHEMA, VERIFY_SCHEMA, COURTMAP_SCHEMA):
+        for line in script.splitlines(keepends=True):
+            current += line
+            if sqlite3.complete_statement(current):
+                if current.strip():
+                    statements.append(current.strip())
+                current = ""
+    return statements
+
+
+def create_schema(conn: sqlite3.Connection, *, triggers: bool = True, indexes: bool = True) -> None:
+    """Create the v4 schema statement by statement (no implicit COMMIT, so it can run inside a
+    migration's transaction).  ``triggers=False`` leaves out the paragraphs -> FTS triggers and
+    ``indexes=False`` the CREATE INDEX statements (bulk loads build them afterwards)."""
+    from .schema_v4 import PARAGRAPH_TRIGGERS
+    for statement in schema_statements():
+        head = " ".join(statement.split()[:6]).upper()
+        if not triggers and head.startswith("CREATE TRIGGER IF NOT EXISTS PARAGRAPHS_"):
+            continue
+        if not indexes and head.startswith("CREATE INDEX"):
+            continue
+        conn.execute(statement)
+    if triggers:
+        for statement in filter(str.strip, PARAGRAPH_TRIGGERS.split("END;")):
+            conn.execute(statement + "END;")
+
+
 def _init_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1, 2, SCHEMA_VERSION):
+    if version not in (0, 1, 2, 3, SCHEMA_VERSION):
         raise RuntimeError(f"database schema v{version} != code schema v{SCHEMA_VERSION}")
     if version in (1, 2):
         # v2 -> v3: decisions.court_id becomes the Amtsgraph id (when mapped); the corpus slug moves to
@@ -304,11 +336,13 @@ def _init_db(conn: sqlite3.Connection) -> None:
         for column, definition in SOURCE_COLUMNS_V2.items():
             if column not in columns:
                 conn.execute(f"ALTER TABLE sources ADD COLUMN {column} {definition}")
-    conn.executescript(SCHEMA)
-    conn.executescript(POLARITY_SCHEMA)
-    conn.executescript(LEDGER_SCHEMA)
-    conn.executescript(VERIFY_SCHEMA)
-    conn.executescript(COURTMAP_SCHEMA)
+    paragraph_columns = {r[1] for r in conn.execute("PRAGMA table_info(paragraphs)")}
+    if version in (1, 2, 3) and "id" in paragraph_columns:
+        # v3 -> v4 (courts.schema_v4): the live corpus is migrated with `python -m courts migrate-schema`
+        # (a verified copy); any other v3 file is upgraded here, inside the file.
+        from .schema_v4 import upgrade_in_place
+        upgrade_in_place(conn, create_schema)
+    create_schema(conn)
     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     conn.execute("INSERT OR REPLACE INTO meta VALUES('schema_version', ?)", (str(SCHEMA_VERSION),))
     conn.execute("INSERT OR IGNORE INTO meta VALUES('created_at', ?)", (utcnow(),))
@@ -404,6 +438,16 @@ def upsert_items(conn: sqlite3.Connection, source_id: str, items: list[dict]) ->
              i.get("listed_case_numbers"), i.get("listed_modified"), i.get("priority", 1),
              json.dumps(i.get("extra") or {}, ensure_ascii=False)) for i in items]
     conn.execute("BEGIN IMMEDIATE")
+    try:
+        _upsert_rows(conn, rows)
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")
+    return len(rows)
+
+
+def _upsert_rows(conn: sqlite3.Connection, rows: list[tuple]) -> None:
     conn.executemany("""INSERT INTO source_items(source_id, source_doc_id, url, listed_date, listed_court,
                           listed_case_numbers, listed_modified, priority, extra) VALUES(?,?,?,?,?,?,?,?,?)
                         ON CONFLICT(source_id, source_doc_id) DO UPDATE SET
@@ -416,8 +460,6 @@ def upsert_items(conn: sqlite3.Connection, source_id: str, items: list[dict]) ->
                                       AND excluded.listed_modified <> source_items.fetched_modified
                                      THEN 'pending' ELSE source_items.state END,
                           listed_modified=excluded.listed_modified""", rows)
-    conn.execute("COMMIT")
-    return len(rows)
 
 
 def select_frontier(conn: sqlite3.Connection, source_id: str, *, since: str | None, limit: int | None,
@@ -607,7 +649,21 @@ def same_decision_elsewhere(conn: sqlite3.Connection, parsed: ParsedDecision):
 
 def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_hash: str, capture_path: str,
                    media_type: str, observed_at: str | None = None, force: bool = False) -> tuple[str, bool]:
-    """Insert or replace one decision; return (decision_id, changed)."""
+    """Insert or replace one decision; return (decision_id, changed).
+
+    The identity checks read the database, so with source threads sharing one writer connection
+    (courts.writer.SharedConnection) the whole store runs under that connection's lock."""
+    lock = getattr(conn, "lock", None)
+    if lock is not None:
+        with lock:
+            return _store_decision(conn, parsed, content_hash=content_hash, capture_path=capture_path,
+                                   media_type=media_type, observed_at=observed_at, force=force)
+    return _store_decision(conn, parsed, content_hash=content_hash, capture_path=capture_path,
+                           media_type=media_type, observed_at=observed_at, force=force)
+
+
+def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_hash: str, capture_path: str,
+                    media_type: str, observed_at: str | None = None, force: bool = False) -> tuple[str, bool]:
     parsed = finalise(parsed)
     decision_id = decision_identity(parsed)
     paragraphs, numbering = assemble(decision_id, parsed.sections)
@@ -673,8 +729,9 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
     relations: list[tuple[Relation, str]] = []
     for p in paragraphs:
         text = p.text
-        paragraph_rows.append((p.id, decision_id, p.section, section_authorship.get(p.section, "unknown"), p.ordinal,
-                               p.rn, p.numbering, len(p.blocks), block_offsets(p), text, sha256(text.encode())))
+        paragraph_rows.append((decision_id, p.ordinal, anchor_of(p.id), p.section,
+                               section_authorship.get(p.section, "unknown"), p.rn, p.numbering, len(p.blocks),
+                               encode_blocks(p), text, hashlib.sha256(text.encode()).digest()))
         if section_authorship.get(p.section) == "court":
             for r in extract_all(text, p.id, own_court_id=parsed.court_id, own_case_keys=own_keys,
                                  own_land=parsed.land):
@@ -711,9 +768,9 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
         conn.executemany("INSERT INTO sections VALUES(?,?,?,?,?,?)",
                          [(decision_id, i, s.name, s.authorship, s.authorship_basis, s.heading)
                           for i, s in enumerate(parsed.sections, 1) if any(b.text.strip() for b in s.blocks)])
-        conn.executemany("""INSERT INTO paragraphs(id, decision_id, section, authorship, ordinal, rn, numbering,
+        conn.executemany("""INSERT INTO paragraphs(decision_id, ordinal, anchor, section, authorship, rn, numbering,
                               block_count, blocks, text, text_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", paragraph_rows)
-        _insert_relations(conn, decision_id, relations)
+        _insert_relations(conn, decision_id, relations, {p.id: p.ordinal for p in paragraphs})
         _mark_item(conn, parsed, decision_id, content_hash)
         if superseded is not None:
             conn.execute("""UPDATE source_items SET state='skipped', decision_id=NULL, failure_kind='duplicate_identity',
@@ -729,17 +786,6 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
     return decision_id, True
 
 
-BLOCK_SEPARATOR = "\n\n"
-
-
-def block_offsets(paragraph) -> str:
-    """Block boundaries as code-point offsets into paragraphs.text (text = blocks joined by a blank line)."""
-    out, position = [], 0
-    for block in paragraph.blocks:
-        end = position + len(block.text)
-        out.append({"start": position, "end": end, "locator": block.locator, "kind": block.kind})
-        position = end + len(BLOCK_SEPARATOR)
-    return json.dumps(out, ensure_ascii=False, separators=(",", ":"))
 
 
 def _metadata_norm_text(norm: str) -> str:
@@ -748,30 +794,36 @@ def _metadata_norm_text(norm: str) -> str:
 
 
 def _procedural_relation(proc: dict, parsed: ParsedDecision) -> Relation:
-    info = resolve_court(proc["court"], default_land=parsed.land)
-    target = synthetic_decision_id(info.court_id, proc["date"], proc["case_number"]) if proc.get("date") and \
-        proc.get("case_number") else None
+    # A Vorinstanz line without a recognisable court (OVG Sachsen PDFs: "Az. … vom …" only) keeps its raw
+    # text; it has no target instead of failing the whole decision.
+    info = resolve_court(proc["court"], default_land=parsed.land) if proc.get("court") else None
+    target = synthetic_decision_id(info.court_id, proc["date"], proc["case_number"]) \
+        if info and proc.get("date") and proc.get("case_number") else None
     return Relation(relation="procedural_reference", target_kind="decision", target_id=target,
                     target_raw=proc["raw"], paragraph_id=None, span_start=None, span_end=None,
                     quoted_context=proc["raw"], confidence=0.9,
-                    detail={"court": proc["court"], "court_id": info.court_id, "date": proc.get("date"),
+                    detail={"court": proc.get("court"), "court_id": info.court_id if info else None, "date": proc.get("date"),
                             "case_number": proc.get("case_number"), "case_key": case_key(proc.get("case_number") or ""),
                             "direction": proc.get("direction", "previous"), "field": proc.get("field")})
 
 
-def _insert_relations(conn: sqlite3.Connection, decision_id: str, relations: list[tuple[Relation, str]]) -> None:
+def _insert_relations(conn: sqlite3.Connection, decision_id: str, relations: list[tuple[Relation, str]],
+                      ordinals: dict[str, int]) -> None:
+    from .detail import trim_detail
     rows = []
     for r, origin in relations:
         d = r.detail
-        rows.append((decision_id, r.relation, r.target_kind, r.target_id,
-                     d.get("court_id") if r.target_kind == "decision" else None,
-                     d.get("date") if r.target_kind == "decision" else None,
-                     d.get("case_key") if r.target_kind == "decision" else None,
-                     r.target_raw, r.paragraph_id, r.span_start, r.span_end, r.quoted_context, origin,
-                     r.derived_by, int(r.legal_effect_verified), r.confidence,
-                     json.dumps(d, ensure_ascii=False, sort_keys=True)))
+        columns = {"target_kind": r.target_kind, "target_id": r.target_id, "target_raw": r.target_raw,
+                   "target_court_id": d.get("court_id") if r.target_kind == "decision" else None,
+                   "target_date": d.get("date") if r.target_kind == "decision" else None,
+                   "target_case_key": d.get("case_key") if r.target_kind == "decision" else None}
+        rows.append((decision_id, r.relation, r.target_kind, r.target_id, columns["target_court_id"],
+                     columns["target_date"], columns["target_case_key"], r.target_raw,
+                     ordinals[r.paragraph_id] if r.paragraph_id is not None else None, r.span_start, r.span_end,
+                     r.quoted_context, origin, r.derived_by, int(r.legal_effect_verified), r.confidence,
+                     trim_detail(d, columns)))
     conn.executemany("""INSERT INTO relations(decision_id, relation, target_kind, target_id, target_court_id,
-                          target_date, target_case_key, target_raw, paragraph_id, span_start, span_end,
+                          target_date, target_case_key, target_raw, paragraph_ordinal, span_start, span_end,
                           quoted_context, origin, derived_by, legal_effect_verified, confidence, detail)
                         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", rows)
 

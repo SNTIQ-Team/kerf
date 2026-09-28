@@ -24,7 +24,7 @@ def conn(fixture, tmp_path, monkeypatch):
 
 
 def test_assessment_stage_runs_after_store_and_keeps_parser_output_pure(conn):
-    rows = conn.execute("SELECT assessment, target_id, rule_id, derived_by, legal_effect_verified, paragraph_id "
+    rows = conn.execute("SELECT assessment, target_id, rule_id, derived_by, legal_effect_verified, paragraph_ordinal "
                         "FROM relation_assessments").fetchall()
     keys = {(r["assessment"], r["target_id"]) for r in rows}
     assert ("applies", "de/bund/asylvfg_1992/para/24/abs/4") in keys

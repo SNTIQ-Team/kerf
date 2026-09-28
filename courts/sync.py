@@ -14,7 +14,6 @@ from pathlib import Path
 
 from .config import data_home
 from .errors import UpstreamFailure
-from .space import check as check_space
 from .http import PoliteHttp
 from .sources.base import Adapter
 from .store import (finish_run, record_failure, register_source, relink, select_frontier,
@@ -27,7 +26,6 @@ STOP_AFTER_ITEM = threading.Event()
 BLOCKING = {"challenge", "login", "robots_disallowed", "rate_limited"}
 BLOCKING_HTTP_STATUS = {403, 429, 503}
 MAX_CONSECUTIVE_BLOCKING = 3
-SPACE_CHECK_EVERY = 25
 
 
 def is_blocking(failure: UpstreamFailure) -> bool:
@@ -77,14 +75,18 @@ def source_lock(source_id: str, home=None):
 
 def sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *, since: str | None = None,
                 limit: int | None = None, courts: list[str] | None = None, retry_failed: bool = False,
-                home=None) -> dict:
+                home=None, maintenance=None) -> dict:
+    """One source.  The caller holds the writer lock (courts.writer); ``maintenance`` (shared by the source
+    threads of the writer process) checkpoints the WAL and runs the space guard every few items."""
+    from .writer import Maintenance
     with source_lock(adapter.source_id, home):
         return _sync_source(adapter, conn, http, since=since, limit=limit, courts=courts,
-                            retry_failed=retry_failed, home=home)
+                            retry_failed=retry_failed, home=home,
+                            maintenance=maintenance or Maintenance(conn, home))
 
 
 def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *, since: str | None,
-                 limit: int | None, courts: list[str] | None, retry_failed: bool, home) -> dict:
+                 limit: int | None, courts: list[str] | None, retry_failed: bool, home, maintenance) -> dict:
     register_source(conn, adapter.source_id, adapter.label, adapter.base_url, adapter.land, adapter.adapter_name,
                     adapter.operator_policy())
     run_id = start_run(conn, adapter.source_id, since, limit)
@@ -187,12 +189,11 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                     conn.execute("UPDATE source_items SET content_hash=? WHERE source_id=? AND source_doc_id=?",
                                  (content_hash, adapter.source_id, item["source_doc_id"]))
                 log(f"{adapter.source_id}: {item['source_doc_id']}: parse_error: {exc}")
-            if position % SPACE_CHECK_EVERY == 0:
-                space = check_space(home or data_home(), starting=False)
-                if space.problems:
-                    status, notes = "failed", ("space guard stopped the run: " + "; ".join(space.problems))[:500]
-                    log(f"{adapter.source_id}: {notes}")
-                    break
+            problems = maintenance.tick()
+            if problems:
+                status, notes = "failed", ("space/WAL guard stopped the run: " + "; ".join(problems))[:500]
+                log(f"{adapter.source_id}: {notes}")
+                break
             if position % 50 == 0:
                 conn.execute("UPDATE sync_runs SET attempted=?, stored=?, unchanged=?, failed=?, requests=? WHERE id=?",
                              (counts["attempted"], counts["stored"], counts["unchanged"], counts["failed"],
@@ -229,6 +230,8 @@ def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None,
     """
     from .sources.base import Capture
     from .store import read_capture
+    from .writer import Maintenance
+    maintenance = Maintenance(conn, home, every_items=100)
     counts = {"reparsed": 0, "unchanged": 0, "failed": 0}
     rows = conn.execute("""SELECT d.id, d.content_hash, d.capture_path, d.media_type, d.source_url, i.*
                            FROM decisions d JOIN source_items i
@@ -237,6 +240,11 @@ def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None,
     if decision_ids is not None:
         rows = [r for r in rows if r["id"] in decision_ids]
     for row in rows:
+        problems = maintenance.tick()
+        if problems:
+            counts["stopped"] = "space/WAL guard: " + "; ".join(problems)
+            log(f"{adapter.source_id}: reparse stopped: {counts['stopped']}")
+            return counts
         try:
             body = read_capture(conn, row["content_hash"], row["capture_path"], home)
             ext_row = conn.execute("SELECT extension FROM captures WHERE sha256=?", (row["content_hash"],)).fetchone()
@@ -354,11 +362,16 @@ def reexamine_twins(conn: sqlite3.Connection, *, home=None) -> dict:
             counts["twins_merged"] += result["reparsed"]
             continue
         conn.execute("BEGIN IMMEDIATE")
-        _delete_decision(conn, loser["id"])
-        conn.execute("""UPDATE source_items SET state='skipped', decision_id=NULL, failure_kind='duplicate_identity',
-                        failure_detail=? WHERE source_id=? AND source_doc_id=?""",
-                     (f"{winner['id']} already stored from {winner['source_id']}:{winner['source_doc_id']} "
-                      f"(same court, date, Az and type as {loser['id']})", loser["source_id"], loser["source_doc_id"]))
+        try:
+            _delete_decision(conn, loser["id"])
+            conn.execute("""UPDATE source_items SET state='skipped', decision_id=NULL,
+                            failure_kind='duplicate_identity', failure_detail=? WHERE source_id=? AND source_doc_id=?""",
+                         (f"{winner['id']} already stored from {winner['source_id']}:{winner['source_doc_id']} "
+                          f"(same court, date, Az and type as {loser['id']})", loser["source_id"],
+                          loser["source_doc_id"]))
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
         conn.execute("COMMIT")
         counts["twins_skipped"] += 1
     return counts
