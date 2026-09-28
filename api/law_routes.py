@@ -5,6 +5,8 @@
     GET /norms/{id}/at?date=YYYY-MM-DD       the version valid on a date
     GET /norms/{id}/diff?from=&to=           sentence-aware diff
     GET /norms/{id}/blame[?date=]            per sentence: introducing version
+    GET /norms/{id}/changes                  amendment change history (norm)
+    GET /acts/{id}/changes                   amendment change history (act)
 
 ``{id}`` is a canonical norm id such as ``de/bund/sgb_14/para/37`` or a
 sub-unit ``de/bund/sgb_14/para/37/abs/2/nr/3``.  Every response is a typed
@@ -40,17 +42,31 @@ from api.norm_history import (
     today_iso,
     version_evidence,
 )
+from api.law_history import LawHistoryStore, open_store
+from api.law_history_chain import (
+    act_summary,
+    compact,
+    enrich_evidence,
+    events_from_changes,
+    history_block,
+    norm_chain,
+    norm_summary,
+)
 from api.norm_identity import load_gii_toc
 
 BUNDLED_TOC = Path(__file__).resolve().parent / "data" / "gii_toc.json"
 _ALLOWED = {
     "log": {"as_of", "limit"},
-    "at": {"date", "as_of", "structure"},
+    "at": {"date", "version", "as_of", "structure"},
     "diff": {"from", "to", "as_of"},
     "blame": {"date", "as_of"},
     "resolve": {"q", "act", "norm"},
     "materials": {"relation"},
+    "changes": {"date", "limit", "offset", "state"},
+    "act_changes": {"date", "limit", "offset", "state", "norm"},
 }
+CHANGE_STATES = {"in_force", "pending", "incorporated_date_unknown",
+                 "date_unknown", "not_yet_promulgated"}
 
 
 def create_router(data_dir: Callable[[], Path],
@@ -71,6 +87,19 @@ def create_router(data_dir: Callable[[], Path],
     def toc() -> dict[str, Any] | None:
         root = data_dir()
         return load_gii_toc(root / "gii_toc.json", BUNDLED_TOC)
+
+    def history() -> LawHistoryStore | None:
+        try:
+            return open_store(data_dir())
+        except Exception as exc:  # a broken store is typed, never empty
+            raise EnvelopeError(
+                "integrity_check_failed", f"law history unreadable: {exc}",
+                failed_components=[{"component": "law_history",
+                                    "reason": "integrity_check_failed"}]
+            ) from exc
+
+    def context(norm_id: str, as_of: str | None):
+        return _context(store(), norm_id, as_of, history())
 
     def run(operation: str, request: Request, norm_id: str | None,
             handler: Callable[..., dict[str, Any]]):
@@ -124,13 +153,18 @@ def create_router(data_dir: Callable[[], Path],
             params = request.query_params
             as_of = _as_of(params.get("as_of"))
             limit = _int(params.get("limit"), 100, 1, 500)
-            resolved, chain, versions = _context(store(), norm_id, as_of)
+            resolved, chain, versions = context(norm_id, as_of)
             sub = resolved["sub"]
             shown = _collapse_by_sub(versions, sub, chain) if sub else versions
             unit, number = resolved["norm_id"].split("/")[-2:]
-            events = amendment_events(chain, unit, number)
-            evidence = [version_evidence(chain, v, toc(), include_text=False)
-                        for v in reversed(shown)][:limit]
+            changes = _changes_of(chain)
+            events = (events_from_changes(changes) if _is_lh(chain) else
+                      amendment_events(chain, unit, number))
+            today = today_iso()
+            by_id = {c["change_id"]: c for c in changes or []}
+            evidence = [enrich_evidence(
+                version_evidence(chain, v, toc(), include_text=False), v,
+                by_id, today) for v in reversed(shown)][:limit]
             if sub:
                 for item, version in zip(evidence, reversed(shown)):
                     item["pinpoint"]["sub_unit"] = sub
@@ -144,18 +178,34 @@ def create_router(data_dir: Callable[[], Path],
                 norm=_norm_meta(chain, resolved, versions),
                 order="newest_first",
                 events=events,
-                history=_history(chain, versions))
+                history=(history_block(chain, versions) if _is_lh(chain)
+                         else _history(chain, versions)),
+                change_summary=_summary(history(), chain, resolved, versions,
+                                        today, versions[-1]))
         return run("log", request, norm_id, handler)
 
     @router.get("/norms/{norm_id:path}/at")
     def norm_at(norm_id: str, request: Request):
         def handler():
             params = request.query_params
-            on = _date(params.get("date"), "date", required=True)
+            if params.get("version") and params.get("date"):
+                raise EnvelopeError(
+                    "invalid_argument",
+                    "use either date=<YYYY-MM-DD> (the version valid on that "
+                    "date) or version=<version_id> (that exact version)")
             as_of = _as_of(params.get("as_of"))
             structure = _bool(params.get("structure"), True)
-            resolved, chain, versions = _context(store(), norm_id, as_of)
-            status, version, resolution = select_version(versions, on, chain)
+            resolved, chain, versions = context(norm_id, as_of)
+            if params.get("version"):
+                version, picked = _pick(versions, params["version"], chain)
+                on = (version.first_state.valid_from or
+                      version.first_state.first_observed_at or today_iso())
+                status, resolution = "ok", {"resolution": "exact_version",
+                                            **picked}
+            else:
+                on = _date(params.get("date"), "date", required=True)
+                status, version, resolution = select_version(versions, on,
+                                                             chain)
             warnings = _warnings(chain)
             if resolution.get("note"):
                 warnings.append(resolution["note"])
@@ -171,9 +221,13 @@ def create_router(data_dir: Callable[[], Path],
                     f"{resolution.get('text_history_start')}",
                     searched=_searched(chain))
             evidence = []
+            changes = _changes_of(chain)
+            by_id = {c["change_id"]: c for c in changes or []}
             if version is not None:
-                item = version_evidence(chain, version, toc(),
-                                        include_structure=structure)
+                item = enrich_evidence(
+                    version_evidence(chain, version, toc(),
+                                     include_structure=structure),
+                    version, by_id, on)
                 item["temporal"]["resolution"] = resolution
                 if resolved["sub"]:
                     item["pinpoint"]["sub_unit"] = resolved["sub"]
@@ -196,7 +250,9 @@ def create_router(data_dir: Callable[[], Path],
                                      "valid_at": on},
                 evidence=evidence, warnings=warnings,
                 norm=_norm_meta(chain, resolved, versions),
-                resolution=resolution)
+                resolution=resolution,
+                change_summary=_summary(history(), chain, resolved, versions,
+                                        on, version))
         return run("at", request, norm_id, handler)
 
     @router.get("/norms/{norm_id:path}/diff")
@@ -209,7 +265,7 @@ def create_router(data_dir: Callable[[], Path],
                     "invalid_argument",
                     "diff needs from= and to= (YYYY-MM-DD, a version id, a "
                     "content hash prefix, or 'head')")
-            resolved, chain, versions = _context(store(), norm_id, as_of)
+            resolved, chain, versions = context(norm_id, as_of)
             left, left_res = _pick(versions, params["from"], chain)
             right, right_res = _pick(versions, params["to"], chain)
             statuses = {left_res["status"], right_res["status"]}
@@ -235,10 +291,11 @@ def create_router(data_dir: Callable[[], Path],
                                      "granularity": "sentence",
                                      "structure_parser":
                                          STRUCTURE_PARSER_VERSION},
-                evidence=[version_evidence(chain, left, toc(),
-                                           include_text=False),
-                          version_evidence(chain, right, toc(),
-                                           include_text=False)],
+                evidence=[enrich_evidence(version_evidence(
+                              chain, v, toc(), include_text=False), v,
+                              {c["change_id"]: c for c in
+                               _changes_of(chain) or []}, today_iso())
+                          for v in (left, right)],
                 warnings=warnings,
                 norm=_norm_meta(chain, resolved, versions),
                 identical=left.content_sha256 == right.content_sha256,
@@ -252,7 +309,7 @@ def create_router(data_dir: Callable[[], Path],
         def handler():
             params = request.query_params
             as_of = _as_of(params.get("as_of"))
-            resolved, chain, versions = _context(store(), norm_id, as_of)
+            resolved, chain, versions = context(norm_id, as_of)
             status = "ok"
             resolution: dict[str, Any] = {"resolution": "latest_version"}
             target = versions[-1]
@@ -267,7 +324,9 @@ def create_router(data_dir: Callable[[], Path],
                         searched=_searched(chain))
                 target = picked
             unit, number = resolved["norm_id"].split("/")[-2:]
-            events = amendment_events(chain, unit, number)
+            events = (events_from_changes(_changes_of(chain))
+                      if _is_lh(chain) else
+                      amendment_events(chain, unit, number))
             lines = blame(versions, target, events, bavarian=chain.bavarian)
             if resolved["sub"]:
                 lines = [row for row in lines
@@ -294,6 +353,112 @@ def create_router(data_dir: Callable[[], Path],
                          "introduced_within_history": attributed,
                          "predates_text_history": len(lines) - attributed})
         return run("blame", request, norm_id, handler)
+
+    @router.get("/norms/{norm_id:path}/changes")
+    def norm_changes(norm_id: str, request: Request):
+        def handler():
+            params = request.query_params
+            on = _date(params.get("date"), "date", required=False) or \
+                today_iso()
+            limit = _int(params.get("limit"), 100, 0, 500)
+            offset = _int(params.get("offset"), 0, 0, 100000)
+            state = _state_filter(params.get("state"))
+            resolved, chain, versions = context(norm_id, None)
+            if not _is_lh(chain):
+                raise EnvelopeError(
+                    "unavailable",
+                    "the change history store (law_history) does not cover "
+                    f"{chain.act.get('id')}",
+                    failed_components=[{"component": "law_history",
+                                        "reason": "source_unavailable"}])
+            changes = _changes_of(chain) or []
+            rows = [dict(compact(c, on), commands=c.get("commands"),
+                         evidence=c.get("evidence"),
+                         diff_url=_diff_url(resolved["norm_id"], c, versions))
+                    for c in reversed(changes)]
+            if state:
+                rows = [row for row in rows if row["state"] in state]
+            return envelope(
+                operation="law_changes", total=len(rows),
+                searched=_searched(chain),
+                applied_constraints={**_applied(chain, None, resolved),
+                                     "evaluated_on": on,
+                                     "state": sorted(state) if state else
+                                     "all",
+                                     "order": "newest_first"},
+                evidence=rows[offset:offset + limit] if limit else [],
+                offset=offset, limit=limit,
+                warnings=_warnings(chain),
+                norm=_norm_meta(chain, resolved, versions),
+                change_summary=_summary(history(), chain, resolved, versions,
+                                        on, versions[-1]))
+        return run("changes", request, norm_id, handler)
+
+    @router.get("/acts/{act_id}/changes")
+    def act_changes(act_id: str, request: Request):
+        def handler():
+            params = request.query_params
+            on = _date(params.get("date"), "date", required=False) or \
+                today_iso()
+            limit = _int(params.get("limit"), 100, 0, 1000)
+            offset = _int(params.get("offset"), 0, 0, 100000)
+            state = _state_filter(params.get("state"))
+            lh = history()
+            if not re.fullmatch(r"[a-z0-9_]+", act_id or ""):
+                raise EnvelopeError("invalid_argument", "invalid act id")
+            if lh is None or not lh.covers(act_id):
+                known = any(row.get("id") == act_id
+                            for row in store().act_index())
+                raise EnvelopeError(
+                    "unavailable" if known else "not_in_corpus",
+                    f"no change history for {act_id}",
+                    failed_components=[{"component": "law_history",
+                                        "reason": "source_unavailable"}]
+                    if known else [])
+            changes = lh.changes(act_id=act_id)
+            norm = params.get("norm")
+            if norm:
+                resolved = store().resolve_act_norm(act_id, norm)
+                changes = [c for c in changes
+                           if c.get("norm_id") == resolved["norm_id"]]
+            groups: dict[tuple[str, str], dict[str, Any]] = {}
+            for change in reversed(changes):
+                row = compact(change, on)
+                if state and row["state"] not in state:
+                    continue
+                key = (str((change.get("amending_act") or {}).get(
+                    "document_id")), str(
+                    (change.get("amending_act") or {}).get("article")))
+                group = groups.setdefault(key, {
+                    "amending_act": row["amending_act"],
+                    "dates": row["dates"], "state": row["state"],
+                    "pending": row["pending"], "norms": []})
+                group["norms"].append({
+                    "change_id": row["change_id"],
+                    "norm_id": row["norm_id"],
+                    "norm_label": row["norm_label"],
+                    "change_type": row["change_type"],
+                    "dates": row["dates"], "state": row["state"],
+                    "text_effect": row["text_effect"]})
+            rows = list(groups.values())
+            info = lh.acts().get(act_id) or {}
+            return envelope(
+                operation="law_act_changes", total=len(rows),
+                searched=[{"source": "law_history", "status": "ok",
+                           "count": len(changes)}],
+                applied_constraints={"act_id": act_id, "evaluated_on": on,
+                                     "grouping": "amending act and article",
+                                     "state": sorted(state) if state else
+                                     "all", "norm": norm,
+                                     "order": "newest_first"},
+                evidence=rows[offset:offset + limit] if limit else [],
+                offset=offset, limit=limit,
+                act={k: info.get(k) for k in ("act_id", "jurabk", "title",
+                                              "states", "states_by_source",
+                                              "earliest_text", "norms",
+                                              "norm_versions")},
+                change_summary=act_summary(lh, act_id, on))
+        return run("act_changes", request, act_id, handler)
 
     @router.get("/norms/{norm_id:path}/materials")
     def norm_materials(norm_id: str, request: Request):
@@ -423,10 +588,23 @@ def _bool(value: str | None, default: bool) -> bool:
     raise EnvelopeError("invalid_argument", "boolean must be true or false")
 
 
-def _context(store: NormHistoryStore, norm_id: str, as_of: str | None
+def _context(store: NormHistoryStore, norm_id: str, as_of: str | None,
+             history: LawHistoryStore | None = None
              ) -> tuple[dict[str, Any], ActChain, list[NormVersion]]:
     resolved = store.resolve(norm_id)
-    chain = store.chain(str(resolved["act_id"]), as_of=as_of)
+    act_id = str(resolved["act_id"])
+    if history is not None and as_of is None and history.covers(act_id):
+        chain, versions, changes = norm_chain(history, resolved,
+                                              resolved["act"])
+        chain.change_records = changes  # type: ignore[attr-defined]
+        if versions:
+            return resolved, chain, versions
+        raise EnvelopeError(
+            "not_found_in_searched_scope",
+            f"{resolved['norm_id']} does not occur in any stored version of "
+            f"{chain.act.get('jurabk')}",
+            searched=_searched(chain))
+    chain = store.chain(act_id, as_of=as_of)
     versions = chain.versions_of(resolved["norm_id"])
     if not versions:
         raise EnvelopeError(
@@ -505,7 +683,60 @@ def _collapse_by_sub(versions: list[NormVersion], sub: str,
     return shown
 
 
+def _is_lh(chain: ActChain) -> bool:
+    return bool((chain.snapshot or {}).get("law_history"))
+
+
+def _changes_of(chain: ActChain) -> list[dict[str, Any]] | None:
+    return getattr(chain, "change_records", None)
+
+
+def _state_filter(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    states = {part.strip() for part in value.split(",") if part.strip()}
+    unknown = states - CHANGE_STATES
+    if unknown:
+        raise EnvelopeError(
+            "invalid_argument",
+            f"unknown state(s) {', '.join(sorted(unknown))}; use "
+            f"{', '.join(sorted(CHANGE_STATES))}")
+    return states
+
+
+def _diff_url(norm_id: str, change: dict[str, Any],
+              versions: list[NormVersion]) -> str | None:
+    effect = change.get("text_effect") or {}
+    before, after = effect.get("before_version"), effect.get("after_version")
+    if before is None or after is None or not (
+            0 <= before < len(versions) and 0 <= after < len(versions)):
+        return None
+    return (f"/norms/{norm_id}/diff?from={versions[before].version_id}"
+            f"&to={versions[after].version_id}")
+
+
+def _summary(history: LawHistoryStore | None, chain: ActChain,
+             resolved: dict[str, Any], versions: list[NormVersion],
+             on: str, current: NormVersion | None) -> dict[str, Any] | None:
+    if history is None or not _is_lh(chain):
+        return None
+    return norm_summary(history, str(chain.act.get("id")),
+                        resolved["norm_id"], _changes_of(chain) or [],
+                        versions, on, current)
+
+
 def _searched(chain: ActChain) -> list[dict[str, Any]]:
+    if _is_lh(chain):
+        info = getattr(chain, "law_history", {}) or {}
+        return [
+            {"source": "law_history", "status": "ok",
+             "count": len(chain.states)},
+            {"source": "law_history_changes", "status": "ok",
+             "count": len(_changes_of(chain) or [])},
+            {"source": "act_states", "status": "ok",
+             "count": info.get("states"),
+             "by_source": info.get("states_by_source")},
+        ]
     if chain.bavarian:
         return [{"source": "bayern_recht_archive", "status": "ok",
                  "count": len(chain.states)}]
@@ -533,7 +764,7 @@ def _applied(chain: ActChain, as_of: str | None,
 
 def _warnings(chain: ActChain) -> list[str]:
     warnings = list(chain.warnings)
-    if chain.bavarian:
+    if chain.bavarian and not _is_lh(chain):
         warnings.append(
             "Bavarian history is per norm from archived official pages; it is "
             "incomplete where no archived page exists (missing versions are "

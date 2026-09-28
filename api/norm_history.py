@@ -962,10 +962,24 @@ def select_version(versions: list[NormVersion], on: str,
                 continue
             if start <= on and (end is None or on < end):
                 status = state.valid_from_status
-                return "ok", version, {
-                    "resolution": ("verified_interval"
-                                   if status == "official_verified" else
-                                   "archived_official_interval"),
+                attribution = (state.amendment or {}).get("attribution") or {}
+                # a start attributed only by the capture bracket (no quoted
+                # wording confirmed) is evidence of the date, not of the text
+                weak = attribution.get("verification") == \
+                    "bracketed_by_captures"
+                resolution = {
+                    "official_verified": "verified_interval",
+                    "official_archived_version_date":
+                        "archived_official_interval",
+                }.get(status, "commencement_attributed_interval")
+                extra = {"attribution": attribution} if attribution else {}
+                if weak:
+                    extra["note"] = (
+                        "the legal start comes from the in-force date of the "
+                        "only amendment between two captures; its wording was "
+                        "not confirmed in the text")
+                return ("temporally_unresolved" if weak else "ok"), version, {
+                    "resolution": resolution, **extra,
                     "valid_from_status": status,
                     "consolidated_version_valid_from": start,
                     "consolidated_version_valid_until_exclusive": end,
