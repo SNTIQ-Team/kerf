@@ -37,6 +37,7 @@ from official_states import (
     load_manifest,
     load_state_verified,
 )
+from snapshot_storage import SnapshotArchiveError, open_snapshot_text
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -676,7 +677,7 @@ def _read_json(path: Path) -> Any:
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     rows = []
     try:
-        with path.open(encoding="utf-8") as stream:
+        with open_snapshot_text(path) as stream:
             for line_number, line in enumerate(stream, 1):
                 if line.strip():
                     value = json.loads(line)
@@ -684,7 +685,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
                         raise ReconstructionError(
                             f"{path}:{line_number} is not an object")
                     rows.append(value)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, SnapshotArchiveError) as exc:
         raise ReconstructionError(f"cannot read {path}: {exc}") from exc
     return rows
 

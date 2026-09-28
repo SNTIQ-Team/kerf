@@ -28,11 +28,18 @@ else
     echo "==> [ 3/24] watch state skipped (one official refresh failed)"
 fi
 step " 4/24" "BGBl promulgation events (daily feed)"       python3 pipeline/fetch_bgbl_events.py
-step " 5/24" "GII corpus HEAD (lags days-weeks)"           python3 pipeline/fetch_gii.py
+step " 5/24" "GII corpus HEAD (lags days-weeks)"           python3 pipeline/fetch_gii.py --budget-mib 64
 step " 6/24" "archive complete official GII states"       python3 tools/archive_gii_states.py
-step "6b/24" "prune archive-verified raw GII snapshots"   python3 tools/prune_gii_snapshots.py
 step " 7/24" "final BGBl documents + integrity/text"       python3 pipeline/fetch_bgbl_documents.py
 step " 8/24" "2023+ official BGBl retrospective inventory" python3 pipeline/backfill_bgbl_history.py
+step "8b/24" "bounded resumable pre-2023 official BGBl history" \
+    python3 pipeline/backfill_legacy_bgbl_history.py \
+        --start 1976-01-01 \
+        --wahlperiode 8 --wahlperiode 9 --wahlperiode 10 --wahlperiode 11 \
+        --wahlperiode 12 --wahlperiode 13 --wahlperiode 14 --wahlperiode 15 \
+        --wahlperiode 16 --wahlperiode 17 --wahlperiode 18 --wahlperiode 19 --wahlperiode 20 \
+        --limit 12 --max-requests 80 --max-download-mib 20 \
+        --max-archive-mib 300 --min-free-mib 1024 --delay 0.8
 echo "==> [ 9/24] Federal case law intake"
 if [ "${LEXGRAPH_ENABLE_RII:-0}" = "1" ]; then
     # RII permits reuse of decisions, but its robots/TDM headers conflict
@@ -88,6 +95,16 @@ if [ "${LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL_BULK:-0}" = "1" ]; then
 else
     echo "    quarantined by data policy (no republication permission for the portal database)"
 fi
+
+# Preserve original bytes before aging snapshots out of the raw working set.
+# A failed compaction leaves those originals in place; it never triggers pruning.
+COMPACT_LOCK_ARGS=()
+if [ -n "${LEXGRAPH_REFRESH_LOCK_FD:-}" ]; then
+    COMPACT_LOCK_ARGS+=(--lock-file "$LEXGRAPH_REFRESH_LOCK" --lock-fd "$LEXGRAPH_REFRESH_LOCK_FD")
+fi
+step "21b/24" "reversible snapshot compaction (newest two remain raw)" \
+    python3 tools/compact_snapshots.py compact --apply --keep 2 \
+        --max-new-mib 64 --max-archive-mib 300 --min-free-mib 1024 "${COMPACT_LOCK_ARGS[@]}"
 
 echo "==> [22/24] build arena"
 python3 tools/build_qfs.py

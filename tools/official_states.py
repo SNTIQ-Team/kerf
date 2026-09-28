@@ -20,6 +20,7 @@ import io
 import json
 import os
 import re
+import sys
 import tempfile
 from collections import defaultdict
 from collections.abc import Iterable
@@ -29,6 +30,9 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "pipeline"))
+from snapshot_storage import SnapshotArchiveError, open_snapshot_text  # noqa: E402
+
 DEFAULT_SNAPSHOTS = ROOT / "data" / "snapshots" / "gii"
 DEFAULT_STORE = ROOT / "data" / "federal_states"
 MANIFEST_NAME = "manifest.json"
@@ -275,7 +279,7 @@ def load_state_verified(store: Path, digest: str) -> dict[str, Any]:
 def _read_jsonl_strict(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
-        with path.open(encoding="utf-8") as stream:
+        with open_snapshot_text(path) as stream:
             for line_number, line in enumerate(stream, 1):
                 if not line.strip():
                     continue
@@ -288,7 +292,7 @@ def _read_jsonl_strict(path: Path) -> list[dict[str, Any]]:
                     raise StateStoreError(
                         f"{path}:{line_number}: row must be an object")
                 rows.append(row)
-    except OSError as exc:
+    except (OSError, SnapshotArchiveError) as exc:
         raise StateStoreError(f"cannot read snapshot file {path}: {exc}") \
             from exc
     return rows

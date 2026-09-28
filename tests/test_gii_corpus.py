@@ -10,14 +10,26 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 from fetch_gii import (  # noqa: E402
     CORPUS,
     PRACTICE_EXPANSION_2026_07,
+    PRACTICE_EXPANSION_2026_09,
     require_complete_corpus,
 )
 
 
 def test_practice_expansion_is_large_and_not_silently_shrunk() -> None:
     assert len(PRACTICE_EXPANSION_2026_07) == 74
-    assert len(CORPUS) == 125
-    assert len(CORPUS - PRACTICE_EXPANSION_2026_07) == 51
+    assert len(CORPUS) == 200
+    assert len(CORPUS - PRACTICE_EXPANSION_2026_07 - PRACTICE_EXPANSION_2026_09) == 51
+
+
+def test_september_expansion_keeps_social_rules_and_adds_everyday_domains() -> None:
+    assert len(PRACTICE_EXPANSION_2026_09) == 75
+    assert not (PRACTICE_EXPANSION_2026_09 & PRACTICE_EXPANSION_2026_07)
+    assert {
+        "bshg_76dv", "bshg_88abs2dv_1988", "versmedv", "schwbawv",
+        "sozsichabkg_ukr", "hgb", "vvg_2008", "uklag", "rdg",
+        "stvg", "stvo_2013", "fev_2010", "ustg_1980", "heizkostenv",
+        "ifsg", "pflbg", "zag_2018",
+    } <= PRACTICE_EXPANSION_2026_09
 
 
 def test_practice_expansion_covers_priority_domains() -> None:

@@ -59,6 +59,30 @@ def test_head_markdown_is_exact_and_supports_full_act_or_one_norm() -> None:
     assert markdown_filename(one) == "fed_testg-24-2026-07-15.md"
 
 
+def test_plain_norm_chemistry_and_angle_brackets_remain_literal_markdown():
+    text = ("[1-(1,3-Benzodioxol-5-yl)propan-2-yl](methyl)azan; "
+            "<chronisch-persistierende Hepatitis>; "
+            "[Hinweis](22a); *; &amp;; C:\\Pfad.")
+    act = _act(norms=[{"enbez": "§ 1", "titel": "Formel", "text": text}])
+    result = render_markdown_snapshot(act, fallback_head="2026-09-27")
+    body = result["markdown"].split("## § 1 — Formel\n\n", 1)[1].strip()
+    assert "norm_body_format: escaped_plain_text\n" in result["markdown"]
+    assert body == (r"\[1-(1,3-Benzodioxol-5-yl)propan-2-yl\](methyl)azan; "
+                    r"\<chronisch-persistierende Hepatitis\>; "
+                    r"\[Hinweis\](22a); \*; \&amp;; C:\\Pfad.")
+    assert act["norms"][0]["text"] == text
+    assert result["source_exact"] is True
+
+
+def test_plain_norm_lines_do_not_become_headings_lists_or_thematic_breaks():
+    text = "# Angabe\n- Minus\n+ Plus\n1. Erster\n2) Zweiter\n---\n===\n> Wort"
+    act = _act(norms=[{"enbez": "§ 1", "titel": "Text", "text": text}])
+    result = render_markdown_snapshot(act, fallback_head="2026-09-27")
+    body = result["markdown"].split("## § 1 — Text\n\n", 1)[1].strip()
+    assert body == ("\\# Angabe\n\\- Minus\n\\+ Plus\n1\\. Erster\n"
+                    "2\\) Zweiter\n\\---\n\\===\n\\> Wort")
+
+
 def test_effective_date_drives_reverse_state_not_publication_date() -> None:
     act = _act(juris="DE-BY", norms=[
         {"enbez": "Art. 44", "titel": "Befugnis", "text": "Neue Fassung"},
@@ -261,6 +285,45 @@ def test_complete_official_observation_is_exact_but_not_effective_date() -> None
         rendered["markdown"]
 
 
+@pytest.mark.parametrize("state_kind", ["observed", "retrospective"])
+def test_exact_historical_norm_query_cannot_resolve_from_unrelated_legacy_history(state_kind):
+    act = _act(versions=[{
+        "date": "2026-06-01", "changes": [{
+            "para": "§ 9", "old": "Later old text", "new": "Later new text",
+        }],
+    }])
+    state = {"observed_at": "2025-01-01", "state_sha256": "d" * 64,
+             "norms": [{"enbez": "§ 1", "text": "Only historical norm"}]}
+    options = {"observed_state": state} if state_kind == "observed" else {
+        "retrospective_state": state,
+        "retrospective_interval": {"requested_at": "2025-01-01",
+            "state_sha256": "d" * 64, "text_status": "official_exact",
+            "date_status": "official_verified", "gaps": []},
+    }
+    with pytest.raises(UnknownNormError):
+        render_markdown_snapshot(act, requested_at="2025-01-01", norm="§ 9",
+                                 fallback_head="2026-07-16", **options)
+
+
+@pytest.mark.parametrize("state_kind", ["observed", "retrospective"])
+def test_exact_historical_export_uses_the_selected_state_title(state_kind):
+    act = _act()
+    state = {"observed_at": "2025-01-01", "state_sha256": "e" * 64,
+             "title": "Historischer Gesetzestitel",
+             "norms": [{"enbez": "§ 1", "text": "Historical body"}]}
+    options = {"observed_state": state} if state_kind == "observed" else {
+        "retrospective_state": state,
+        "retrospective_interval": {"requested_at": "2025-01-01",
+            "state_sha256": "e" * 64, "text_status": "official_exact",
+            "date_status": "official_verified", "gaps": []},
+    }
+    result = render_markdown_snapshot(act, requested_at="2025-01-01",
+                                     fallback_head="2026-07-16", **options)
+    assert "# Historischer Gesetzestitel\n" in result["markdown"]
+    assert "# Testgesetz\n" not in result["markdown"]
+    assert result["title"] == "Historischer Gesetzestitel"
+
+
 def test_reviewed_legal_transition_exposes_provenance_without_claiming_exact() -> None:
     act = _act(norms=[
         {"enbez": "§ 29a", "titel": "Bericht", "text": "Neue Fassung"},
@@ -398,3 +461,15 @@ def test_verified_reconstruction_is_complete_without_becoming_source_exact(
     assert "source_exact: false" in rendered["markdown"]
     assert "verified_reconstruction: true" in rendered["markdown"]
     assert "not an exact historical source capture" in rendered["markdown"]
+
+
+def test_bavarian_archived_capture_keeps_provider_and_archive_provenance():
+    act=_act(juris='DE-BY')
+    state={'title':'Bayerisches Testgesetz','observed_at':'2016-01-29','state_sha256':'d'*64,'norms':[{'enbez':'Art. 1','text':'Archivtext'}], 'source':'BAYERN.RECHT','source_store':'bavarian_states','source_url':'https://www.gesetze-bayern.de/Content/Document/BayTest/true','archive_url':'https://web.archive.org/web/20160129120000id_/https://www.gesetze-bayern.de/Content/Document/BayTest/true','archive_timestamp':'20160129120000','date_basis':'archive_capture_not_effective_date'}
+    result=render_markdown_snapshot(act,requested_at='2016-01-29',observed_state=state,fallback_head='2026-09-27')
+    assert 'official GII' not in result['markdown']
+    assert 'BAYERN.RECHT' in result['markdown']
+    assert 'archive_url:' in result['markdown']
+    assert 'archive_timestamp: "20160129120000"' in result['markdown']
+    assert result['archive_url']==state['archive_url']
+    assert result['date_basis']=='archive_capture_not_effective_date'

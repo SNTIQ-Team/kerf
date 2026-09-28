@@ -7,7 +7,10 @@ data/neuris_archive.jsonl
 data/neuris_work_map.json
 data/neuris_objects/
 data/federal_states/
+data/gii_import_cache/
+data/reader-source/
 data/bgbl_documents/
+data/legacy_bgbl_history/
 web/data/
 
 # raw legal-content working set (not part of the open dataset)

@@ -75,3 +75,48 @@ def test_hash_tampering_fails_closed(tmp_path: Path):
         handle.write(b'{"norms":[]}')
     with pytest.raises(OfficialStateError, match="hash mismatch"):
         load_observed_state(tmp_path, _act(digest), "2026-07-13")
+
+
+def test_bavarian_archive_uses_its_own_store_and_exact_capture_date(tmp_path):
+    state = {'act_id':'by_testg','jurabk':'TestG','title':'Historischer Titel','norms':[{'enbez':'Art. 1','text':'Amtlicher Archivtext'}]}
+    digest = _write_state(tmp_path, state)
+    (tmp_path/'federal_states').rename(tmp_path/'bavarian_states')
+    act = _act(digest); act['id']='by_testg'
+    observation = act['official_states'][0]
+    observation.update(observed_at='2016-01-29',source='BAYERN.RECHT',source_store='bavarian_states',source_url='https://www.gesetze-bayern.de/Content/Document/BayTest/true',archive_url='https://web.archive.org/web/20160129120000id_/https://www.gesetze-bayern.de/Content/Document/BayTest/true',archive_timestamp='20160129120000',date_basis='archive_capture_not_effective_date')
+    loaded=load_observed_state(tmp_path,act,'2016-01-29')
+    assert loaded['norms']==state['norms']
+    assert loaded['source']=='BAYERN.RECHT'
+    assert loaded['archive_timestamp']=='20160129120000'
+    assert load_observed_state(tmp_path,act,'2016-01-30') is None
+
+
+@pytest.mark.parametrize('store', ['../federal_states','/tmp/federal_states','unknown'])
+def test_unapproved_source_store_rejected_even_if_federal_object_exists(tmp_path,store):
+    state={'act_id':'fed_testg','jurabk':'TestG','norms':[{'enbez':'§ 1','text':'body'}]}
+    digest=_write_state(tmp_path,state);act=_act(digest);act['official_states'][0]['source_store']=store
+    with pytest.raises(OfficialStateError,match='source store'):
+        load_observed_state(tmp_path,act,'2026-07-13')
+
+
+def test_bavarian_store_cannot_be_mislabelled_gii(tmp_path):
+    state={'act_id':'fed_testg','jurabk':'TestG','norms':[{'enbez':'§ 1','text':'body'}]}
+    digest=_write_state(tmp_path,state);act=_act(digest);act['official_states'][0].update(source_store='bavarian_states',source='GII')
+    with pytest.raises(OfficialStateError,match='source store'):
+        load_observed_state(tmp_path,act,'2026-07-13')
+
+
+def test_observation_metadata_cannot_replace_verified_cas_identity_or_body(tmp_path):
+    state={'act_id':'fed_testg','jurabk':'TestG','title':'Verified title','norms':[{'enbez':'§ 1','text':'VERIFIED CAS TEXT'}]}
+    digest=_write_state(tmp_path,state);act=_act(digest)
+    act['official_states'][0].update(norms=[{'enbez':'§ 1','text':'UNVERIFIED OBSERVATION TEXT'}],title='Wrong title',act_id='other',jurabk='Other')
+    loaded=load_observed_state(tmp_path,act,'2026-07-13')
+    for key in ('norms','title','act_id','jurabk'):assert loaded[key]==state[key]
+
+
+def test_nonscalar_store_is_integrity_error(tmp_path):
+    state={'act_id':'fed_testg','jurabk':'TestG','norms':[{'enbez':'§ 1','text':'body'}]}
+    digest=_write_state(tmp_path,state);act=_act(digest)
+    act['official_states'][0]['source_store']=['bavarian_states']
+    with pytest.raises(OfficialStateError,match='source store'):
+        load_observed_state(tmp_path,act,'2026-07-13')

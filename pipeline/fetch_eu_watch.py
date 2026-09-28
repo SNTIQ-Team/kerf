@@ -395,13 +395,15 @@ def cellar_adopted_act(http: Http, proposal_celex: str) -> dict | None:
         return None
     query = f"""PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-SELECT DISTINCT ?celex ?pub ?collection ?title WHERE {{
+SELECT DISTINCT ?celex ?pub ?collection ?title ?force ?inforce WHERE {{
   ?proposal cdm:resource_legal_id_celex "{proposal_celex}"^^xsd:string .
   ?act cdm:resource_legal_adopts_resource_legal ?proposal ;
        cdm:resource_legal_id_celex ?celex .
   OPTIONAL {{ ?act cdm:official-journal-act_date_publication ?pub }}
   OPTIONAL {{ ?act cdm:official-journal-act_part_of_collection_document
                    ?collection }}
+  OPTIONAL {{ ?act cdm:resource_legal_date_entry-into-force ?force }}
+  OPTIONAL {{ ?act cdm:resource_legal_in-force ?inforce }}
   OPTIONAL {{
     ?e cdm:expression_belongs_to_work ?act ;
        cdm:expression_uses_language <{LANG_ENG_URI}> ;
@@ -421,20 +423,30 @@ SELECT DISTINCT ?celex ?pub ?collection ?title WHERE {{
         celex = str(row.get("celex") or "")
         if not ADOPTED_DECISION_RE.match(celex):
             continue
-        entry = best.setdefault(celex, {"celex": celex})
-        for key in ("pub", "collection", "title"):
+        entry = best.setdefault(celex, {"celex": celex, "force": set()})
+        for key in ("pub", "collection", "title", "inforce"):
             if row.get(key) and not entry.get(key):
                 entry[key] = row[key]
+        # An act can carry several entry-into-force dates when provisions are
+        # staggered (32026D1912: 2026-08-05, then 2027-03-05). Collect them
+        # all; the act itself is in force from the earliest.
+        force = str(row.get("force") or "")
+        if force >= "1900":            # 1001-01-01 is CELLAR's "not stated"
+            entry["force"].add(force)
     for celex in sorted(best):
         entry = best[celex]
         published = str(entry.get("pub") or "")
         # Only an OJ L publication counts as promulgation evidence here.
         if not published or not str(entry.get("collection") or "").endswith("OJ-L"):
             continue
+        in_force_dates = sorted(entry.get("force") or ())
         return {
             "celex": celex,
             "citation": f"OJ L, {published}",
             "published_at": published,
+            "in_force": str(entry.get("inforce") or "") == "1",
+            "in_force_since": in_force_dates[0] if in_force_dates else None,
+            "in_force_dates": in_force_dates,
             "title": " ".join(str(entry.get("title") or "").split()),
             "eli": None,
             "url": ("https://eur-lex.europa.eu/legal-content/EN/TXT/"
@@ -580,16 +592,19 @@ def stale_fallback(watch_key: str, config: dict, previous: dict | None,
     # The procedure page being unreachable says nothing about whether the act
     # was adopted. CELLAR is a separate host and still answers, so promulgation
     # evidence is recovered here rather than frozen at the last observation.
-    if not row["official_journal"]:
-        recovered = _cellar_journal(http, row, config) if http else []
-        if recovered:
-            row = apply_final_review_gate(row, config, recovered)
-            row["retrieval_status"] = "stale_fallback_cellar_publication"
-            row["source_stale"] = True
-            row["retrieval_warning"] = (
-                "EUR-Lex procedure page unreachable "
-                f"({type(error).__name__}); Official Journal publication "
-                "recovered from CELLAR.")
+    # Always re-ask CELLAR, not just when nothing is on file: a record carried
+    # over from an earlier run can predate fields we now capture (in-force
+    # dates), and one SPARQL query is cheap next to serving a stale legal
+    # status. The lookup is best-effort and never raises.
+    recovered = _cellar_journal(http, row, config) if http else []
+    if recovered:
+        row = apply_final_review_gate(row, config, recovered)
+        row["retrieval_status"] = "stale_fallback_cellar_publication"
+        row["source_stale"] = True
+        row["retrieval_warning"] = (
+            "EUR-Lex procedure page unreachable "
+            f"({type(error).__name__}); Official Journal publication "
+            "recovered from CELLAR.")
 
     seed = _council_seed(config, fetched_at, "verified_seed")
     previous_council = previous.get("council_development") or {}
