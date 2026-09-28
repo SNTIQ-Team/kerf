@@ -472,3 +472,70 @@ def test_first_sigterm_finishes_the_current_item_then_stops(conn, fixture):
     states = sorted(r[0] for r in conn.execute("SELECT state FROM source_items"))
     assert result["attempted"] == 1 and states.count("pending") == 1   # one item done, the other untouched
     assert conn.execute("SELECT status, notes FROM sync_runs ORDER BY id DESC").fetchone()[0] == "interrupted"
+
+
+def _bsg(source, doc, ecli, labels, date="2025-06-18", dtype="Urteil"):
+    from courts.model import Block, ParsedDecision, Section
+    return ParsedDecision(source_id=source, source_doc_id=doc, source_url=f"https://x/{doc}",
+                          court_name="Bundessozialgericht", decision_date=date, case_numbers_raw="B 6 KA 4/24 R",
+                          case_numbers=["B 6 KA 4/24 R"], decision_type=dtype, ecli=ecli,
+                          sections=[Section("gruende", "court", "t", [Block(t, lab) for t, lab in
+                                                                      zip(("Erster Satz.", "Zweiter Satz."), labels)])])
+
+
+def test_rn_copy_without_valid_ecli_supersedes_its_unnumbered_twin_and_keeps_the_ecli():
+    """RII publishes the Urteil of 18.06.2025 with the ECLI of a 2024 Beschluss (dropped as the other
+    document's); bsg.bund.de has the right ECLI but no Rn.  One decision results: RII's text with Rn under the
+    validated ECLI."""
+    from courts.store import connect, init_db, store_decision
+    conn = connect()
+    init_db(conn)
+    for source in ("bsg", "rii"):
+        conn.execute("INSERT INTO source_items(source_id, source_doc_id, url) VALUES(?,?,?)", (source, "d-" + source, "x"))
+    store_decision(conn, _bsg("bsg", "d-bsg", "ECLI:DE:BSG:2025:180625UB6KA424R0", (None, None)), content_hash="h1",
+                   capture_path="-", media_type="text/html")
+    decision_id, _ = store_decision(conn, _bsg("rii", "d-rii", "ECLI:DE:BSG:2024:200624BB6KA424R0", ("1", "2")),
+                                    content_hash="h2", capture_path="-", media_type="application/zip")
+    assert decision_id == "ECLI:DE:BSG:2025:180625UB6KA424R0"
+    rows = conn.execute("SELECT id, source_id, numbering, metadata FROM decisions").fetchall()
+    assert [(r["id"], r["source_id"], r["numbering"]) for r in rows] == [(decision_id, "rii", "rn")]
+    meta = json.loads(rows[0]["metadata"])
+    assert meta["ecli_from_source"] == "bsg:d-bsg"
+    assert meta["ecli_published_other_document"]["ecli"] == "ECLI:DE:BSG:2024:200624BB6KA424R0"
+
+
+def test_ecli_spelling_variants_of_one_decision_are_one_decision():
+    from courts.errors import UpstreamFailure
+    from courts.store import connect, init_db, store_decision
+    conn = connect()
+    init_db(conn)
+    store_decision(conn, _bsg("rii", "a", "ECLI:DE:BSG:2025:180625UB6KA424R0", ("1", "2")), content_hash="h1",
+                   capture_path="-", media_type="x")
+    with pytest.raises(UpstreamFailure) as exc:
+        store_decision(conn, _bsg("bsg", "b", "ECLI:DE:BSG:2025:180625UB6KA0424R0", ("1", "2")), content_hash="h2",
+                       capture_path="-", media_type="x")
+    assert exc.value.kind == "duplicate_identity"
+    # Another document of the same day and docket (a Beschluss) is its own decision.
+    store_decision(conn, _bsg("bsg", "c", None, ("1", "2"), dtype="Beschluss"), content_hash="h3", capture_path="-",
+                   media_type="x")
+    assert conn.execute("SELECT count(*) FROM decisions").fetchone()[0] == 2
+
+
+def test_reexamine_twins_keeps_the_first_of_two_numbered_copies(monkeypatch):
+    import courts.store as store_module
+    from courts.store import connect, init_db, store_decision
+    from courts.sync import reexamine_twins
+    conn = connect()
+    init_db(conn)
+    for source, doc in (("bb", "x"), ("be", "y")):
+        conn.execute("INSERT INTO source_items(source_id, source_doc_id, url) VALUES(?,?,?)", (source, doc, "u"))
+    with monkeypatch.context() as m:   # stored under the old rules: no twin detection
+        m.setattr(store_module, "same_decision_elsewhere", lambda conn, parsed: None)
+        store_decision(conn, _bsg("bb", "x", "ECLI:DE:BSG:2025:180625UB6KA424R0", ("1", "2")), content_hash="h1",
+                       capture_path="-", media_type="x", observed_at="2026-01-01T00:00:00+00:00")
+        store_decision(conn, _bsg("be", "y", "ECLI:DE:BSG:2025:180625UB6KA0424R0", ("1", "2")), content_hash="h2",
+                       capture_path="-", media_type="x", observed_at="2026-02-01T00:00:00+00:00")
+    assert reexamine_twins(conn) == {"twins_merged": 0, "twins_skipped": 1}
+    assert [r[0] for r in conn.execute("SELECT source_id FROM decisions")] == ["bb"]
+    item = conn.execute("SELECT state, failure_detail FROM source_items WHERE source_id='be'").fetchone()
+    assert item["state"] == "skipped" and item["failure_detail"].startswith("ECLI:DE:BSG:2025:180625UB6KA424R0 already")

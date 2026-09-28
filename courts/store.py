@@ -573,6 +573,35 @@ def finalise(parsed: ParsedDecision) -> ParsedDecision:
     return parsed
 
 
+def _loose_ecli(ecli: str) -> str:
+    return re.sub(r"[^A-Z1-9]", "", ecli.upper())
+
+
+def same_decision_elsewhere(conn: sqlite3.Connection, parsed: ParsedDecision):
+    """The same decision stored from another source under another id: same court, date, first Az and
+    decision type, and no two distinct ECLIs (spelling variants such as "…B1KR0924R0"/"…B1KR924R0" or
+    "26B.ER"/"26BER" count as one).  Two documents of one day and docket differ in type or ECLI."""
+    if not parsed.case_numbers or not parsed.court_id:
+        return None
+    rows = conn.execute("""SELECT d.id, d.content_hash, d.text_hash, d.parser_version, d.first_seen, d.source_id,
+                                  d.source_doc_id, d.numbering, d.ecli, d.decision_type
+                           FROM decisions d JOIN case_numbers c ON c.decision_id = d.id AND c.position = 1
+                           WHERE d.court_slug = ? AND d.decision_date = ? AND c.case_key = ? AND d.source_id <> ?""",
+                        (parsed.court_id, parsed.decision_date, case_key(parsed.case_numbers[0]),
+                         parsed.source_id)).fetchall()
+    kind = (parsed.decision_type or "").split(" ")[0].lower()
+    for row in rows:
+        other_kind = (row["decision_type"] or "").split(" ")[0].lower()
+        if kind and other_kind and kind != other_kind:
+            continue
+        if parsed.ecli and row["ecli"]:
+            a, b = _loose_ecli(parsed.ecli), _loose_ecli(row["ecli"])
+            if not (a.startswith(b) or b.startswith(a)):
+                continue
+        return row
+    return None
+
+
 def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_hash: str, capture_path: str,
                    media_type: str, observed_at: str | None = None, force: bool = False) -> tuple[str, bool]:
     """Insert or replace one decision; return (decision_id, changed)."""
@@ -583,9 +612,20 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
         raise UpstreamFailure("empty_document", "no paragraphs", url=parsed.source_url)
     text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
     observed_at = observed_at or utcnow()
+    twin = same_decision_elsewhere(conn, parsed)
+    if twin is not None and twin["numbering"] == "none" and numbering == "rn" and not parsed.ecli and twin["ecli"]:
+        # The explicit-Rn copy replaces an unnumbered twin and keeps its validated ECLI as the identity
+        # (RII copies whose published ECLI belongs to another document, bsg.bund.de copies without Rn).
+        parsed.ecli = twin["ecli"]
+        parsed.metadata["ecli_from_source"] = f"{twin['source_id']}:{twin['source_doc_id']}"
+        decision_id = decision_identity(parsed)
+        paragraphs, numbering = assemble(decision_id, parsed.sections)
+        text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
     existing = conn.execute("SELECT id, content_hash, text_hash, parser_version, first_seen, source_id, "
                             "source_doc_id, numbering FROM decisions WHERE (source_id=? AND source_doc_id=?) OR id=?",
                             (parsed.source_id, parsed.source_doc_id, decision_id)).fetchall()
+    if twin is not None and twin["id"] not in {r["id"] for r in existing}:
+        existing.append(twin)
     superseded = None
     for row in existing:
         if (row["source_id"], row["source_doc_id"]) != (parsed.source_id, parsed.source_doc_id):
@@ -595,7 +635,8 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
                 superseded = row
                 continue
             raise UpstreamFailure("duplicate_identity",
-                                  f"{decision_id} already stored from {row['source_id']}:{row['source_doc_id']}",
+                                  f"{row['id']} already stored from {row['source_id']}:{row['source_doc_id']}"
+                                  + ("" if row["id"] == decision_id else f" (same court, date, Az and type as {decision_id})"),
                                   url=parsed.source_url)
     first_seen = min(r["first_seen"] for r in existing) if existing else observed_at
     own = [r for r in existing if superseded is None or r["id"] != superseded["id"]

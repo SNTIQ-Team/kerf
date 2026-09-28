@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import json
 import os
 import sqlite3
 import sys
@@ -311,4 +312,50 @@ def reexamine_skipped(adapter: Adapter, conn: sqlite3.Connection, *, home=None) 
             counts["skipped_requeued"] += 1
         else:
             counts["skipped_kept"] += 1
+    return counts
+
+
+def reexamine_twins(conn: sqlite3.Connection, *, home=None) -> dict:
+    """One decision stored twice from two sources under different ids (ECLI spelling variants, or a published
+    ECLI dropped as another document's): keep one.  The explicit-Rn copy wins (it is re-stored and takes the
+    unnumbered twin's validated ECLI), otherwise the first stored; the other becomes a skipped duplicate."""
+    from .sources import get_adapter
+    from .store import _delete_decision, same_decision_elsewhere
+    counts = {"twins_merged": 0, "twins_skipped": 0}
+    rows = conn.execute("""
+        SELECT a.id AS a_id, b.id AS b_id FROM decisions a
+        JOIN case_numbers ca ON ca.decision_id = a.id AND ca.position = 1
+        JOIN case_numbers cb ON cb.case_key = ca.case_key AND cb.position = 1 AND cb.decision_id <> a.id
+        JOIN decisions b ON b.id = cb.decision_id AND b.court_slug = a.court_slug
+                        AND b.decision_date = a.decision_date AND b.source_id > a.source_id""").fetchall()
+    for pair in rows:
+        a = conn.execute("SELECT * FROM decisions WHERE id=?", (pair["a_id"],)).fetchone()
+        b = conn.execute("SELECT * FROM decisions WHERE id=?", (pair["b_id"],)).fetchone()
+        if a is None or b is None:
+            continue
+        from .model import ParsedDecision
+        probe = ParsedDecision(source_id=b["source_id"], source_doc_id=b["source_doc_id"], source_url="",
+                               court_name="", decision_date=b["decision_date"], case_numbers_raw="",
+                               case_numbers=json.loads(b["case_numbers"]), decision_type=b["decision_type"],
+                               sections=[], ecli=b["ecli"], court_id=b["court_slug"])
+        twin = same_decision_elsewhere(conn, probe)
+        if twin is None or twin["id"] != a["id"]:
+            continue  # different documents (type or ECLI differ)
+        if a["numbering"] != b["numbering"]:
+            winner, loser = (a, b) if a["numbering"] == "rn" else (b, a)
+        else:
+            winner, loser = (a, b) if a["first_seen"] <= b["first_seen"] else (b, a)
+        if winner["numbering"] == "rn" and loser["numbering"] == "none":
+            result = reparse_source(get_adapter(winner["source_id"]), conn, home=home,
+                                    decision_ids={winner["id"]}, force=True)
+            counts["twins_merged"] += result["reparsed"]
+            continue
+        conn.execute("BEGIN IMMEDIATE")
+        _delete_decision(conn, loser["id"])
+        conn.execute("""UPDATE source_items SET state='skipped', decision_id=NULL, failure_kind='duplicate_identity',
+                        failure_detail=? WHERE source_id=? AND source_doc_id=?""",
+                     (f"{winner['id']} already stored from {winner['source_id']}:{winner['source_doc_id']} "
+                      f"(same court, date, Az and type as {loser['id']})", loser["source_id"], loser["source_doc_id"]))
+        conn.execute("COMMIT")
+        counts["twins_skipped"] += 1
     return counts
