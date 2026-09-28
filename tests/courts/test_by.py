@@ -90,3 +90,16 @@ def test_lag_list_attributes_first_instance_entries_to_the_arbg():
     assert (first["listed_court"], first["listed_case_numbers"]) == ("arbg-muenchen", "6 BV 41/19")
     assert first["extra"]["court_name"] == "Arbeitsgericht München"
     assert (second["listed_court"], second["listed_case_numbers"]) == ("lag-muenchen", "4 Sa 871/20")
+
+
+def test_wrong_list_date_is_tolerated_only_when_the_docket_matches_the_file(fixture):
+    from courts.errors import UpstreamFailure
+    wrong = dict(ITEM, listed_date="2008-08-27")
+    d = parse_pdf_decision(fixture(PDF), wrong, "https://www.bayern.verfassungsgerichtshof.de/media/images/"
+                                                "bayverfgh/15-vii-25_entscheidung.pdf")
+    assert d.decision_date == "2026-07-31"
+    assert d.metadata["listed_date_conflict"] == {"listed": "2008-08-27", "document": "2026-07-31"}
+    with pytest.raises(UpstreamFailure) as err:
+        parse_pdf_decision(fixture(PDF), wrong, "https://www.bayern.verfassungsgerichtshof.de/media/images/"
+                                                "bayverfgh/16-vii-25_entscheidung.pdf")
+    assert err.value.kind == "identity_mismatch"

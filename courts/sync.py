@@ -31,6 +31,8 @@ def sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *,
                 home=None) -> dict:
     register_source(conn, adapter.source_id, adapter.label, adapter.base_url, adapter.land, adapter.adapter_name)
     run_id = start_run(conn, adapter.source_id, since, limit)
+    conn.execute("UPDATE sources SET status='partial', status_reason='first sync in progress' "
+                 "WHERE source_id=? AND status='never_synced'", (adapter.source_id,))
     counts = {"listed": 0, "attempted": 0, "stored": 0, "unchanged": 0, "failed": 0, "requests": 0}
     requests_before = http.requests_made
     status, notes = "ok", None
