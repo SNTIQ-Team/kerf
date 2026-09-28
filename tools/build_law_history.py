@@ -117,6 +117,7 @@ class StateObs:
     valid_until: str | None = None
     interval: dict[str, Any] | None = None
     amendment: dict[str, Any] | None = None
+    capture_kind: str | None = None
     seq: int = 0
 
     def rows(self) -> list[dict[str, Any]]:
@@ -233,7 +234,12 @@ def bundle_states(bundle: sqlite3.Connection | None, act_id: str
         captured = str(row["captured_at"] or "")
         first = str(row["first_captured_at"] or captured)
         last = str(row["last_captured_at"] or captured)
+        kinds = {str(c.get("kind")) for c in json.loads(
+            row["captures_json"] or "[]") if isinstance(c, dict)}
+        kind = "norm_html" if "norm_html" in kinds or (
+            not row["complete"] and row["norm_count"] <= 1) else None
         states.append(StateObs(
+            capture_kind=kind,
             key=f"{row['source']}:{row['sha256'][:16]}",
             source=row["source"], source_role=row["source_role"],
             known_from=_day(first), known_until=_day(last),
@@ -1463,6 +1469,8 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
              pack_json(change)))
     for state in states:
         notes = stand_by_state.get(state.seq) or parse_notes(state.stand)
+        if state.capture_kind:
+            notes = {**notes, "capture_kind": state.capture_kind}
         writer.db.execute(
             "INSERT INTO states VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (act_id, state.seq, state.key, state.source, state.source_role,

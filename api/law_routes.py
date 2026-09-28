@@ -64,7 +64,7 @@ _ALLOWED = {
     "materials": {"relation"},
     "changes": {"date", "limit", "offset", "state"},
     "act_changes": {"date", "limit", "offset", "state", "norm"},
-    "act_versions": {"limit", "offset", "source"},
+    "act_versions": {"limit", "offset", "source", "include_partial"},
 }
 CHANGE_STATES = {"in_force", "pending", "incorporated_date_unknown",
                  "date_unknown", "not_yet_promulgated"}
@@ -469,6 +469,7 @@ def create_router(data_dir: Callable[[], Path],
             limit = _int(params.get("limit"), 200, 0, 1000)
             offset = _int(params.get("offset"), 0, 0, 100000)
             source = params.get("source")
+            partial = _bool(params.get("include_partial"), False)
             lh = history()
             if not re.fullmatch(r"[a-z0-9_]+", act_id or ""):
                 raise EnvelopeError("invalid_argument", "invalid act id")
@@ -476,10 +477,14 @@ def create_router(data_dir: Callable[[], Path],
                 raise EnvelopeError(
                     "not_in_corpus", f"no version history for {act_id}")
             rows = []
+            skipped = 0
             for state in reversed(lh.states(act_id)):
                 if source and state["source"] != source:
                     continue
                 notes = state.get("notes") or {}
+                if notes.get("capture_kind") == "norm_html" and not partial:
+                    skipped += 1   # single-norm pages attest norms, not acts
+                    continue
                 rows.append({
                     "seq": state["seq"], "state": state["state_key"],
                     "source": state["source"],
@@ -507,6 +512,8 @@ def create_router(data_dir: Callable[[], Path],
                            "count": len(rows)}],
                 applied_constraints={"act_id": act_id,
                                      "source": source or "all",
+                                     "include_partial": partial,
+                                     "single_norm_pages_omitted": skipped,
                                      "order": "newest_first"},
                 evidence=rows[offset:offset + limit] if limit else [],
                 offset=offset, limit=limit,
