@@ -236,3 +236,13 @@ def test_reparse_is_offline_and_only_rewrites_on_parser_change(conn, fixture, mo
     assert reparse_source(adapter, conn) == {"reparsed": 1, "unchanged": 0, "failed": 0}
     row = conn.execute("SELECT parser_version, first_seen, observed_at FROM decisions WHERE id=?", (ECLI,)).fetchone()
     assert row["parser_version"] == "courts-parser/9.9.9"
+
+
+def test_second_concurrent_sync_of_the_same_source_is_refused(isolated_corpus):
+    from courts.sync import SourceBusy, source_lock
+    with source_lock("nrw", isolated_corpus):
+        with pytest.raises(SourceBusy):
+            with source_lock("nrw", isolated_corpus):
+                pass
+        with source_lock("rii", isolated_corpus):  # other sources are independent
+            pass

@@ -11,7 +11,7 @@ from .http import PoliteHttp
 from .read import citing_decisions, coverage, get_decision, get_paragraph, open_db, search
 from .sources import get_adapter, registry
 from .store import connect, init_db
-from .sync import reparse_source, sync_source
+from .sync import SourceBusy, reparse_source, sync_source
 
 
 def _date(value: str) -> str:
@@ -33,8 +33,12 @@ def cmd_sync(args) -> int:
     init_db(conn)
     http = PoliteHttp()
     courts = [c.strip() for c in args.court.split(",")] if args.court else None
-    result = sync_source(adapter, conn, http, since=args.since, limit=args.limit, courts=courts,
-                         retry_failed=args.retry_failed)
+    try:
+        result = sync_source(adapter, conn, http, since=args.since, limit=args.limit, courts=courts,
+                             retry_failed=args.retry_failed)
+    except SourceBusy as exc:
+        print(json.dumps({"status": "busy", "detail": str(exc)}), file=sys.stderr)
+        return 3
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result["status"] in ("ok", "partial") else 1
 
