@@ -6,6 +6,7 @@ import contextlib
 import json
 import re
 import sys
+import time
 
 from .config import data_home, db_path
 from .space import check as check_space
@@ -51,13 +52,16 @@ def cmd_sync(args) -> int:
     all share one connection whose transaction lock serialises the short write transactions, and one
     Maintenance checkpoints the WAL and runs the space guard (courts.writer)."""
     import threading
+    from .sync import STOP_AFTER_ITEM
     from .writer import Maintenance, SharedConnection
     sources = [s.strip() for s in args.source.split(",") if s.strip()]
+    queued = [s.strip() for s in (args.then or "").split(",") if s.strip()]
     if len(sources) > MAX_PARALLEL_SOURCES:
         print(json.dumps({"status": "invalid_argument",
                           "detail": f"at most {MAX_PARALLEL_SOURCES} sources per writer process"}), file=sys.stderr)
         return 2
     adapters = [get_adapter(s) for s in sources]
+    waiting = [get_adapter(s) for s in queued]
     if not space_ok(f"sync {args.source}"):
         return 4
     conn = SharedConnection(connect(threads=True))
@@ -75,15 +79,24 @@ def cmd_sync(args) -> int:
             results[adapter.source_id] = {"status": "busy", "detail": str(exc)}
         except Exception as exc:  # one source's defect must not take the others down
             results[adapter.source_id] = {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"[:500]}
-    threads = [threading.Thread(target=run, args=(a,), name=f"sync-{a.source_id}", daemon=True) for a in adapters]
-    for thread in threads:
+    def start(adapter):
+        thread = threading.Thread(target=run, args=(adapter,), name=f"sync-{adapter.source_id}", daemon=True)
         thread.start()
-    for thread in threads:
-        while thread.is_alive():
-            thread.join(timeout=1.0)  # the main thread keeps receiving SIGTERM
+        return thread
+    # At most len(--source) threads at a time; a --then source starts when a slot frees up (batch order).
+    threads = [start(a) for a in adapters]
+    while threads:
+        time.sleep(1.0)  # the main thread keeps receiving SIGTERM
+        alive = [t for t in threads if t.is_alive()]
+        while waiting and len(alive) < len(adapters) and not STOP_AFTER_ITEM.is_set() and not maintenance.stopped:
+            alive.append(start(waiting.pop(0)))
+        threads = alive
+    for adapter in waiting:
+        results[adapter.source_id] = {"status": "not_started",
+                                      "detail": "stopped before its turn (SIGTERM or space/WAL guard)"}
     from .writer import checkpoint
     checkpoint(conn)
-    print(json.dumps(results if len(sources) > 1 else results[sources[0]], ensure_ascii=False))
+    print(json.dumps(results if len(results) > 1 else results[sources[0]], ensure_ascii=False))
     return 0 if all(r.get("status") in ("ok", "partial") for r in results.values()) else 1
 
 
@@ -434,6 +447,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=_positive, help="fetch at most N decisions (priority order)")
     p.add_argument("--court", help="comma list of court ids/prefixes to restrict (e.g. bsg,bverwg)")
     p.add_argument("--retry-failed", action="store_true", help="also retry previously failed items")
+    p.add_argument("--then", help="comma list of sources to sync next, each starting when a --source thread "
+                                  "finishes (at most len(--source) at a time)")
     p.set_defaults(func=cmd_sync)
     p = sub.add_parser("reparse", help="re-parse stored raw captures with the current parser (offline)")
     p.add_argument("--source", help="one source (default: all)")
