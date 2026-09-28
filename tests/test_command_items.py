@@ -45,3 +45,12 @@ def test_quoted_wording_never_becomes_the_address():
     row = FIXTURE["bgbl_2023_146"]
     ref = parse_command(row["raw"])["ref"]
     assert ref == {"para": "26", "absatz": "6"}
+
+
+def test_lettered_and_three_digit_items_are_separate_commands():
+    body = ("1. § 3 wird aufgehoben.\n1a. § 4 wird aufgehoben.\n"
+            "1c. § 5 wird aufgehoben.\n2. § 6 wird aufgehoben.\n")
+    assert [item.split()[1] for item in _split_items(body)] == [
+        "3", "4", "5", "6"]
+    long = "\n".join(f"{n}. § {n} wird aufgehoben." for n in range(1, 102))
+    assert len(_split_items(long)) == 101
