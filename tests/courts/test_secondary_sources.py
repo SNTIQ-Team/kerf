@@ -72,6 +72,14 @@ def test_wayback_bverwg_page_and_old_layout():
     assert [p["court"] for p in d.procedural] == ["VG Bremen", "OVG Bremen"]
 
 
+def test_wayback_bverwg_2015_layout_without_data_ecli():
+    item = wayback_item("bverwg", "010415B1C7.15.0", "20150511111941", "2015-04-01", "1 C 7.15")
+    body = gz(FIX / "wayback" / "bverwg-010415B1C7.15.0-20150511111941-2015-layout.html.gz")
+    d = finalise(get_adapter("wayback").parse(Capture(body, item["url"], "text/html", "html"), item))
+    assert d.ecli == "ECLI:DE:BVerwG:2015:010415B1C7.15.0" and [(s.name, len(s.blocks)) for s in d.sections] == [
+        ("tenor", 5), ("gruende", 7)]
+
+
 def test_wayback_bverwg_reasons_after_the_tenor_are_gruende():
     item = wayback_item("bverwg", "010206B7B80.05.0", "20240622222938", "2006-02-01", "7 B 80.05")
     body = gz(FIX / "wayback" / "bverwg-010206B7B80.05.0-20240622222938.html.gz")
