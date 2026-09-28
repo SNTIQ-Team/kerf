@@ -243,6 +243,30 @@ def verify(bundle: Path, *, signers: Path | None = None) -> dict[str, Any]:
     return manifest
 
 
+def install(incoming: Path, root: Path, *, signers: Path | None,
+            keep: int = 3) -> dict[str, Any]:
+    """Verify an uploaded bundle and make it ``<root>/current`` atomically."""
+    manifest = verify(incoming, signers=signers)
+    stamp = manifest["built_at"].replace("-", "").replace(":", "")
+    target = root / f"bundle-{stamp}"
+    root.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        shutil.rmtree(incoming)
+    else:
+        os.replace(incoming, target)
+    link = root / "current"
+    tmp = root / f".current-{os.getpid()}"
+    if tmp.exists() or tmp.is_symlink():
+        tmp.unlink()
+    tmp.symlink_to(target.name)
+    os.replace(tmp, link)
+    bundles = sorted(p for p in root.glob("bundle-*") if p.is_dir())
+    for old in bundles[:-keep]:
+        if old.resolve() != target.resolve():
+            shutil.rmtree(old)
+    return manifest
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -256,12 +280,20 @@ def main(argv: list[str] | None = None) -> int:
     ve = sub.add_parser("verify")
     ve.add_argument("bundle", type=Path)
     ve.add_argument("--signers", type=Path)
+    ins = sub.add_parser("install")
+    ins.add_argument("incoming", type=Path)
+    ins.add_argument("--root", type=Path,
+                     default=ROOT / "data" / "history_bundle")
+    ins.add_argument("--signers", type=Path, default=Path(os.environ.get(
+        "LEXGRAPH_ARCHIVE_SIGNERS", "/etc/sntiq/lexgraph-archive.allowed_signers")))
     args = parser.parse_args(argv)
     if args.command == "export":
         manifest = export(args.archive, args.out,
                           change_dates=args.change_dates,
                           bavarian=args.bavarian, key=args.key,
                           acts={a for a in args.acts.split(",") if a} or None)
+    elif args.command == "install":
+        manifest = install(args.incoming, args.root, signers=args.signers)
     else:
         manifest = verify(args.bundle, signers=args.signers)
     print(json.dumps({k: manifest.get(k) for k in (
