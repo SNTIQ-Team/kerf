@@ -98,6 +98,47 @@ def cmd_migrate_captures(args) -> int:
     return 0 if not report["verify_error_count"] and not report["bad_legacy"] else 1
 
 
+def cmd_compact(args) -> int:
+    """FTS optimize + VACUUM INTO a fresh file in the NOCOW corpus directory, then an atomic swap."""
+    import os
+    import sqlite3 as _sqlite3
+    from .packs import _nocow
+    if not space_ok("compact"):
+        return 4
+    home = data_home()
+    conn = connect()
+    init_db(conn)
+    sources = [r[0] for r in conn.execute("SELECT source_id FROM sources")]
+    with contextlib.ExitStack() as stack:
+        try:
+            for source_id in sources:
+                stack.enter_context(source_lock(source_id))
+        except SourceBusy as exc:
+            print(json.dumps({"status": "busy", "detail": str(exc)}), file=sys.stderr)
+            return 3
+        before = db_path().stat().st_size
+        conn.execute("INSERT INTO paragraphs_fts(paragraphs_fts) VALUES('optimize')")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        _nocow(home)  # new files in the corpus root inherit NOCOW (fewer btrfs extents)
+        target = home / "courts.sqlite.compact"
+        target.unlink(missing_ok=True)
+        conn.execute("VACUUM INTO ?", (str(target),))
+        conn.close()
+        check = _sqlite3.connect(target)
+        ok = check.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        check.execute("INSERT INTO paragraphs_fts(paragraphs_fts) VALUES('integrity-check')")
+        check.close()
+        if not ok:
+            target.unlink()
+            print(json.dumps({"status": "failed", "detail": "quick_check failed on compacted copy"}))
+            return 1
+        os.replace(target, db_path())
+        for suffix in ("-wal", "-shm"):
+            (home / f"courts.sqlite{suffix}").unlink(missing_ok=True)
+        print(json.dumps({"status": "ok", "bytes_before": before, "bytes_after": db_path().stat().st_size}))
+    return 0
+
+
 def cmd_space(args) -> int:
     report = check_space(data_home(), starting=True)
     print(json.dumps({"bulk_writes_allowed": not report.problems, **report.as_dict()}, indent=2))
@@ -187,6 +228,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--delete-legacy", action="store_true", help="delete legacy files after full verification")
     p.add_argument("--verify-only", action="store_true", help="only verify packs against the index")
     p.set_defaults(func=cmd_migrate_captures)
+    p = sub.add_parser("compact", help="FTS optimize + VACUUM INTO a NOCOW file (no syncs may run)")
+    p.set_defaults(func=cmd_compact)
     p = sub.add_parser("space", help="btrfs/disk guard for bulk writes")
     p.set_defaults(func=cmd_space)
     p = sub.add_parser("status", help="coverage per source")

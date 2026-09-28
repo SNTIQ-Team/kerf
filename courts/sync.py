@@ -119,6 +119,16 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                 counts["stored" if changed else "unchanged"] += 1
                 consecutive_blocking = 0
             except UpstreamFailure as failure:
+                if failure.kind == "duplicate_identity":
+                    # The same decision (same ECLI) is already stored from another official source,
+                    # e.g. RII and the court's own site: not a failure; the capture stays in the pack.
+                    counts["duplicates"] = counts.get("duplicates", 0) + 1
+                    conn.execute("""UPDATE source_items SET state='skipped', attempts=attempts+1, last_attempt=?,
+                                    failure_kind='duplicate_identity', failure_detail=? WHERE source_id=? AND
+                                    source_doc_id=?""", (utcnow(), failure.detail[:500], adapter.source_id,
+                                                         item["source_doc_id"]))
+                    consecutive_blocking = 0
+                    continue
                 counts["failed"] += 1
                 if failure.url is None:
                     failure.url = item["url"]

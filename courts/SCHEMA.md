@@ -11,7 +11,7 @@ reads it directly and read-only. This file is the contract between them.
 | Database | `courts.sqlite` (WAL mode; writers are `python -m courts sync` processes) |
 | Raw captures | Packed: `packs/<source_id>/<source_id>-<NNNN>.pack`, append-only, rotated at 512 MiB (O(100) files in total, not one file per capture; per-file storage exhausted btrfs metadata). Indexed by table `captures`. |
 | Schema version | `PRAGMA user_version` = `2`, also `meta.schema_version`. |
-| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.2.0`). |
+| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.3.0`). |
 
 Readers must check `PRAGMA user_version == 2` and refuse any other value. Within a version, changes are additive only (new tables, new nullable columns, new views). Removing or renaming a column, or changing identity or storage rules, bumps the version. v1 → v2 (2026-09-28): added `captures` and the `sources` policy columns; `decisions.capture_path` became a pack reference. `init_db` upgrades v1 in place, and `python -m courts migrate-captures --delete-legacy` moves v1 `raw/*.gz` files into packs, verifying every hash before anything is deleted.
 
@@ -75,7 +75,7 @@ One row per decision. Keys: `id` PK, `UNIQUE(source_id, source_doc_id)`.
 | `decision_id`, `section`, `authorship`, `ordinal` | `ordinal` is the document order. |
 | `rn` | Explicit Randnummer label, or NULL. |
 | `numbering` | `rn` or `none`. |
-| `block_count`, `blocks` | `blocks` is JSON `[{text, locator, kind}]`; `locator` points into the raw capture (XPath / CSS / PDF page+line). |
+| `block_count`, `blocks` | `blocks` is JSON `[{start, end, locator, kind}]`: code-point offsets into `text` (text = the block texts joined by `\n\n`), so the block text is `text[start:end]`; `locator` points into the raw capture (XPath / CSS / PDF page+line). Block text is not stored twice. |
 | `text`, `text_hash` | `text_hash` = sha256(text). Readers verify it before quoting. |
 
 `paragraphs_fts` is an external-content FTS5 table (`tokenize='unicode61 remove_diacritics 2'`), kept in sync by triggers. Query it with `paragraphs_fts MATCH ?`. Build the MATCH string from quoted literals only (`"Untätigkeitsklage" AND "Mitteilung"`, phrase: `"sondern lediglich"`) so user input can never inject FTS syntax. Rank with `bm25(paragraphs_fts)`.
@@ -92,7 +92,7 @@ Typed citation statements. Never a generic "cites".
 | `target_decision_id` | Corpus decision the citation resolves to (filled by the relink step: ECLI, or court + date + case_key). |
 | `target_court_id`, `target_date`, `target_case_key` | Decision citations only; used for relinking. |
 | `target_raw` | Normalised citation text (`§ 166 Abs. 1 Satz 1 VwGO`, `BVerwG, Beschluss vom … - 1 B 1.14`). |
-| `paragraph_id`, `span_start`, `span_end`, `quoted_context` | Evidence. Spans are Unicode code-point offsets into `paragraphs.text`. |
+| `paragraph_id`, `span_start`, `span_end`, `quoted_context` | Evidence. Spans are Unicode code-point offsets into `paragraphs.text`. `quoted_context` is stored for `quotes` rows (the quoted passage) and for metadata rows. For other text rows it is stored as `''`, and readers derive it as `paragraphs.text[max(0, span_start-160) : span_end+160]` with whitespace collapsed. |
 | `origin` | `decision_text` (parsed from court-authored paragraphs), `editorial_metadata` (e.g. RII `<norm>`, `<vorinstanz>`) or `source_metadata` (e.g. NRWE "Vorinstanz" field). Metadata rows have `paragraph_id` NULL. |
 | `derived_by`, `legal_effect_verified`, `confidence` | `derived_by` ∈ `parser, model, user`. `legal_effect_verified` is 0 for everything the parser writes. |
 | `detail` | JSON: act, act_key, act_resolution (`gii_catalog, alias, land_affix, eu, eu_citation, international, unresolved`), chain, `in_conjunction_with` (i.V.m.), `following` (`f`/`ff`), `via_range`, `pinpoint_extra` (Alt./Hs.), court/date/case_number for decisions. |
@@ -107,7 +107,7 @@ Norm prefix query (segment-exact, index-friendly): `target_id = :n OR (target_id
 | Table | Content |
 |---|---|
 | `sources` | One row per portal. `status` ∈ `ok, partial, unavailable, blocked, never_synced`; `status_reason`; `upstream_listed`; `listing_complete` (1 only after an unbounded run listed the whole upstream archive); access policy `robots_policy` ∈ `respect, ignore_by_operator_decision` with `policy_decided_at` (date) and `policy_basis` (text), and `min_interval` (seconds between requests per host); last sync timestamps. `ignore_by_operator_decision` means that robots.txt, Crawl-delay and TDM reservations were deliberately not applied for that source on the operator's (user's) decision. Challenges, CAPTCHAs and logins are never bypassed; 429/503 and Retry-After are honoured. Coverage output must show this flag. |
-| `source_items` | The incremental frontier: every listed upstream document with `state` ∈ `pending, stored, failed, skipped`; `priority` (0 = social/administrative courts first); `listed_modified` versus `fetched_modified` (a change re-queues the item); typed `failure_kind`. |
+| `source_items` | The incremental frontier: every listed upstream document with `state` ∈ `pending, stored, failed, skipped` (`skipped` + `failure_kind = duplicate_identity`: the same decision is already stored from another official source, e.g. RII and the court's own site); `priority` (0 = social/administrative courts first); `listed_modified` versus `fetched_modified` (a change re-queues the item); typed `failure_kind`. |
 | `sync_runs` | One row per run: counts, request total, status; `notes = 'listing incomplete…'` marks runs that cannot serve as an incremental baseline. |
 | `failures` | Typed failures (`challenge, login, error_page, http_error, rate_limited, network, robots_disallowed, unexpected_representation, parse_error, identity_mismatch, empty_document, duplicate_identity`). A failure is never stored as a decision. |
 | `http_validators` | ETag / Last-Modified per URL, for conditional requests. |
@@ -140,4 +140,5 @@ WHERE paragraphs_fts MATCH '"Streitgegenstand" AND "Untätigkeitsklage" AND "Mit
 
 - `python -m courts space`: the btrfs guard. Bulk writes (sync, reparse, migrate-captures) start only if "Device unallocated" ≥ 10 GiB and metadata usage ≤ 90 %. Metadata usage = used / (allocated + unallocated / metadata ratio). A running sync re-checks every 25 items and stops (run status `failed`, reason in `sync_runs.notes`) if metadata usage exceeds 90 % or unallocated falls below 4 GiB. Items stay `pending`.
 - `python -m courts status`: coverage per source, including the robots policy and the space guard verdict.
+- `python -m courts compact`: FTS `optimize` plus `VACUUM INTO` a new file in the NOCOW corpus directory, then an atomic swap. It needs all source locks, so no sync may be running.
 - One sync process per source (lock file `locks/<source>.lock`); a second one exits with code 3.

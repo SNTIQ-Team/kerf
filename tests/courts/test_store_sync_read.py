@@ -294,3 +294,34 @@ def test_local_disk_full_stops_the_run_and_leaves_items_pending(conn, fixture, m
     assert conn.execute("SELECT count(*) FROM failures").fetchone()[0] == 0
     run = conn.execute("SELECT status, notes FROM sync_runs ORDER BY id DESC LIMIT 1").fetchone()
     assert run["status"] == "failed" and "No space left" in run["notes"]
+
+
+def test_blocks_are_offsets_into_text_and_contexts_are_derived(conn, fixture):
+    seed(conn, fixture)
+    raw = conn.execute("SELECT blocks, text FROM paragraphs WHERE id=?", (f"{ECLI}#rn-10",)).fetchone()
+    blocks = json.loads(raw["blocks"])
+    assert all(set(b) == {"start", "end", "locator", "kind"} for b in blocks)      # no duplicated text
+    assert "\n\n".join(raw["text"][b["start"]:b["end"]] for b in blocks) == raw["text"]
+    p = get_paragraph(open_db(), f"{ECLI}#rn-10")["evidence"][0]
+    assert p["blocks"][2]["text"].startswith("rechtfertigt diese ebenfalls nicht")
+    stored = conn.execute("SELECT quoted_context FROM relations WHERE paragraph_id=? AND target_id=?",
+                          (f"{ECLI}#rn-10", "de/bund/vwgo/para/75")).fetchone()[0]
+    assert stored == ""                                                            # derived at read time
+    rel = next(r for r in p["relations"] if r["target_id"] == "de/bund/vwgo/para/75")
+    assert "Untätigkeitsklage" in rel["evidence"]["quoted_context"]
+
+
+def test_same_decision_from_second_source_is_skipped_not_failed(conn, fixture):
+    sync_source(FixtureAdapter(fixture, [item()]), conn, FakeHttp())
+
+    class CourtSite(FixtureAdapter):
+        source_id = "bverwg"
+
+        def parse(self, capture, it):
+            parsed = RiiAdapter().parse(capture, dict(it, source_doc_id=DOC))
+            parsed.source_id, parsed.source_doc_id = "bverwg", it["source_doc_id"]
+            return parsed
+    result = sync_source(CourtSite(fixture, [item("160316B1B19.16.0")]), conn, FakeHttp())
+    assert result["failed"] == 0 and result["duplicates"] == 1 and result["status"] == "ok"
+    row = conn.execute("SELECT state, failure_kind FROM source_items WHERE source_id='bverwg'").fetchone()
+    assert tuple(row) == ("skipped", "duplicate_identity")

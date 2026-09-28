@@ -248,16 +248,31 @@ def get_decision(conn: sqlite3.Connection, ref: str, *, with_paragraphs: bool = 
              "text_hash": p["text_hash"]}
             for p in conn.execute("SELECT * FROM paragraphs WHERE decision_id=? ORDER BY ordinal", (d["id"],))]
     if with_relations:
-        result["relations"] = [relation_row(r) for r in conn.execute(
-            "SELECT * FROM relations WHERE decision_id=? ORDER BY id", (d["id"],))]
+        result["relations"] = [relation_row(r, conn) for r in conn.execute(
+            "SELECT * FROM relations WHERE decision_id=? ORDER BY id", (d["id"],)).fetchall()]
     return {"status": "ok", "decision": result}
 
 
-def relation_row(r) -> dict:
+CONTEXT_WIDTH = 160
+
+
+def context_for(conn, r) -> str:
+    """quoted_context as stored, or derived from paragraphs.text and the span (stored empty to save space)."""
+    if r["quoted_context"] or r["paragraph_id"] is None or r["span_start"] is None:
+        return r["quoted_context"]
+    row = conn.execute("SELECT text FROM paragraphs WHERE id = ?", (r["paragraph_id"],)).fetchone()
+    if row is None:
+        return ""
+    text = row[0]
+    return " ".join(text[max(0, r["span_start"] - CONTEXT_WIDTH):r["span_end"] + CONTEXT_WIDTH].split())
+
+
+def relation_row(r, conn=None) -> dict:
     return {"relation": r["relation"], "target_kind": r["target_kind"], "target_id": r["target_id"],
             "target_decision_id": r["target_decision_id"], "target_raw": r["target_raw"],
             "origin": r["origin"], "source_id": r["decision_id"],
-            "evidence": {"paragraph_id": r["paragraph_id"], "quoted_context": r["quoted_context"],
+            "evidence": {"paragraph_id": r["paragraph_id"],
+                         "quoted_context": context_for(conn, r) if conn is not None else r["quoted_context"],
                          "span": [r["span_start"], r["span_end"]] if r["span_start"] is not None else None,
                          "derived_by": r["derived_by"], "legal_effect_verified": bool(r["legal_effect_verified"]),
                          "confidence": r["confidence"]},
@@ -272,9 +287,9 @@ def get_paragraph(conn: sqlite3.Connection, paragraph_id: str) -> dict:
     if hashlib.sha256(row["text"].encode()).hexdigest() != row["text_hash"]:
         return {"status": "integrity_check_failed", "request": paragraph_id}
     item = evidence_item(row, excerpt=False)
-    item["blocks"] = json.loads(row["blocks"])
-    item["relations"] = [relation_row(r) for r in conn.execute(
-        "SELECT * FROM relations WHERE paragraph_id=? ORDER BY span_start", (paragraph_id,))]
+    item["blocks"] = [dict(b, text=row["text"][b["start"]:b["end"]]) for b in json.loads(row["blocks"])]
+    item["relations"] = [relation_row(r, conn) for r in conn.execute(
+        "SELECT * FROM relations WHERE paragraph_id=? ORDER BY span_start", (paragraph_id,)).fetchall()]
     return {"status": "ok", "evidence": [item]}
 
 
@@ -299,7 +314,7 @@ def citing_decisions(conn: sqlite3.Connection, target: str, *, relation: str | N
             "relation_types_included": [relation] if relation else ["mentions", "quotes", "procedural_reference"],
             "note": "parser relations only (derived_by=parser, legal_effect_verified=false); "
                     "they record that a decision mentions/quotes a target, not that it applies it",
-            "total": total, "relations": [relation_row(r) for r in rows]}
+            "total": total, "relations": [relation_row(r, conn) for r in rows]}
 
 
 def coverage(conn: sqlite3.Connection) -> dict:
