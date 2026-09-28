@@ -454,3 +454,21 @@ def test_reexamine_skipped_stores_the_second_document_of_a_shared_federal_ecli()
     rows = {r["id"]: r["decision_date"] for r in conn.execute("SELECT id, decision_date FROM decisions")}
     assert rows[ecli] == "2023-02-15"
     assert "court:bsg/2023-08-31/B_11_AL_42-21_R" in rows
+
+
+def test_first_sigterm_finishes_the_current_item_then_stops(conn, fixture):
+    import courts.sync as sync_module
+
+    class StopDuringFirst(FixtureAdapter):
+        def fetch(self, http, it):
+            sync_module.STOP_AFTER_ITEM.set()   # SIGTERM arrives while the first item is being fetched
+            return super().fetch(http, it)
+    items = [item(), item(doc="second", date="2016-03-17")]
+    try:
+        result = sync_module.sync_source(StopDuringFirst(fixture, items), conn, FakeHttp())
+    finally:
+        sync_module.STOP_AFTER_ITEM.clear()
+    assert result["status"] == "interrupted"
+    states = sorted(r[0] for r in conn.execute("SELECT state FROM source_items"))
+    assert result["attempted"] == 1 and states.count("pending") == 1   # one item done, the other untouched
+    assert conn.execute("SELECT status, notes FROM sync_runs ORDER BY id DESC").fetchone()[0] == "interrupted"

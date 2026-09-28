@@ -412,11 +412,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=_positive, default=20)
     p.set_defaults(func=cmd_cites)
     args = parser.parse_args(argv)
-    # SIGTERM (e.g. `kill <pid>`) ends a sync like Ctrl-C: the run is recorded as interrupted and every
-    # committed decision stays; pending items resume on the next run.
+    # SIGTERM (e.g. `kill <pid>`) during a sync: the current item is finished, then the run stops and is
+    # recorded as interrupted; a second SIGTERM (or any other command) interrupts at once like Ctrl-C.
+    # Every committed decision stays; pending items resume on the next run.
     import signal
+    from .sync import STOP_AFTER_ITEM
 
     def _terminate(signum, frame):
+        if args.func is cmd_sync and not STOP_AFTER_ITEM.is_set():
+            STOP_AFTER_ITEM.set()
+            return
         raise KeyboardInterrupt(f"signal {signum}")
     signal.signal(signal.SIGTERM, _terminate)
     try:
