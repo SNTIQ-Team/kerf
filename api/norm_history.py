@@ -65,6 +65,12 @@ _DIGEST = re.compile(r"[0-9a-f]{64}")
 
 # ----------------------------------------------------------------- helpers
 
+def is_annex(norm_id: str) -> bool:
+    """Anlagen/Anhänge are tables or forms, not Absatz-structured text."""
+    parts = norm_id.split("/")
+    return len(parts) > 3 and parts[3] in {"anlage", "anhang"}
+
+
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -170,6 +176,10 @@ class NormVersion:
     states: list[StateVersion]
     bavarian: bool = False
     source_capture: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def annex(self) -> bool:
+        return is_annex(self.norm_id)
 
     @property
     def version_id(self) -> str:
@@ -915,7 +925,8 @@ def version_evidence(chain: ActChain, version: NormVersion,
         item["text"] = version.text
     if include_structure:
         item["structure"] = parse_norm_structure(version.text,
-                                                 bavarian=chain.bavarian)
+                                                 bavarian=chain.bavarian,
+                                                 annex=version.annex)
     return item
 
 
@@ -983,11 +994,13 @@ def select_version(versions: list[NormVersion], on: str,
         "candidates": [v.version_id for v in versions]}
 
 
-def sentence_diff(old_text: str, new_text: str, *, bavarian: bool
-                  ) -> list[dict[str, Any]]:
+def sentence_diff(old_text: str, new_text: str, *, bavarian: bool,
+                  annex: bool = False) -> list[dict[str, Any]]:
     """Sentence-level diff with structure-aware locators on both sides."""
-    left = sentence_units(old_text, bavarian=bavarian) if old_text else []
-    right = sentence_units(new_text, bavarian=bavarian) if new_text else []
+    left = (sentence_units(old_text, bavarian=bavarian, annex=annex)
+            if old_text else [])
+    right = (sentence_units(new_text, bavarian=bavarian, annex=annex)
+             if new_text else [])
     matcher = difflib.SequenceMatcher(
         a=[row["text"] for row in left], b=[row["text"] for row in right],
         autojunk=False)
@@ -1049,10 +1062,12 @@ def blame(versions: list[NormVersion], target: NormVersion,
     """
     history = versions[:versions.index(target) + 1]
     units_by_version = [
-        {row["text"] for row in sentence_units(v.text, bavarian=bavarian)}
+        {row["text"] for row in sentence_units(v.text, bavarian=bavarian,
+                                               annex=target.annex)}
         for v in history]
     rows = []
-    for unit in sentence_units(target.text, bavarian=bavarian):
+    for unit in sentence_units(target.text, bavarian=bavarian,
+                               annex=target.annex):
         text = unit["text"]
         index = len(history) - 1
         while index > 0 and text in units_by_version[index - 1]:

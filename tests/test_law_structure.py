@@ -122,3 +122,26 @@ def test_sentence_units_carry_structural_locators():
     assert [item["short_locator"] for item in rows[-1]["items"]] == [
         f"abs/2/nr/{n}" for n in range(1, 7)]
     assert human_locator("abs/2/satz/3/nr/1") == "Abs. 2 Satz 3 Nr. 1"
+
+
+def test_irregular_source_numbering_stays_visible():
+    """Real consolidations: AsylG § 31 prints "(3)" twice, AufenthG § 90
+    jumps from (5) to (7), AZRG § 18e starts without "(1)".  None of these
+    may be merged into the previous Absatz or renumbered."""
+    dup = parse_norm_structure(FIXTURES["asylvfg_para31"]["text"])
+    assert [u["number"] for u in dup["units"]] == ["1", "2", "3", "3~2", "4"]
+    assert dup["units"][3]["flags"] == ["duplicate_number_in_source"]
+    gap = parse_norm_structure(FIXTURES["aufenthg_para90"]["text"])
+    assert [u["number"] for u in gap["units"]][-2:] == ["5", "7"]
+    assert gap["units"][-1]["flags"] == ["sequence_gap_in_source"]
+    implicit = parse_norm_structure(FIXTURES["azrg_para18e"]["text"])
+    assert [u["number"] for u in implicit["units"]] == ["1", "2"]
+    assert implicit["units"][0]["flags"] == ["implicit_marker"]
+
+
+def test_annex_tables_are_not_split_into_absaetze():
+    table = ("Ausweisungsverfügung sofort vollziehbar seit(2)(5)(7)(7)b)"
+             "Ausweisungsverfügung erlassen amaa)zugestellt am")
+    structure = parse_norm_structure(table, annex=True)
+    assert structure["counts"]["absatz"] == 0
+    assert structure["mode"] == "annex_sentences_only"

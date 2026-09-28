@@ -214,7 +214,7 @@ def create_router(data_dir: Callable[[], Path],
             statuses = {left_res["status"], right_res["status"]}
             status = "ok" if statuses == {"ok"} else "temporally_unresolved"
             ops = sentence_diff(left.text, right.text,
-                                bavarian=chain.bavarian)
+                                bavarian=chain.bavarian, annex=left.annex)
             sub = resolved["sub"]
             if sub:
                 ops = [op for op in ops if _op_in_sub(op, sub)]
@@ -308,7 +308,8 @@ def create_router(data_dir: Callable[[], Path],
                 ) from exc
             ident = resolved["norm_id"] + (
                 "/" + resolved["sub"] if resolved["sub"] else "")
-            result = materials_for_norm(data_dir(), ident)
+            result = materials_for_norm(data_dir(), ident,
+                                        limit_per_relation=50)
             relation = request.query_params.get("relation")
             if relation and relation not in {"explains", "mentions", "drafts"}:
                 raise EnvelopeError("invalid_argument",
@@ -330,9 +331,14 @@ def create_router(data_dir: Callable[[], Path],
                       for kind in ("explains", "mentions", "drafts")}
             evidence = [item for kind, rows in groups.items()
                         if relation in (None, kind) for item in rows]
+            totals = result.get("totals") or {}
             return envelope(
                 status=status, operation="law_materials",
-                total=len(evidence),
+                total=(sum(int(totals.get(kind) or 0) for kind in groups
+                           if relation in (None, kind))
+                       if totals else len(evidence)),
+                truncated=bool(result.get("truncated")),
+                relation_totals=totals,
                 searched=result.get("searched") or [],
                 warnings=result.get("warnings") or [],
                 applied_constraints={"canonical_id": ident,
@@ -475,7 +481,8 @@ def _op_in_sub(op: dict[str, Any], sub: str) -> bool:
 
 
 def _sub_text(version: NormVersion, sub: str, chain: ActChain) -> str | None:
-    structure = parse_norm_structure(version.text, bavarian=chain.bavarian)
+    structure = parse_norm_structure(version.text, bavarian=chain.bavarian,
+                                     annex=version.annex)
     for unit in iter_units(structure):
         short = re.sub(r"/satz/\d+(?=/nr/)", "", unit["locator"])
         if unit["locator"] == sub or (unit["type"] in {
