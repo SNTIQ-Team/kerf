@@ -1652,6 +1652,10 @@ def main() -> int:
         "bgbl_history_backfill", "candidates.jsonl")
     retrospective_candidates.extend(load(
         "bgbl_legacy_history_backfill", "candidates.jsonl"))
+    from backfill_legacy_bgbl_history import attestation_notice
+    notice = attestation_notice()
+    if notice:
+        print(notice)
     # Publication-year inventory alone misses laws effective in January but
     # published the preceding December. Keep independently reviewed captures.
     retrospective_candidates.extend(load_reviewed_candidates())

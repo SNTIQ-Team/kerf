@@ -32,6 +32,14 @@ step " 5/24" "GII corpus HEAD (lags days-weeks)"           python3 pipeline/fetc
 step " 6/24" "archive complete official GII states"       python3 tools/archive_gii_states.py
 step " 7/24" "final BGBl documents + integrity/text"       python3 pipeline/fetch_bgbl_documents.py
 step " 8/24" "2023+ official BGBl retrospective inventory" python3 pipeline/backfill_bgbl_history.py
+# On the VPS (LEXGRAPH_LEGACY_CAPTURE_ONLY=1, set by deploy/refresh-server.sh)
+# this only captures new sources: the archive worker archive holds every older
+# source byte, re-verifies all of them, rebuilds the candidates and pushes a
+# signed attestation (deploy/archive-pull.sh, deploy/legacy-rebuild-push.sh).
+LEGACY_MODE_ARGS=()
+if [ "${LEXGRAPH_LEGACY_CAPTURE_ONLY:-0}" = "1" ]; then
+    LEGACY_MODE_ARGS+=(--capture-only)
+fi
 step "8b/24" "bounded resumable pre-2023 official BGBl history" \
     python3 pipeline/backfill_legacy_bgbl_history.py \
         --start 1976-01-01 \
@@ -39,7 +47,7 @@ step "8b/24" "bounded resumable pre-2023 official BGBl history" \
         --wahlperiode 12 --wahlperiode 13 --wahlperiode 14 --wahlperiode 15 \
         --wahlperiode 16 --wahlperiode 17 --wahlperiode 18 --wahlperiode 19 --wahlperiode 20 \
         --limit 12 --max-requests 80 --max-download-mib 20 \
-        --max-archive-mib 300 --min-free-mib 1024 --delay 0.8
+        --max-archive-mib 300 --min-free-mib 1024 --delay 0.8 "${LEGACY_MODE_ARGS[@]}"
 echo "==> [ 9/24] Federal case law intake"
 if [ "${LEXGRAPH_ENABLE_RII:-0}" = "1" ]; then
     # RII permits reuse of decisions, but its robots/TDM headers conflict
@@ -101,6 +109,14 @@ fi
 COMPACT_LOCK_ARGS=()
 if [ -n "${LEXGRAPH_REFRESH_LOCK_FD:-}" ]; then
     COMPACT_LOCK_ARGS+=(--lock-file "$LEXGRAPH_REFRESH_LOCK" --lock-fd "$LEXGRAPH_REFRESH_LOCK_FD")
+fi
+# Archive-and-prune first (VPS: LEXGRAPH_ARCHIVE_OFFLOAD=1): objects older
+# than the 14-day window whose exact bytes a signed archive worker receipt holds
+# leave the VPS, so compaction has room.  Over its budget, compaction defers
+# the newest files instead of failing.
+if [ "${LEXGRAPH_ARCHIVE_OFFLOAD:-0}" = "1" ]; then
+    step "21a/24" "offload receipted archive bytes (14-day window)" \
+        python3 tools/archive_offload.py prune --apply "${COMPACT_LOCK_ARGS[@]}"
 fi
 step "21b/24" "reversible snapshot compaction (newest two remain raw)" \
     python3 tools/compact_snapshots.py compact --apply --keep 2 \
