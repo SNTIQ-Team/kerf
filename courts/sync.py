@@ -109,6 +109,11 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
             # items" really means the local corpus covers the source.
             conn.execute("UPDATE sources SET listing_complete=1 WHERE source_id=?", (adapter.source_id,))
         counts["listed"] = upsert_items(conn, adapter.source_id, listing.items)
+        # The source answers again: a stale 'blocked'/'unavailable' from an earlier run must not make
+        # searches report it as unavailable while this run fills it.
+        conn.execute("""UPDATE sources SET status='partial', status_reason=? WHERE source_id=?
+                        AND status IN ('blocked','unavailable','never_synced','partial')""",
+                     (f"sync in progress (run {run_id})", adapter.source_id))
         if listing.upstream_total is not None:
             conn.execute("UPDATE sources SET upstream_listed=? WHERE source_id=?",
                          (listing.upstream_total, adapter.source_id))
@@ -180,6 +185,9 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                     log(f"{adapter.source_id}: {notes}")
                     break
             if position % 50 == 0:
+                conn.execute("UPDATE sync_runs SET attempted=?, stored=?, unchanged=?, failed=?, requests=? WHERE id=?",
+                             (counts["attempted"], counts["stored"], counts["unchanged"], counts["failed"],
+                              http.requests_made - requests_before, run_id))
                 log(f"{adapter.source_id}: {position}/{len(frontier)} stored={counts['stored']} "
                     f"unchanged={counts['unchanged']} failed={counts['failed']}")
         relink(conn)
