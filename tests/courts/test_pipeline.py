@@ -320,3 +320,18 @@ def test_first_sigterm_does_not_wait_for_a_listing(conn, fixture):
     assert results["rii"]["status"] == "interrupted"
     row = conn.execute("SELECT status, notes FROM sync_runs WHERE source_id='nrw'").fetchone()
     assert tuple(row) == ("interrupted", "listing abandoned (SIGTERM)")
+
+
+def test_a_slow_start_does_not_fix_a_loose_baseline():
+    clock, logs = Clock(), []
+    g = governor(clock, logs, start=4)
+    for _ in range(20):
+        g.answered(5.0)                        # the first answers of a run are slow
+    assert g.baseline == pytest.approx(5.0)
+    clock.now += 121
+    for _ in range(10):
+        g.answered(0.4)
+    assert g.baseline == pytest.approx(0.4) and g.limit == 5
+    for _ in range(20):
+        g.answered(2.0)                        # now a real spike: > 3x 0.4 s and > 0.4 s + 1 s
+    assert g.limit == 2
