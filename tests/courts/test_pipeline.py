@@ -256,3 +256,32 @@ def test_governors_share_one_bucket_per_host_and_the_stricter_policy_wins():
     host = g.get("gesetze.berlin.de")
     assert (host.limit, host.maximum, host.min_interval) == (1, 2, 2.0)
     assert g.get("GESETZE.berlin.de") is host
+
+
+def test_existing_source_items_get_the_claim_columns(tmp_path):
+    """The live v4 file had source_items without claims: init_db rebuilds the table, rows kept."""
+    import sqlite3
+    from courts.store import connect, init_db
+    db = tmp_path / "c.sqlite"
+    conn = connect(db)
+    init_db(conn)
+    conn.executescript("""
+        DROP VIEW source_coverage; DROP INDEX source_items_claim; DROP TABLE source_items;
+        CREATE TABLE source_items(source_id TEXT NOT NULL, source_doc_id TEXT NOT NULL, url TEXT NOT NULL,
+          listed_date TEXT, listed_court TEXT, listed_case_numbers TEXT, listed_modified TEXT,
+          priority INTEGER NOT NULL DEFAULT 1,
+          state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','stored','failed','skipped')),
+          fetched_modified TEXT, content_hash TEXT, decision_id TEXT, attempts INTEGER NOT NULL DEFAULT 0,
+          last_attempt TEXT, failure_kind TEXT, failure_detail TEXT, extra TEXT NOT NULL DEFAULT '{}',
+          PRIMARY KEY(source_id, source_doc_id));
+        CREATE INDEX source_items_frontier ON source_items(source_id, state, priority, listed_date);
+        INSERT INTO source_items(source_id, source_doc_id, url, state) VALUES('nrw','a','u','pending'),
+                                                                            ('nrw','b','u','stored');""")
+    init_db(conn)
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(source_items)")}
+    assert {"claimed_by", "lease_until"} <= columns
+    assert dict(conn.execute("SELECT source_doc_id, state FROM source_items").fetchall()) == {"a": "pending",
+                                                                                             "b": "stored"}
+    conn.execute("UPDATE source_items SET state='claimed' WHERE source_doc_id='a'")   # the CHECK admits it
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert "source_items_claim" in names and "source_items_frontier" not in names
