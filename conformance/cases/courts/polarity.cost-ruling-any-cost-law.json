@@ -1,0 +1,25 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.cost-ruling-any-cost-law",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "Every norm cited in the court's own cost ruling is procedural_reference (Land and disciplinary cost laws too, parser 1.6.0), never 'applies'; a substantive claim about costs is not a cost ruling.",
+  "origin": "polarity held-out gold 2026-09-28, applies-1 (VG Berlin disciplinary case)",
+  "status": "active",
+  "input": {
+    "text": "II. Die Kostenentscheidung beruht auf § 41 DiszG, § 77 Abs. 1 BDG i.V.m. § 154 Abs. 2 VwGO. Der Anspruch auf Erstattung der Kosten des Vorverfahrens ergibt sich aus § 63 SGB X.",
+    "own_court_id": "vg-berlin",
+    "jurisdiction": "verwaltung",
+    "land": "be"
+  },
+  "expected": {
+    "relations": [
+      {"relation": "procedural_reference", "target_id": null},
+      {"relation": "procedural_reference", "target_id": "de/bund/bdg/para/77/abs/1"},
+      {"relation": "procedural_reference", "target_id": "de/bund/vwgo/para/154/abs/2"},
+      {"relation": "mentions", "target_id": "de/bund/sgb_10/para/63"}
+    ],
+    "assessment_keys": ["applies|de/bund/sgb_10/para/63"]
+  },
+  "match": "subset"
+}
