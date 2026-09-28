@@ -140,6 +140,10 @@ class StateVersion:
     knowledge_from: str | None = None
     gaps: list[Any] = field(default_factory=list)
     derived: bool = False
+    # first observation (or legal start) of the version that replaced this
+    # one when its own legal end is unknown: a bound for selection only,
+    # never reported as a legal date
+    superseded_by_observation: str | None = None
 
     @property
     def order_date(self) -> str:
@@ -960,12 +964,33 @@ def select_version(versions: list[NormVersion], on: str,
             start, end = state.valid_from, state.valid_until
             if not start or state.valid_from_status == "unresolved":
                 continue
+            if end is None and state.superseded_by_observation and \
+                    on >= state.superseded_by_observation:
+                continue   # a later wording was already in the source
             if start <= on and (end is None or on < end):
                 status = state.valid_from_status
-                return "ok", version, {
-                    "resolution": ("verified_interval"
-                                   if status == "official_verified" else
-                                   "archived_official_interval"),
+                attribution = (state.amendment or {}).get("attribution") or {}
+                # a start attributed only by the capture bracket (no quoted
+                # wording confirmed) is evidence of the date, not of the text
+                weak = attribution.get("verification") in {
+                    "bracketed_by_captures", "replay_unverified"}
+                resolution = {
+                    "official_verified": "verified_interval",
+                    "official_archived_version_date":
+                        "archived_official_interval",
+                }.get(status, "commencement_attributed_interval")
+                extra = {"attribution": attribution} if attribution else {}
+                if weak:
+                    extra["note"] = (
+                        "future wording reconstructed from the promulgated "
+                        "amendment; no official consolidation shows it yet"
+                        if attribution.get("verification") ==
+                        "replay_unverified" else
+                        "the legal start comes from the in-force date of the "
+                        "only amendment between two captures; its wording was "
+                        "not confirmed in the text")
+                return ("temporally_unresolved" if weak else "ok"), version, {
+                    "resolution": resolution, **extra,
                     "valid_from_status": status,
                     "consolidated_version_valid_from": start,
                     "consolidated_version_valid_until_exclusive": end,

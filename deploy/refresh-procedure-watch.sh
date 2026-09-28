@@ -50,6 +50,16 @@ fi
 echo "==> [4/5] rebuild API data plane"
 "$PYTHON" tools/build_web_data.py
 test -s web/data/summary.json
+# Keep the change history's pending/in-force states current (same inputs as
+# the daily refresh; a failure keeps the previous law_history.sqlite).
+history_args=(--data-dir web/data)
+if [ -f data/history_bundle/current/manifest.json ]; then
+    history_args+=(--bundle data/history_bundle/current)
+    signers="${LEXGRAPH_ARCHIVE_SIGNERS:-/etc/sntiq/lexgraph-archive.allowed_signers}"
+    [ -f "$signers" ] && history_args+=(--bundle-signers "$signers")
+fi
+"$PYTHON" tools/build_law_history.py "${history_args[@]}" \
+    || echo "[warn] law history rebuild failed — previous file kept"
 
 echo "==> [5/5] publish -> /srv/sntiq-lexapi/data/web-data"
 deploy/publish-web-data.sh web/data

@@ -352,6 +352,131 @@ def load_backfill_documents() -> dict[str, dict]:
     return rows
 
 
+FNA_INDEX = ROOT / "data" / "bgbl_documents" / "index"
+
+
+def split_fna(raw: object) -> tuple[list[str], list[str]]:
+    """recht.bund.de FNA field → (amended FNA numbers, newly created)."""
+    amended: list[str] = []
+    created: list[str] = []
+    for part in str(raw or "").replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        target = created if part.startswith("neu:") else amended
+        value = part.removeprefix("neu:").strip()
+        if value and value not in target:
+            target.append(value)
+    return amended, created
+
+
+def learn_act_fna(documents: Iterable[dict], links: Iterable[tuple[str, str]]
+                  ) -> dict[str, set[str]]:
+    """FNA numbers of corpus acts, learned from verified document↔act links.
+
+    A document's official FNA list names every act it amends; the FNA shared
+    by (nearly) all documents that amend one act is that act's number.
+    """
+    fna_by_doc = {str(d.get("document_id")): split_fna(
+        (d.get("official_fields") or {}).get("FNA"))[0] for d in documents}
+    docs_by_slug: dict[str, set[str]] = {}
+    for slug, document_id in links:
+        if fna_by_doc.get(document_id):
+            docs_by_slug.setdefault(slug, set()).add(document_id)
+    learned: dict[str, set[str]] = {}
+    for slug, docs in docs_by_slug.items():
+        counts: dict[str, int] = {}
+        for document_id in docs:
+            for value in set(fna_by_doc[document_id]):
+                counts[value] = counts.get(value, 0) + 1
+        n = len(docs)
+        # the act's own number is the one shared by the most of its
+        # documents; co-amended acts' numbers appear less often
+        top = max(counts.values(), default=0)
+        chosen = {value for value, count in counts.items()
+                  if count == top and count >= 2 and count >= 0.6 * n}
+        if not chosen and n == 1:
+            only = fna_by_doc[next(iter(docs))]
+            if len(set(only)) <= 2:
+                chosen = set(only)
+        if chosen:
+            learned[slug] = chosen
+    return learned
+
+
+def fna_index_candidates(index_dir: Path, acts: list[dict],
+                         documents: dict[str, dict],
+                         links: Iterable[tuple[str, str]],
+                         start: str, end: str, known: set[str]
+                         ) -> tuple[list[dict], dict[str, set[str]]]:
+    """BGBl I documents whose official FNA list names a corpus act."""
+    learned = learn_act_fna(documents.values(), links)
+    by_fna: dict[str, list[dict]] = {}
+    for act in acts:
+        for value in learned.get(str(act["slug"]), ()):
+            by_fna.setdefault(value, []).append(act)
+    rows: list[dict] = []
+    if not index_dir.is_dir():
+        return rows, learned
+    for path in sorted(index_dir.glob("bgbl1-*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            entry = json.loads(line)
+            if entry.get("status") != "ok":
+                continue
+            document_id = str(entry.get("document_id") or "")
+            publication = _valid_date(entry.get("publication_date"))
+            if not document_id or document_id in known or publication is \
+                    None or not start <= publication <= end:
+                continue
+            amended, _created = split_fna(entry.get("fna_raw"))
+            matched = {str(a["slug"]): a for value in amended
+                       for a in by_fna.get(value, [])}
+            if not matched:
+                continue
+            urls = canonical_urls(entry["year"], entry["issue"])
+            rows.append({
+                "document_id": document_id,
+                "year": str(int(entry["year"])),
+                "issue": str(int(entry["issue"])),
+                "title": _compact(entry.get("title")),
+                "eli": entry.get("eli") or urls["eli"],
+                "official_html_url": urls["html"],
+                "official_pdf_url": urls["pdf"],
+                "publication_date": publication,
+                "execution_date": _valid_date(entry.get("execution_date")),
+                "procedure_id": "",
+                "procedure_status": None,
+                "procedure_updated_at": None,
+                "dip_entry_into_force": [],
+                "referenced_corpus_acts": [],
+                "discovery": "recht.bund.de FNA index",
+                "retrospective_procedures": [{
+                    "procedure_id": "",
+                    "wahlperiode": None,
+                    "procedure_title": _compact(entry.get("title")),
+                    "procedure_status": None,
+                    "procedure_updated_at": None,
+                    "dip_entry_into_force": [],
+                    "discovery": "recht.bund.de FNA index",
+                    "matched_acts": [{
+                        "slug": act["slug"], "jurabk": act["jurabk"],
+                        "long_title": _compact(act["long_title"]),
+                        "descriptor_aliases": [],
+                        "aliases": list(act.get("aliases")
+                                        or act_aliases(act)),
+                        "fna": sorted(learned.get(str(act["slug"]), ())),
+                    } for act in sorted(matched.values(),
+                                        key=lambda a: str(a["slug"]))],
+                }],
+            })
+    rows.sort(key=lambda row: (str(row["publication_date"]),
+                               int(row["year"]), int(row["issue"])),
+              reverse=True)
+    return rows, learned
+
+
 def capture_candidates(http: Http, candidates: Iterable[dict], refresh: bool,
                        limit: int | None = None) -> tuple[list[dict], int, int]:
     """Capture or reuse candidate final documents; fail the batch on error."""
@@ -1025,6 +1150,13 @@ def main() -> int:
     parser.add_argument(
         "--rebuild-latest", action="store_true",
         help="reparse the latest cached documents without any network access")
+    parser.add_argument(
+        "--fna-index", type=Path, default=FNA_INDEX,
+        help="recht.bund.de issue index (pipeline/index_bgbl_issues.py); "
+             "documents amending corpus acts by FNA are added")
+    parser.add_argument(
+        "--max-new-index", type=int, default=40,
+        help="new FNA-index documents captured per run (bounded)")
     args = parser.parse_args()
     if not (_valid_date(args.start) and _valid_date(args.end)) or \
             args.start > args.end:
@@ -1068,6 +1200,37 @@ def main() -> int:
         procedures, acts, args.start, args.end)
     print(f"DIP: {len(procedures)} promulgated procedures; "
           f"{len(selected)} exact-descriptor BGBl I documents")
+    if args.fna_index and args.fna_index.is_dir():
+        cached = load_backfill_documents()
+        links: set[tuple[str, str]] = set()
+        for document in cached.values():
+            for ref in document.get("referenced_corpus_acts") or []:
+                if ref.get("slug"):
+                    links.add((str(ref["slug"]), str(document["document_id"])))
+            for procedure in document.get("retrospective_procedures") or []:
+                if procedure.get("discovery"):
+                    continue  # learn only from DIP/GII-verified links
+                for act in procedure.get("matched_acts") or []:
+                    links.add((str(act["slug"]), str(document["document_id"])))
+        # article-verified document→act links of the previous inventory
+        latest = latest_snapshot("bgbl_history_backfill")
+        inventory_path = latest / "candidates.jsonl" if latest else None
+        if inventory_path is not None and inventory_path.is_file():
+            for row in read_jsonl(inventory_path):
+                if row.get("slug") and row.get("document_id"):
+                    links.add((str(row["slug"]), str(row["document_id"])))
+        index_rows, learned = fna_index_candidates(
+            args.fna_index, acts, cached, links, args.start, args.end,
+            {row["document_id"] for row in selected})
+        new = [row for row in index_rows
+               if row["document_id"] not in cached][:args.max_new_index]
+        reuse = [row for row in index_rows if row["document_id"] in cached]
+        print(f"FNA index: {len(learned)} corpus acts with learned FNA; "
+              f"{len(index_rows)} further documents ({len(reuse)} cached, "
+              f"{len(new)} to capture this run)")
+        selected = sorted(selected + reuse + new, key=lambda row: (
+            str(row["publication_date"]), int(row["year"]),
+            int(row["issue"])), reverse=True)
     if args.inventory_only:
         by_act = {row["slug"] for candidate in selected
                   for procedure in candidate["retrospective_procedures"]

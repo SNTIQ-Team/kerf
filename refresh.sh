@@ -31,7 +31,14 @@ step " 4/24" "BGBl promulgation events (daily feed)"       python3 pipeline/fetc
 step " 5/24" "GII corpus HEAD (lags days-weeks)"           python3 pipeline/fetch_gii.py --budget-mib 64
 step " 6/24" "archive complete official GII states"       python3 tools/archive_gii_states.py
 step " 7/24" "final BGBl documents + integrity/text"       python3 pipeline/fetch_bgbl_documents.py
-step " 8/24" "2023+ official BGBl retrospective inventory" python3 pipeline/backfill_bgbl_history.py
+# Complete recht.bund.de issue index (FNA of every amended act): the 2023+
+# inventory also captures amendments that were never an act's latest
+# "zuletzt geändert" note.  Daily: the current year's tail (+ previous year
+# in January); the backlog is bounded by --max-new-index per run.
+INDEX_YEARS="$(date -u +%Y)"
+if [ "$(date -u +%m)" = "01" ]; then INDEX_YEARS="$(( $(date -u +%Y) - 1 )),$INDEX_YEARS"; fi
+step "7a/24" "recht.bund.de BGBl I issue index (FNA)"       python3 pipeline/index_bgbl_issues.py --years "$INDEX_YEARS" --max-requests 60
+step " 8/24" "2023+ official BGBl retrospective inventory" python3 pipeline/backfill_bgbl_history.py --max-new-index "${LEXGRAPH_FNA_NEW_PER_RUN:-40}"
 # On the VPS (LEXGRAPH_LEGACY_CAPTURE_ONLY=1, set by deploy/refresh-server.sh)
 # this only captures new sources: the archive worker archive holds every older
 # source byte, re-verifies all of them, rebuilds the candidates and pushes a
@@ -129,6 +136,16 @@ VIS="${QFS_VISUALIZER_PUBLIC:-}"
 
 echo "==> [23/24] export web data (Wiki/Realtime/Hierarchie/Graph)"
 python3 tools/build_web_data.py
+# Multi-source norm versions + change history (law_history.sqlite).  The
+# archive worker bundle (archived captures, legacy date resolutions) is optional;
+# without it the history is built from the daily official states.
+HISTORY_BUNDLE_ARGS=()
+if [ -f data/history_bundle/current/manifest.json ]; then
+    HISTORY_BUNDLE_ARGS+=(--bundle data/history_bundle/current)
+    SIGNERS="${LEXGRAPH_ARCHIVE_SIGNERS:-/etc/sntiq/lexgraph-archive.allowed_signers}"
+    if [ -f "$SIGNERS" ]; then HISTORY_BUNDLE_ARGS+=(--bundle-signers "$SIGNERS"); fi
+fi
+step "23b/24" "law history: versions + change records"      python3 tools/build_law_history.py --data-dir web/data "${HISTORY_BUNDLE_ARGS[@]}"
 
 step "24/24" "LLM digest (skips without OPENROUTER_API_KEY)" python3 tools/build_digest.py
 echo "OK — serve with: python3 -m http.server -d web 8777"
