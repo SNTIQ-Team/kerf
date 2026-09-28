@@ -93,18 +93,18 @@ def amending_reference(text: str) -> dict[str, Any] | None:
         result["gazette_lookup"] = {
             "part": issue.group(4), "year": int(year),
             "number": int(issue.group(6)), "page": None,
-            # the "v." date is GII's wording; it only helps to pick the
-            # document and is verified against the document's own heading.
-            "stated_instrument_date": _day(issue.group(1), issue.group(2),
-                                           issue.group(3)),
+            # GII's wording only; used to pick the document, never shown
+            # or used as an adoption date (the document's own heading is).
+            "date_in_gii_wording": _day(issue.group(1), issue.group(2),
+                                        issue.group(3)),
             "document_id": (f"bgbl-{1 if issue.group(4) == 'I' else 2}-"
                             f"{year}-{int(issue.group(6))}")}
     elif page := _PAGE.search(ref):
         result["gazette_lookup"] = {
             "part": page.group(4), "year": int(page.group(3)),
             "number": None, "page": int(page.group(5)),
-            "stated_instrument_date": _day(page.group(1), page.group(2),
-                                           page.group(3)),
+            "date_in_gii_wording": _day(page.group(1), page.group(2),
+                                        page.group(3)),
             "document_id": (f"bgbl-{1 if page.group(4) == 'I' else 2}-"
                             f"{page.group(3)}-s{int(page.group(5))}")}
     return result

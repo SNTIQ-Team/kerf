@@ -90,7 +90,7 @@ def test_stand_note_not_yet_incorporated_keeps_mwv_as_secondary():
 def test_amending_reference_legacy_page_citation():
     ref = amending_reference("Art. 1 G v. 22.12.2016 I 3155")
     assert ref["gazette_lookup"]["document_id"] == "bgbl-1-2016-s3155"
-    assert ref["gazette_lookup"]["stated_instrument_date"] == "2016-12-22"
+    assert ref["gazette_lookup"]["date_in_gii_wording"] == "2016-12-22"
 
 
 # -------------------------------------------------------------- builder
