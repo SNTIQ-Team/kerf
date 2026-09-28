@@ -314,7 +314,7 @@ def _span(*ranges: tuple[int, int] | str) -> set[int | str]:
 
 
 PROCEDURAL_NORMS: dict[str, tuple[str, set[int] | None]] = {
-    "de/bund/vwgo": ("costs/enforceability/legal aid/finality", _span((152, 152), (154, 167))),
+    "de/bund/vwgo": ("costs/enforceability/legal aid/finality", _span((152, 152), (154, 167), (188, 188))),
     "de/bund/sgg": ("costs/legal aid/finality", _span((73, 73), (177, 177), (183, 197))),
     "de/bund/zpo": ("costs/legal aid/provisional enforceability/enforcement costs", _span((91, 107), (114, 127), (708, 720), (788, 788), (891, 891))),
     "de/bund/fgo": ("costs/legal aid", _span((135, 143))),
@@ -328,6 +328,30 @@ PROCEDURAL_NORMS: dict[str, tuple[str, set[int] | None]] = {
     "de/bund/jveg": ("witness/expert fees", None),
     "de/bund/gnotkg": ("court/notary fees", None),
 }
+
+
+# The court's own cost / enforceability / value / admission ruling: every norm cited in such a sentence grounds
+# that procedural step (Land cost laws, BDG, DiszG … included), e.g. "Die Kostenentscheidung beruht auf § 41
+# DiszG, § 77 Abs. 1 BDG i.V.m. § 154 Abs. 2 VwGO."  Only the sentence subject counts, so a substantive claim
+# about costs ("Der Anspruch auf Erstattung der Kosten des Vorverfahrens ergibt sich aus § 63 SGB X") is not one.
+COST_RULING = re.compile(
+    r"^\W*(?:(?:[IVX]+|\d{1,2}|[a-z]{1,2})[.)]\s*)?(?:Die|Der|Das)?\s*(?:Kostenentscheidung|Kostengrundentscheidung|"
+    r"Kostenfolge|Gerichtskostenfreiheit|Gerichtskosten(?:freiheit)?|Entscheidung\s+(?:über|zu)\s+(?:den\s+|die\s+)?(?:Kosten|vorl[äa]ufigen?\s+Vollstreckbarkeit)|"
+    r"Streitwertfestsetzung|Festsetzung\s+des\s+(?:Streit|Gegenstands)werte?s|Streitwert|Gegenstandswert|"
+    r"vorl[äa]ufige\s+Vollstreckbarkeit|(?:Nicht)?[Zz]ulassung\s+der\s+(?:Revision|Berufung|Rechtsbeschwerde)|"
+    r"Revision\s+(?:ist|war|wird)\s+nicht\s+zuzulassen|Kosten\s+des\s+(?:Verfahrens|Rechtsstreits|"
+    r"(?:Beschwerde|Berufungs|Revisions|Widerspruchs)verfahrens)\s+(?:tr[äa]gt|tragen|hat|haben|sind|werden))", re.I)
+SENTENCE_START = re.compile(r"(?:^|[.;:!?]\s+|\n)(?=[A-ZÄÖÜ(IVX\d])")
+
+
+def procedural_clause(text: str, start: int) -> str | None:
+    """'cost/enforceability/value ruling' if the citation at ``start`` stands in the court's own ruling on costs,
+    provisional enforceability, the value in dispute or the admission of an appeal."""
+    window_start = max(0, start - 300)
+    sentence = window_start
+    for m in SENTENCE_START.finditer(text, window_start, start):
+        sentence = m.end()
+    return "cost/enforceability/value ruling" if COST_RULING.match(text[sentence:start]) else None
 
 
 def procedural_basis(target: str | None) -> str | None:
@@ -376,7 +400,7 @@ def _item_relations(item: _Item, ref: ActIdentity | None, raw_act: str, text: st
             detail["pinpoint_extra"] = item.extra_raw
         if in_conjunction:
             detail["in_conjunction_with"] = True
-        procedural = procedural_basis(target)
+        procedural = procedural_basis(target) or procedural_clause(text, start)
         if procedural:
             detail["procedural_basis"] = procedural
         out.append(Relation(
