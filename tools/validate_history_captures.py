@@ -111,18 +111,20 @@ def cdx_listed(archive: HistoryArchive, web_data: Path, act_id: str) -> Counter:
 
 
 def ledger_stats(archive: HistoryArchive, source: str) -> dict[str, Counter]:
+    """Final status per capture (a later success overrides earlier errors)."""
     per_act: dict[str, Counter] = defaultdict(Counter)
-    final: dict[tuple, str] = {}
+    final: dict[tuple, tuple[str, str]] = {}
     for row in archive.read_ledger(source):
         key = (row.get("act_id"), row.get("capture_timestamp")
                or row.get("archive_url"), row.get("wayback_original")
                or row.get("original_url"))
         status = row.get("status")
-        if final.get(key) in {"ok", "skipped"}:
+        if final.get(key, ("", ""))[0] in {"ok", "skipped"}:
             continue
-        final[key] = status
-    for (act_id, _, _), status in final.items():
+        final[key] = (status, row.get("kind") or "")
+    for (act_id, _, _), (status, kind) in final.items():
         per_act[act_id][status] += 1
+        per_act[act_id][f"{kind}:{status}"] += 1
     return per_act
 
 
@@ -164,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
             day = (record.get("captured_at") or "")[:10]
             if not period_start or not day or day < period_start:
                 continue
+            if not record["complete"]:
+                continue            # partial pages cannot give a match rate
             got = set(identities(record["norms"]))
             on = state_on(states, day)
             on_obj = objects.get(on["state_sha256"]) if on else None
@@ -193,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
         zips = [r for r in records if r.get("media_ext") == "zip"
                 and r["source"] == "wayback_gii"]
         htmls = [r for r in records if r.get("media_ext") == "html"
-                 and r["source"] == "wayback_gii"]
+                 and r["source"] == "wayback_gii" and r["complete"]]
         for z in zips:
             z_ids = identities(z["norms"])
             z_set = set(z_ids)
@@ -225,11 +229,12 @@ def main(argv: list[str] | None = None) -> int:
         all_ids: set[str] = set()
         act_texts: set[str] = set()
         for record in records:
-            if not record["complete"]:
-                continue
+            # every emitted norm is whole (truncated pages drop the cut
+            # norm), so partial records still count as norm versions
             ids = identities(record["norms"])
             all_ids.update(ids)
-            act_texts.add(act_text_key(ids))
+            if record["complete"]:
+                act_texts.add(act_text_key(ids))
         dates = [r.get("first_captured_at") for r in wb if r.get("first_captured_at")]
         dates += [r.get("last_captured_at") for r in wb if r.get("last_captured_at")]
         led = ledgers["wayback_gii"].get(act_id, Counter())
