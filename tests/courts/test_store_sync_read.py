@@ -336,3 +336,13 @@ def test_failed_parse_keeps_the_capture_hash_for_offline_reexamination(conn, fix
     row = conn.execute("SELECT state, content_hash FROM source_items").fetchone()
     assert row["state"] == "failed"
     assert row["content_hash"] == conn.execute("SELECT sha256 FROM captures").fetchone()[0]
+
+
+def test_refused_second_sync_does_not_clobber_the_holders_pid(isolated_corpus):
+    import os
+    from courts.sync import SourceBusy, source_lock
+    with source_lock("rii", isolated_corpus):
+        with pytest.raises(SourceBusy):
+            with source_lock("rii", isolated_corpus):
+                pass
+        assert (isolated_corpus / "locks" / "rii.lock").read_text() == str(os.getpid())

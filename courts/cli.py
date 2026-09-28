@@ -139,6 +139,24 @@ def cmd_compact(args) -> int:
     return 0
 
 
+def cmd_running(args) -> int:
+    """Active sync/reparse processes per source (a held lock file = running), with their PID."""
+    import fcntl
+    rows = [["source", "state", "pid"]]
+    locks = data_home() / "locks"
+    for lock in sorted(locks.glob("*.lock")) if locks.exists() else []:
+        with open(lock, "r+") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(handle, fcntl.LOCK_UN)
+                state, pid = "idle", "-"
+            except BlockingIOError:
+                state, pid = "running", handle.read().strip() or "?"
+        rows.append([lock.stem, state, pid])
+    print(_table(rows))
+    return 0
+
+
 def cmd_space(args) -> int:
     report = check_space(data_home(), starting=True)
     print(json.dumps({"bulk_writes_allowed": not report.problems, **report.as_dict()}, indent=2))
@@ -230,6 +248,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_migrate_captures)
     p = sub.add_parser("compact", help="FTS optimize + VACUUM INTO a NOCOW file (no syncs may run)")
     p.set_defaults(func=cmd_compact)
+    p = sub.add_parser("running", help="which sources are being synced right now (PIDs)")
+    p.set_defaults(func=cmd_running)
     p = sub.add_parser("space", help="btrfs/disk guard for bulk writes")
     p.set_defaults(func=cmd_space)
     p = sub.add_parser("status", help="coverage per source")
