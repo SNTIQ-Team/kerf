@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Lexgraph archive pull from the VPS (catches up after missed days)
+
+[Timer]
+# After the VPS refresh (04:43 UTC) and the workstation refresh (06:20).
+OnCalendar=*-*-* 09:30:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

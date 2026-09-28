@@ -22,6 +22,10 @@ if ! flock -n 9; then
 fi
 export LEXGRAPH_REFRESH_LOCK="$LOCK_FILE"
 export LEXGRAPH_REFRESH_LOCK_FD=9
+# Old source archives live on the workstation (deploy/archive-pull.sh): the
+# VPS captures new pre-2023 sources only and offloads receipted bytes.
+export LEXGRAPH_LEGACY_CAPTURE_ONLY=1
+export LEXGRAPH_ARCHIVE_OFFLOAD=1
 
 ./refresh.sh
 

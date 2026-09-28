@@ -105,3 +105,45 @@ Bulk historical collection belongs on the workstation under the collector's
 request, byte, archive and free-space budgets. Export only validated public
 indexes/history into production. More frequent checks do not mean a full
 historical crawl of every source on the small VPS.
+
+## Workstation archive (2026-09-28)
+
+The VPS keeps only recent data.  Older source bytes live on the workstation
+in `~/.local/share/sntiq-legal/lexgraph-archive/` (`data/legacy_bgbl_history`,
+`data/snapshots` incl. the `.compact` archive, and `offload/` with manifests,
+receipts and the allowed-signers copy).
+
+* **Daily pull** — user timer `lexgraph-archive-pull.timer` (09:30,
+  `Persistent=true`; units in `deploy/workstation/`) runs
+  `deploy/archive-pull.sh`: the VPS lists every unreceipted archived file
+  with SHA-256 (`tools/archive_offload.py manifest`), rsync pulls it
+  append-only (never `--delete`), every file is re-hashed on the workstation
+  and a receipt signed with `~/.config/sntiq/lexgraph-archive-signing-key`
+  goes back to `data/archive-offload/receipts/`.
+* **VPS retention** — `tools/archive_offload.py prune --apply` (after the
+  pull, and as refresh step 21a) deletes only files a verified receipt lists
+  with the same path and hash, and only if the refresh no longer reads them:
+  pre-2023 BGBl PDFs/texts once the latest legacy candidate snapshot is
+  attested; compacted snapshot objects older than 14 days (GII days the
+  refresh still archives and the newest two days per family are kept);
+  superseded legacy rebuilds older than 14 days.  Signatures are checked
+  against `/etc/sntiq/lexgraph-archive.allowed_signers`.
+* **Compaction** no longer fails at its cap: it compacts the oldest files
+  that fit and defers the rest until receipts free room.
+* **Pre-2023 BGBl history** — the VPS refresh runs step 8b with
+  `--capture-only` (new sources only; `LEXGRAPH_LEGACY_CAPTURE_ONLY=1` in
+  `refresh-server.sh`).  The workstation re-verifies every source, rebuilds
+  the candidates and signs an attestation; the VPS build admits exactly the
+  attested rows and logs which parser produced them.
+
+### After a legacy parser change
+
+Once the change is on main and deployed, run on the workstation:
+
+```bash
+deploy/legacy-rebuild-push.sh            # pull, rebuild, attest, push, verify
+deploy/legacy-rebuild-push.sh --dry-run  # rebuild + attest locally only
+```
+
+Until it runs, the VPS keeps serving the previous attested rows (the build
+log shows both parser hashes); the refresh does not fail.
