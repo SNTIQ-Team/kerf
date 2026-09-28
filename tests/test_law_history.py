@@ -317,3 +317,30 @@ def test_builder_without_bundle_and_bavarian_chain(tmp_path):
     store = LawHistoryStore(data / "law_history.sqlite")
     assert store.acts()["by_agsg"]["event_history_status"] == "not_built"
     assert store.versions("de/by/agsg/art/80")
+
+
+def test_law_git_commits_are_dated_by_in_force(built, tmp_path):
+    import subprocess
+    from tools import law_git_export
+    repo = tmp_path / "law-git"
+    assert law_git_export.main(["--data", str(built), "--repo", str(repo),
+                                "--acts", "fed_asylvfg_1992"]) == 0
+    log = subprocess.run(
+        ["git", "-C", str(repo), "log", "--reverse", "--date=short",
+         "--format=%ad%x09%s%x09%(trailers:key=Lexgraph-Author-Date-Basis,"
+         "valueonly,separator=)"], capture_output=True, text=True,
+        check=True).stdout.strip().splitlines()
+    first = log[0].split("\t")
+    assert first[0] == "2023-06-01" and first[2] == "observed_at"
+    assert "legal start unresolved" in first[1]
+    legal = [line.split("\t") for line in log if "\tin_force" in line]
+    assert any(row[0] == "2026-02-01" and "BGBl. 2025 I Nr. 364" in row[1]
+               for row in legal)
+    body = subprocess.run(
+        ["git", "-C", str(repo), "log", "--format=%B", "--grep",
+         "BGBl. 2025 I Nr. 364"], capture_output=True, text=True,
+        check=True).stdout
+    assert "In force: 2026-02-01" in body
+    assert "Adopted (Ausfertigung): unknown" in body
+    text = (repo / "de/bund/asylvfg_1992/para/29a.md").read_text()
+    assert "source_role:" in text and "in_force:" in text

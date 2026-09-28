@@ -240,18 +240,27 @@ repository is a projection for `git log`, `git diff`, `git blame`.
   and `de/by/<act>/<art|…>/<n>.md`.  Front matter holds the identity, version
   id, `valid_from` (+ status and basis), `observed_from`, source role, content
   hashes and the amending act.
-* One commit per consolidated version.  The **author date is `valid_from`**
-  when Lexgraph verified it (final BGBl command + commencement clause, or the
-  BAYERN.RECHT "gültig ab" of an archived official page).  Where the legal
-  start is unresolved, the author date is the first official retrieval
-  observation and the trailer `Lexgraph-Author-Date-Basis: observed_at`
-  says so — that date is **not** a legal date.
+* One commit per amending act and in-force date (every norm version that
+  amendment produced).  The **author date is the in-force date** from the
+  amending act's commencement clause when Lexgraph attributes the text change
+  to it (the change lies between two captures of the official text), or the
+  verified start of a consolidated version / the BAYERN.RECHT "gültig ab" of
+  an archived official page.  Adoption (Ausfertigung) and promulgation
+  (Verkündung) dates are in the commit message, the trailers and the front
+  matter.  Where the legal start is unresolved, the author date is the first
+  capture or retrieval that showed the wording and the trailer
+  `Lexgraph-Author-Date-Basis: observed_at` says so — that date is **not** a
+  legal date.
+* Versions come from complete official consolidations (GII daily states,
+  NeuRIS), archived copies of official pages (Wayback captures; the
+  `source_role` front matter says `archived_capture`) and clearly labelled
+  reconstructions, de-duplicated by exact wording.
 * Bodies have one legal sentence per line, so `git blame` answers "which
   version introduced this sentence".  Sentences present in the first stored
   version predate Lexgraph's text history; blame cannot attribute them.
-* Federal history starts with the first complete GII state Lexgraph holds
-  (plus replay-verified reconstructions).  Bavarian history is per norm from
-  archived official pages and is incomplete where no archive exists.
+* Federal history starts with the oldest archived capture of the official
+  consolidation Lexgraph holds.  Bavarian history is per norm from archived
+  official pages and is incomplete where no archive exists.
 * EU: Lexgraph holds EU instruments as metadata only; there is no versioned
   EU text to export.
 * Do not edit this working tree: every export resets it to `main`.
@@ -499,6 +508,266 @@ def plan(store: NormHistoryStore, act_ids: Iterable[str],
     return commits, report
 
 
+# ------------------------------------------------ planning (law history)
+
+def _history_front_matter(act: dict[str, Any], prefix: str, norm_id: str,
+                          version: Any, change: dict[str, Any] | None,
+                          toc: dict[str, Any] | None) -> str:
+    record = version.record or {}
+    temporal = record.get("temporal") or {}
+    unit, number = norm_id.split("/")[-2:]
+    number = number.split("~")[0]
+    bavarian = prefix.startswith("de/by")
+    if bavarian:
+        url = {"url": None, "status": "not_resolved",
+               "act_url": act.get("permalink")}
+    else:
+        url = gii_norm_url(toc, prefix.split("/")[2], unit, number)
+    structure = parse_norm_structure(version.text, bavarian=bavarian,
+                                     annex=unit in {"anlage", "anhang"})
+    dates = (change or {}).get("dates") or {}
+    amending = (change or {}).get("amending_act") or {}
+
+    def day(name: str) -> Any:
+        value = dates.get(name) or {}
+        return value.get("date")
+
+    fields = [
+        ("id", norm_id),
+        ("jurisdiction", "/".join(prefix.split("/")[:2])),
+        ("act_id", act.get("act_id") or act.get("id")),
+        ("act", act.get("jurabk")),
+        ("act_title", act.get("title")),
+        ("label", version.enbez or unit_label(unit, number)),
+        ("title", version.titel or None),
+        ("version", version.vseq),
+        ("valid_from", temporal.get("valid_from")),
+        ("valid_from_status", temporal.get("valid_from_status")),
+        ("valid_from_basis", temporal.get("valid_from_basis")),
+        ("valid_until_exclusive", temporal.get("valid_until")),
+        ("known_from", version.known_from),
+        ("known_until", version.known_until),
+        ("date_axes", "valid_* is legal validity; known_* is when a source "
+                      "(official consolidation or archived capture) showed "
+                      "this wording and never a legal date"),
+        ("source_role", version.source_role),
+        ("sources", [a.get("source") for a in record.get("attestations")
+                     or []]),
+        ("source_url", url.get("url") or url.get("act_url")),
+        ("content_identity", version.identity),
+        ("text_sha256", hashlib.sha256(version.text.encode("utf-8"))
+         .hexdigest()),
+        ("completeness", (record.get("completeness") or {}).get("status")),
+        ("amending_act", amending.get("title")),
+        ("amending_act_citation", amending.get("citation")),
+        ("amending_act_document", amending.get("document_id")),
+        ("adopted", day("adopted")),
+        ("promulgated", day("promulgated")),
+        ("in_force", day("in_force")),
+        ("in_force_basis", (dates.get("in_force") or {}).get("basis")),
+        ("applies_from", day("applies_from")),
+        ("change_type", (change or {}).get("change_type")),
+        ("attribution", (temporal.get("attribution") or {}).get("status")),
+        ("structure", {key: value for key, value in
+                       structure["counts"].items() if value}),
+        ("structure_parser", STRUCTURE_PARSER_VERSION),
+        ("rendering", "one legal sentence per line; canonical bytes are "
+                      "identified by text_sha256"),
+        ("exporter", EXPORTER),
+    ]
+    lines = ["---", *(f"{key}: {_yaml(value)}" for key, value in fields),
+             "---", ""]
+    heading = version.enbez or unit_label(unit, number)
+    if version.titel:
+        heading = f"{heading} {version.titel}"
+    lines.append(f"# {heading}")
+    lines.append("")
+    lines.extend(render_body(version.text, bavarian=bavarian,
+                             annex=unit in {"anlage", "anhang"}))
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _day_line(label: str, value: dict[str, Any] | None) -> str:
+    value = value or {}
+    if value.get("date"):
+        basis = value.get("basis")
+        return f"{label}: {value['date']}" + (f" ({basis})" if basis else "")
+    return f"{label}: unknown ({value.get('reason') or value.get('status') or 'not evidenced'})"
+
+
+def plan_act_history(lh: Any, act_id: str, toc: dict[str, Any] | None
+                     ) -> list[PlannedCommit]:
+    """Commits dated by in-force date (legal) or first knowledge (observed).
+
+    One commit per amending act/in-force date (every norm version it
+    produced) or per first observation of wordings whose legal start is not
+    evidenced.  Adoption and promulgation dates go into the message and the
+    front matter.
+    """
+    act = lh.acts()[act_id]
+    prefix = act["prefix"]
+    db = lh._db()
+    norm_ids = [row[0] for row in db.execute(
+        "SELECT norm_id FROM norms WHERE act_id=? ORDER BY norm_id",
+        (act_id,))]
+    states = {row["seq"]: row for row in lh.states(act_id)}
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for norm_id in norm_ids:
+        versions = lh.versions(norm_id)
+        changes = {c["change_id"]: c for c in lh.changes(norm_id=norm_id)}
+        for version in versions:
+            temporal = (version.record or {}).get("temporal") or {}
+            ids = temporal.get("change_ids") or []
+            change = None
+            for cid in ids:
+                if cid in changes and (change is None or (
+                        (changes[cid].get("dates") or {}).get("in_force")
+                        or {}).get("date", "") >= ((change.get("dates") or {})
+                                                   .get("in_force") or {}
+                                                   ).get("date", "")):
+                    change = changes[cid]
+            if change is None and temporal.get("interval_amendment"):
+                doc = temporal["interval_amendment"].get("document_id")
+                change = next((c for c in changes.values() if (
+                    c.get("amending_act") or {}).get("document_id") == doc),
+                    None)
+            valid = temporal.get("valid_from")
+            status = temporal.get("valid_from_status")
+            if valid and status not in {None, "unresolved"}:
+                docs = sorted({(changes[c].get("amending_act") or {}).get(
+                    "document_id") or "" for c in ids if c in changes})
+                key = ("in_force", valid, ",".join(docs) or
+                       f"interval:{status}")
+            else:
+                source = ",".join(sorted({a.get("source") or "" for a in
+                                          (version.record or {}).get(
+                                              "attestations") or []}))
+                key = ("observed_at", version.known_from or "1970-01-01",
+                       source)
+            group = groups.setdefault(key, {"files": {}, "changes": {},
+                                            "labels": [], "roles": set(),
+                                            "attribution": set()})
+            group["files"][_path(norm_id)] = _history_front_matter(
+                act, prefix, norm_id, version, change, toc)
+            group["labels"].append(version.enbez or norm_id)
+            group["roles"].add(version.source_role)
+            if change:
+                group["changes"][change["change_id"]] = change
+            if temporal.get("attribution"):
+                group["attribution"].add(str(
+                    temporal["attribution"].get("status")))
+        norm = lh.norm(norm_id) or {}
+        if versions and not norm.get("present_in_latest"):
+            following = states.get((lh._db().execute(
+                "SELECT last_seq FROM versions WHERE norm_id=? ORDER BY vseq "
+                "DESC LIMIT 1", (norm_id,)).fetchone() or [None])[0])
+            nxt = None
+            if following is not None:
+                nxt = states.get(following["seq"] + 1)
+            if nxt is not None and nxt.get("known_from"):
+                key = ("observed_at", nxt["known_from"], nxt["source"])
+                group = groups.setdefault(key, {"files": {}, "changes": {},
+                                                "labels": [], "roles": set(),
+                                                "attribution": set()})
+                group["files"][_path(norm_id)] = None
+                group["labels"].append(f"{versions[-1].enbez} (removed)")
+    commits: list[PlannedCommit] = []
+    last_order = "0000-00-00"
+    for key in sorted(groups, key=lambda k: (k[1], k[0] != "in_force",
+                                             k[2])):
+        basis, day, detail = key
+        group = groups[key]
+        changes = sorted(group["changes"].values(), key=lambda c: (
+            (c.get("amending_act") or {}).get("document_id") or "",
+            (c.get("amending_act") or {}).get("article") or ""))
+        jurabk = act.get("jurabk") or act_id
+        if basis == "in_force" and changes:
+            lead = changes[0]
+            amending = lead.get("amending_act") or {}
+            what = amending.get("citation") or amending.get("document_id")
+            subject = f"{jurabk}: {what} — in Kraft {day}"
+        elif basis == "in_force":
+            subject = f"{jurabk}: version in force {day} (verified interval)"
+        else:
+            subject = (f"{jurabk}: wording known since {day} "
+                       f"({detail or 'source'}; legal start unresolved)")
+        body: list[str] = []
+        for change in changes[:12]:
+            amending = change.get("amending_act") or {}
+            dates = change.get("dates") or {}
+            body.extend([
+                f"Amending act: {amending.get('title') or 'not recorded'}",
+                f"Citation: {amending.get('citation') or amending.get('document_id')}",
+                _day_line("Adopted (Ausfertigung)", dates.get("adopted")),
+                _day_line("Promulgated (Verkündung)",
+                          dates.get("promulgated")),
+                _day_line("In force", dates.get("in_force")),
+                _day_line("Applies from", dates.get("applies_from"))
+                if (dates.get("applies_from") or {}).get("date") else
+                "Applies from: not stated (same as in force)",
+                f"Change type: {change.get('change_type')}",
+                ""])
+        if basis == "observed_at":
+            body.append("Author date: first capture/retrieval that showed "
+                        "these wordings — NOT a legal effective date.")
+        if group["attribution"]:
+            body.append("Attribution: " + ", ".join(sorted(
+                group["attribution"])))
+        body.append("Source roles: " + ", ".join(sorted(group["roles"])))
+        shown = group["labels"][:40]
+        body.append("")
+        body.append(f"Changed norms ({len(group['labels'])}): "
+                    + ", ".join(shown)
+                    + (" …" if len(group["labels"]) > len(shown) else ""))
+        order = max(day, last_order)
+        last_order = order
+        trailers = [("Lexgraph-Act", act_id),
+                    ("Lexgraph-Author-Date-Basis", basis),
+                    ("Lexgraph-Source-Roles",
+                     ",".join(sorted(group["roles"])))]
+        if basis == "in_force":
+            trailers.append(("Lexgraph-In-Force", day))
+        for change in changes[:6]:
+            dates = change.get("dates") or {}
+            trailers.append(("Lexgraph-Amending-Document", str(
+                (change.get("amending_act") or {}).get("document_id"))))
+            for name in ("adopted", "promulgated"):
+                value = (dates.get(name) or {}).get("date")
+                trailers.append((f"Lexgraph-{name.title()}", value or
+                                 "unknown"))
+        version_key = hashlib.sha256(
+            f"{act_id}:{basis}:{day}:{detail}".encode()).hexdigest()
+        commits.append(PlannedCommit(
+            act_id=act_id, state_keys=[version_key], author_date=day,
+            author_basis=basis, order_date=order, subject=subject,
+            body="\n".join(body), trailers=trailers,
+            files=dict(sorted(group["files"].items()))))
+    return commits
+
+
+def plan_history(lh: Any, act_ids: Iterable[str],
+                 toc: dict[str, Any] | None
+                 ) -> tuple[list[PlannedCommit], list[dict[str, Any]]]:
+    commits: list[PlannedCommit] = []
+    report: list[dict[str, Any]] = []
+    for act_id in act_ids:
+        if not lh.covers(act_id):
+            report.append({"act_id": act_id, "status": "not_in_corpus",
+                           "reason": "not in law_history"})
+            continue
+        act_commits = plan_act_history(lh, act_id, toc)
+        for sequence, commit in enumerate(act_commits):
+            commit.sequence = sequence
+        commits.extend(act_commits)
+        report.append({"act_id": act_id, "status": "ok",
+                       "commits": len(act_commits),
+                       "in_force_dated": sum(1 for c in act_commits
+                                             if c.author_basis ==
+                                             "in_force")})
+    commits.sort(key=lambda c: (c.order_date, c.act_id, c.sequence))
+    return commits, report
+
+
 # --------------------------------------------------------------------- git
 
 def _git(repo: Path, *args: str, input_bytes: bytes | None = None,
@@ -621,6 +890,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--acts", default="",
                         help="comma-separated act ids (default: all fed_/by_)")
     parser.add_argument("--report", type=Path, default=None)
+    parser.add_argument("--legacy-chain", action="store_true",
+                        help="plan from the per-state chain instead of "
+                             "law_history.sqlite")
     args = parser.parse_args(argv)
     data = args.data.resolve()
     manifest_path = data / "retrospective_history.json"
@@ -628,10 +900,15 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8"))) if manifest_path.is_file() else None)
     toc = load_gii_toc(data / "gii_toc.json",
                        ROOT / "api" / "data" / "gii_toc.json")
-    store = NormHistoryStore(data, manifest_loader=lambda: manifest,
-                             cache_size=1)
     acts = [a for a in args.acts.split(",") if a] or default_acts(data)
-    commits, report = plan(store, acts, toc)
+    from api.law_history import open_store
+    lh = None if args.legacy_chain else open_store(data)
+    if lh is not None:
+        commits, report = plan_history(lh, acts, toc)
+    else:
+        store = NormHistoryStore(data, manifest_loader=lambda: manifest,
+                                 cache_size=1)
+        commits, report = plan(store, acts, toc)
     result = export(args.repo.expanduser(), commits)
     summary = {
         "exporter": EXPORTER,
@@ -639,6 +916,8 @@ def main(argv: list[str] | None = None) -> int:
             timespec="seconds"),
         "data_dir": str(data),
         "retrospective_built_at": (manifest or {}).get("built_at"),
+        "law_history_built_at": (lh.meta.get("built_at") if lh else None),
+        "planner": "law_history" if lh else "state_chain",
         "repo": str(args.repo.expanduser()),
         **result,
         "acts": report,
