@@ -124,7 +124,8 @@ class PoliteHttp:
 
     # requests -------------------------------------------------------------
     def request(self, method: str, url: str, *, validators: tuple[str | None, str | None] | None = None,
-                headers: dict | None = None, detect: bool = True, **kwargs) -> Response:
+                headers: dict | None = None, detect: bool = True, retries: int | None = None,
+                **kwargs) -> Response:
         self.check_robots(url)
         host = self._host(url)
         send = dict(headers or {})
@@ -135,7 +136,7 @@ class PoliteHttp:
             if last_modified:
                 send["If-Modified-Since"] = last_modified
         last_error: UpstreamFailure | None = None
-        for attempt in range(self.retries + 1):
+        for attempt in range((self.retries if retries is None else retries) + 1):
             with host.lock:
                 self._pace(host)
                 started = time.monotonic()

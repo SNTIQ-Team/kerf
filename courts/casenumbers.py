@@ -8,7 +8,10 @@ import re
 _SPLIT = re.compile(
     r"\s*(?:;|,|\s/\s|\s\+\s|\s+und\s+|\s+u\.\s+(?=[A-Z0-9])|\s+sowie\s+|\s+bzw\.\s+|\n)\s*")
 # "19 U 104/90 (vormals: 19 U 147/86)": the annotated former docket is kept as its own item.
-_ANNOTATION = re.compile(r"\(\s*(?:vormals|früher|frueher|alt|jetzt|neu|vorher)?\s*:?\s*([^()]*)\)", re.I)
+# A parenthesis is an annotation only if it holds another docket (a digit);
+# "8 AZR 194/25 (F)" keeps its suffix, which is part of the BAG ECLI.
+_ANNOTATION = re.compile(r"\(\s*(?:(?:vormals|früher|frueher|alt|jetzt|neu|vorher)\s*:?\s*)?([^()]*\d[^()]*)\)",
+                         re.I)
 _PREFIX = re.compile(r"^(?:Az\.?|Aktenzeichen|AZ)\s*:?\s*", re.I)
 _TRAILER = re.compile(r"\s*(?:u\.\s*a\.?|ua\.?|et al\.?)\s*$", re.I)
 _DASHES = str.maketrans({"‐": "-", "‑": "-", "‒": "-", "–": "-",

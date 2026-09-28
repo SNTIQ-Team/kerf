@@ -90,9 +90,16 @@ def parse_lag_list(markup: str, lag: str) -> list[dict]:
     for az, when, href in re.findall(r'<h2>([^<]+)</h2>\s*<span><strong>(\d\d\.\d\d\.\d{4})</strong></span>.*?'
                                      r'<a href="([^"]+/entscheidungen/neue/\d+/[^"]*)"', markup, re.S):
         url = urljoin(ARBG, href.replace("index.php", ""))
+        az, court_name, court_id = squash(az), LAGS[lag], f"lag-{lag}"
+        # The LAG databases also list first-instance decisions: "ArbG München - 6 BV 41/19".
+        first = re.match(r"ArbG\s*([A-ZÄÖÜ][\wäöüß]+)\s*-?\s*(.+)$", az)
+        if first:
+            court_name = f"Arbeitsgericht {first.group(1)}"
+            court_id = resolve_court(court_name, default_land="by").court_id
+            az = squash(first.group(2))
         items.append({"source_doc_id": f"lag:{urlsplit(url).path}", "url": url, "listed_date": iso_date(when),
-                      "listed_court": f"lag-{lag}", "listed_case_numbers": squash(az), "listed_modified": None,
-                      "priority": 1, "extra": {"route": "lag", "court_name": LAGS[lag]}})
+                      "listed_court": court_id, "listed_case_numbers": az, "listed_modified": None,
+                      "priority": 1, "extra": {"route": "lag", "court_name": court_name}})
     return items
 
 
@@ -202,9 +209,16 @@ def parse_pdf_decision(pdf: bytes, item: dict, url: str) -> ParsedDecision:
         metadata["cover_court"] = m.group(1) if m else None
     elif route == "verfgh":
         m = re.search(r"Aktenzeichen:\s*(.+)", head)
-        if not m:
-            raise UpstreamFailure("parse_error", "BayVerfGH PDF without Aktenzeichen", url=url)
-        raw_az = squash(m.group(1))
+        if m:
+            raw_az = squash(m.group(1))
+        else:
+            # Joined proceedings: "I. Vf. 5-VIII-18 ... II. Vf. 7-VII-18" in the header, no label.
+            header = re.split(r"\n\s*(?:Leitsätze?|Entscheidung|Gründe)\s*:", head)[0]
+            dockets = list(dict.fromkeys(re.findall(r"Vf\.\s*\d+[a-z]?-[IVX]+-\d{2}", header)))
+            if not dockets:
+                raise UpstreamFailure("parse_error", "BayVerfGH PDF without Aktenzeichen", url=url)
+            raw_az = ", ".join(" ".join(d.split()) for d in dockets)
+            metadata["case_numbers_raw_constructed"] = "joined 'Vf.' dockets from the PDF header"
         headers.add(raw_az)
         m = re.search(r"(Entscheidung|Beschluss|Urteil)\s+des\s+Bayerischen\s+Verfassungsgerichtshofs?\s+vom\s+"
                       r"(\d{1,2}\.\s*\w+\s+\d{4})", head)
@@ -215,7 +229,7 @@ def parse_pdf_decision(pdf: bytes, item: dict, url: str) -> ParsedDecision:
             raise UpstreamFailure("identity_mismatch", f"listed {item['listed_date']} != PDF {when}", url=url)
     elif route == "lag":
         first = text.split("\f", 1)[0]
-        if listed_az and squash(listed_az) not in squash(first):
+        if listed_az and re.sub(r"\s", "", listed_az) not in re.sub(r"\s", "", first):
             raise UpstreamFailure("identity_mismatch", f"LAG PDF first page lacks {listed_az!r}", url=url)
         decision_type = "Urteil" if re.search(r"\bURTEIL\b|\bUrteil\b", first) else (
             "Beschluss" if re.search(r"BESCHLUSS|Beschluss", first) else None)
@@ -237,7 +251,18 @@ def parse_pdf_decision(pdf: bytes, item: dict, url: str) -> ParsedDecision:
         sections = [s for s in sections if not (s.name == "leitsatz" and s.heading and s.blocks
                                                 and s.blocks[0].locator.startswith("page[1]"))] or sections
     if not any(s.name in ("gruende", "entscheidungsgruende", "tatbestand") for s in sections):
-        raise UpstreamFailure("parse_error", "no reasoning section recognised in PDF", url=url)
+        tenor = [s for s in sections if s.name == "tenor"]
+        if not tenor:
+            raise UpstreamFailure("parse_error", "no reasoning section recognised in PDF", url=url)
+        # Tenor and reasons follow each other without a "Gründe" heading: not separable
+        # without guessing, so the text is kept as one court-authored section.
+        merged = [b for s in sections if s.name == "tenor" or sections.index(s) > sections.index(tenor[0])
+                  for b in s.blocks]
+        sections = [s for s in sections if sections.index(s) < sections.index(tenor[0])] + [
+            Section("sonstiger_langtext", "court",
+                    "court PDF without a 'Gründe'/'Tatbestand' heading: tenor and reasons not separable",
+                    merged, heading=tenor[0].heading)]
+        metadata["sections_not_separable"] = True
     info = resolve_court(court_name, default_land="by")
     return ParsedDecision(
         source_id="by", source_doc_id=item["source_doc_id"], source_url=url, court_name=court_name,

@@ -9,6 +9,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import tempfile
 from datetime import datetime, timezone
@@ -377,7 +378,19 @@ def put_validators(conn: sqlite3.Connection, url: str, headers: dict, content_ha
 
 # --- decisions -----------------------------------------------------------------
 
+ECLI_RE = re.compile(r"^ECLI:[A-Z]{2}:[A-Za-z0-9]{1,7}:\d{4}:[A-Za-z0-9.]{1,25}$")
+
+
 def decision_identity(parsed: ParsedDecision) -> str:
+    malformed = parsed.ecli and (not ECLI_RE.match(parsed.ecli) or (
+        # German ordinals embed the Aktenzeichen ("0813.L9SO202.26B.ER.00", "180626UB4AS1025R0",
+        # "rs20150127.1bvr047110"); a bare date + counter such as "0525.00" is not unique.
+        parsed.ecli.startswith("ECLI:DE:") and not re.search(r"[A-Za-z]", parsed.ecli.rsplit(":", 1)[1])
+        and parsed.ecli.rsplit(":", 1)[1].count(".") < 2))
+    if malformed:
+        # A malformed ECLI (e.g. without the ordinal part) cannot be a unique id.
+        parsed.metadata["ecli_published_invalid"] = parsed.ecli
+        parsed.ecli = None
     if parsed.ecli:
         return parsed.ecli
     if not parsed.case_numbers:
@@ -481,7 +494,6 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
 
 def _metadata_norm_text(norm: str) -> str:
     # RII/juris norm metadata omits dots ("§ 24 Abs 4 AsylVfG 1992").
-    import re
     return re.sub(r"\b(Abs|Nr|Buchst|Alt|Halbs)(?=\s)", r"\1.", norm)
 
 

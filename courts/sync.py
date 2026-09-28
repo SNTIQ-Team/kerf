@@ -45,6 +45,9 @@ def sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *,
             status, notes = ("blocked" if blocked else "failed"), f"listing: {failure}"
             log(f"{adapter.source_id}: listing failed: {failure}")
             return _result(counts, status, run_id, http, requests_before)
+        if not listing.complete:
+            # Incremental adapters treat only runs with a complete listing as a baseline.
+            notes = "listing incomplete"
         counts["listed"] = upsert_items(conn, adapter.source_id, listing.items)
         if listing.upstream_total is not None:
             conn.execute("UPDATE sources SET upstream_listed=? WHERE source_id=?",
