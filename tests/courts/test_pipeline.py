@@ -295,3 +295,28 @@ def test_a_small_baseline_does_not_turn_noise_into_spikes():
     for _ in range(20):
         g.answered(0.9)                        # 4.5x the baseline, but only 0.7 s above it
     assert g.limit == 4
+
+
+def test_first_sigterm_does_not_wait_for_a_listing(conn, fixture):
+    import courts.sync as sync_module
+    from courts.pipeline import SourceSpec, run_pipeline
+    release = threading.Event()
+
+    class Lister(SlowAdapter):
+        source_id = "nrw"
+
+        def list_items(self, http, conn, *, since, limit, courts):
+            release.wait(30)            # a long listing
+            return super().list_items(http, conn, since=since, limit=limit, courts=courts)
+    fast = SlowAdapter(fixture, n=6, stop_after=3)
+    started = time.monotonic()
+    try:
+        results = run_pipeline(conn, [SourceSpec(fast, FakeHttp()), SourceSpec(Lister(fixture), FakeHttp())],
+                               relist_after=0)
+    finally:
+        sync_module.STOP_AFTER_ITEM.clear()
+        release.set()
+    assert time.monotonic() - started < 10
+    assert results["rii"]["status"] == "interrupted"
+    row = conn.execute("SELECT status, notes FROM sync_runs WHERE source_id='nrw'").fetchone()
+    assert tuple(row) == ("interrupted", "listing abandoned (SIGTERM)")
