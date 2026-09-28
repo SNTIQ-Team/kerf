@@ -355,17 +355,48 @@ def summarize(changes: list[dict[str, Any]], *, scope: str, subject: str,
                  for c in changes}
     notes = stand_notes or {}
     unknown = _unknown_dates(changes)
+    # link GII's typed notes to this subject's change records by the
+    # amending document and article they name
+    keyed: dict[tuple[str, str], dict[str, Any]] = {}
+    for change in changes:
+        act = change.get("amending_act") or {}
+        keyed.setdefault((str(act.get("document_id")),
+                          str(act.get("article"))), change)
+    linked_notes = []
+    for note in notes.get("documentation_notes") or []:
+        lookup = ((note.get("amending_act") or {}).get("gazette_lookup")
+                  or {})
+        key = (str(lookup.get("document_id")),
+               str((note.get("amending_act") or {}).get("article")))
+        match = keyed.get(key)
+        linked_notes.append({
+            **note, "observed_at": notes_observed_at,
+            "applies_to_subject": bool(match) if scope == "norm" else None,
+            "change_id": (match or {}).get("change_id")})
+    by_change = {n["change_id"]: n for n in linked_notes if n["change_id"]}
+
+    def with_note(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        if entry and entry.get("change_id") in by_change:
+            note = by_change[entry["change_id"]]
+            entry["gii_documentation"] = {
+                "kind": note.get("kind"),
+                "text_incorporated": note.get("text_incorporated"),
+                "documentation_complete": note.get("documentation_complete"),
+                "text": note.get("text")}
+        return entry
     return {
         "schema": SUMMARY_SCHEMA,
         "scope": scope,
         "subject": subject,
         "as_of": day,
-        "last_change": compact_change(last, day) if last else None,
-        "last_incorporated_undated": (compact_change(later_undated[-1], day)
-                                      if later_undated else None),
-        "next_pending_change": (compact_change(pending[0], day)
+        "last_change": with_note(compact_change(last, day)) if last
+        else None,
+        "last_incorporated_undated": (with_note(compact_change(
+            later_undated[-1], day)) if later_undated else None),
+        "next_pending_change": (with_note(compact_change(pending[0], day))
                                 if pending else None),
-        "pending_changes": [compact_change(c, day) for c in pending[:20]],
+        "pending_changes": [with_note(compact_change(c, day))
+                            for c in pending[:20]],
         "counts": {
             "versions": len(versions or []),
             "versions_by_role": roles,
@@ -378,9 +409,7 @@ def summarize(changes: list[dict[str, Any]], *, scope: str, subject: str,
         },
         "source_role": version_role,
         "act_stand_note": notes.get("act_stand_note"),
-        "documentation_notes": [
-            {**note, "observed_at": notes_observed_at}
-            for note in notes.get("documentation_notes") or []],
+        "documentation_notes": linked_notes,
         "unknown_dates": unknown[:unknown_limit],
         "unknown_dates_total": len(unknown),
         "completeness": completeness or {},
