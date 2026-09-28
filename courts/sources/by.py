@@ -226,7 +226,13 @@ def parse_pdf_decision(pdf: bytes, item: dict, url: str) -> ParsedDecision:
             raise UpstreamFailure("parse_error", "BayVerfGH PDF without decision date", url=url)
         decision_type, when = m.group(1), _german_date(m.group(2))
         if item["listed_date"] and item["listed_date"] != when:
-            raise UpstreamFailure("identity_mismatch", f"listed {item['listed_date']} != PDF {when}", url=url)
+            # The court's list dates are occasionally wrong (e.g. 2008 for a 2017 decision).  The PDF
+            # date is accepted only if the PDF's docket matches the document's own file name.
+            slug = re.sub(r"[^0-9a-z]", "", urlsplit(url).path.rsplit("/", 1)[-1].lower())
+            dockets = [re.sub(r"[^0-9a-z]", "", d.lower().replace("vf.", "")) for d in split_case_numbers(raw_az)]
+            if not dockets or not slug.startswith(dockets[0]):
+                raise UpstreamFailure("identity_mismatch", f"listed {item['listed_date']} != PDF {when}", url=url)
+            metadata["listed_date_conflict"] = {"listed": item["listed_date"], "document": when}
     elif route == "lag":
         first = text.split("\f", 1)[0]
         if listed_az and re.sub(r"\s", "", listed_az) not in re.sub(r"\s", "", first):
