@@ -246,7 +246,7 @@ FEDERAL_ALIASES = {
     "asylg": "asylvfg_1992", "asylvfg": "asylvfg_1992", "rustag": "stag",
     "freizuegeu": "freiz_gg_eu_2004", "freizgeu": "freiz_gg_eu_2004",
     "baugb": "bbaug", "weg": "woeigg", "egbgb": "bgbeg", "egzpo": "zpoeg",
-    "egstgb": "stgbeg", "eggvg": "gvgeg", "eghgb": "hgbeg", "eginso": "insoeg", "soldg": "sg",
+    "egstgb": "stgbeg", "eggvg": "gvgeg", "eghgb": "hgbeg", "soldg": "sg",
 }
 EU_ACTS = {
     "dsgvo": "32016R0679", "eudsgvo": "32016R0679", "aeuv": "12016E", "euv": "12016M",

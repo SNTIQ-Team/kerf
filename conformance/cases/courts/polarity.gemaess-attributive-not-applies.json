@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.gemaess-attributive-not-applies",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: gemaess-attributive-not-applies",
+  "origin": "precision review of the live corpus 2026-09-28 (BAG 7 ABR …, VG … Rn)",
+  "status": "active",
+  "input": {
+    "text": "Einschränkungen des Grundsatzes der geheimen Wahl nach § 14 Abs. 1 BetrVG sind nur zulässig, wenn diese zur Durchführung einer ordnungsgemäßen Wahl erforderlich sind.",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$excludes": [
+        "applies|de/bund/betrvg/para/14/abs/1"
+      ]
+    }
+  },
+  "match": "subset"
+}
