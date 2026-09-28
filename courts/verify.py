@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS verification_findings(
   status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','explained','corrected'))
 );
 CREATE INDEX IF NOT EXISTS verification_findings_decision ON verification_findings(decision_id);
+CREATE TABLE IF NOT EXISTS verification_captures(
+  decision_id TEXT NOT NULL, representation TEXT NOT NULL, sha256 TEXT NOT NULL, url TEXT NOT NULL,
+  fetched_at TEXT NOT NULL, PRIMARY KEY(decision_id, representation)
+);
 """
 
 
@@ -228,81 +232,122 @@ class Alternate:
     network: bool
 
 
-def alternates(conn: sqlite3.Connection, decision: sqlite3.Row, http=None) -> list[Alternate]:
+COURT_SITE_SOURCES = {"bag": "bag", "bsg": "bsg", "bverwg": "bverwg", "bverfg": "bverfg"}
+
+
+def cached_fetch(conn: sqlite3.Connection, decision_id: str, representation: str, url: str, http, home=None) -> bytes:
+    """Fetch an alternate representation once; later verification runs read it from the packs (offline)."""
+    from .packs import PackStore
+    from .config import data_home
+    row = conn.execute("SELECT sha256 FROM verification_captures WHERE decision_id=? AND representation=?",
+                       (decision_id, representation)).fetchone()
+    store = PackStore(home or data_home(), conn)
+    if row is not None:
+        return store.get(row[0])
+    if http is None:
+        raise UpstreamFailure("network", "alternate not cached and verification runs offline", url=url)
+    body = http.get(url, timeout=120).body
+    ext = "pdf" if body.startswith(b"%PDF") else "zip" if body.startswith(b"PK") else "html"
+    # One pack directory per representation: parallel verify processes never append to the same pack.
+    ref = store.put(body, f"verify-{representation}", ext)
+    conn.execute("INSERT OR REPLACE INTO verification_captures VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%S+00:00','now'))",
+                 (decision_id, representation, ref.sha256, url))
+    return body
+
+
+def alternates(conn: sqlite3.Connection, decision: sqlite3.Row, http=None, kinds: set[str] | None = None
+               ) -> list[Alternate]:
     out: list[Alternate] = []
     from .store import read_capture
+    want = kinds or {"capture", "nrwe-pdf", "rii-xml"}
     # 1. offline: a second official source's capture of the same decision (skipped duplicate)
-    for item in conn.execute("""SELECT * FROM source_items WHERE decision_id IS NULL AND state='skipped'
-                                AND failure_kind='duplicate_identity' AND content_hash IS NOT NULL
-                                AND failure_detail LIKE ?""", (decision["id"] + " %",)).fetchall():
-        def load(item=item):
-            from .sources import get_adapter
-            ext = (conn.execute("SELECT extension FROM captures WHERE sha256=?", (item["content_hash"],)).fetchone()
-                   or ["bin"])[0]
-            body = read_capture(conn, item["content_hash"])
-            return get_adapter(item["source_id"]).parse(Capture(body, item["url"], "", ext), item)
-        out.append(Alternate(f"capture:{item['source_id']}", load, False))
+    if "capture" in want:
+        for item in conn.execute("""SELECT * FROM source_items WHERE decision_id IS NULL AND state='skipped'
+                                    AND failure_kind='duplicate_identity' AND content_hash IS NOT NULL
+                                    AND failure_detail LIKE ?""", (decision["id"] + " %",)).fetchall():
+            def load(item=item):
+                from .sources import get_adapter
+                ext = (conn.execute("SELECT extension FROM captures WHERE sha256=?",
+                                    (item["content_hash"],)).fetchone() or ["bin"])[0]
+                body = read_capture(conn, item["content_hash"])
+                return get_adapter(item["source_id"]).parse(Capture(body, item["url"], "", ext), item)
+            out.append(Alternate(f"capture:{item['source_id']}", load, False))
+    cached = {r[0] for r in conn.execute("SELECT representation FROM verification_captures WHERE decision_id=?",
+                                         (decision["id"],))}
     # 2. NRWE: the PDF of the same page
-    if decision["source_id"] == "nrw" and http is not None:
+    if "nrwe-pdf" in want and decision["source_id"] == "nrw" and (http is not None or "nrwe-pdf" in cached):
         path = decision["source_url"].split("nrwe.justiz.nrw.de", 1)[-1]
         pdf_url = f"https://nrwe.justiz.nrw.de/pdfdownload/downloadEntscheidung.php?entscheidung=/nrwe{path}"
 
         def load_pdf():
-            response = http.get(pdf_url, timeout=120)
-            if not response.body.startswith(b"%PDF"):
+            body = cached_fetch(conn, decision["id"], "nrwe-pdf", pdf_url, http)
+            if not body.startswith(b"%PDF"):
                 raise UpstreamFailure("unexpected_representation", "NRWE PDF download is not a PDF", url=pdf_url)
-            return parse_nrwe_pdf(response.body, pdf_url, decision["source_doc_id"])
-        out.append(Alternate("nrwe-pdf", load_pdf, True))
-    # 3. RII XML <-> bverwg.de HTML for BVerwG decisions with an ECLI
-    if decision["court_slug"] == "bverwg" and decision["ecli"] and http is not None:
-        suffix = decision["ecli"].rsplit(":", 1)[-1]
-        if decision["source_id"] == "rii":
-            def load_site():
-                from .sources.bverwg import BverwgAdapter
-                item = {"source_doc_id": suffix, "url": f"https://www.bverwg.de/de/{suffix}",
-                        "listed_date": decision["decision_date"], "listed_case_numbers": None, "extra": {}}
-                adapter = BverwgAdapter()
-                return adapter.parse(adapter.fetch(http, item), item)
-            out.append(Alternate("bverwg-html", load_site, True))
-        elif decision["source_id"] == "bverwg":
-            row = conn.execute("""SELECT * FROM source_items WHERE source_id='rii' AND listed_date=? AND
-                                  listed_court='bverwg'""", (decision["decision_date"],)).fetchall()
-            keys = {case_key(c) for c in json.loads(decision["case_numbers"])}
-            match = [r for r in row if {case_key(c) for c in split_case_numbers(r["listed_case_numbers"] or "")} & keys]
-            if len(match) == 1:
-                def load_rii(item=match[0]):
-                    from .sources.rii import RiiAdapter
-                    adapter = RiiAdapter()
-                    return adapter.parse(adapter.fetch(http, item), item)
-                out.append(Alternate("rii-xml", load_rii, True))
+            return parse_nrwe_pdf(body, pdf_url, decision["source_doc_id"])
+        out.append(Alternate("nrwe-pdf", load_pdf, "nrwe-pdf" not in cached))
+    # 3. court site (BAG, BSG, BVerwG, BVerfG) <-> RII XML of the same decision
+    if "rii-xml" in want and decision["source_id"] in COURT_SITE_SOURCES and (http is not None or "rii-xml" in cached):
+        keys = {case_key(c) for c in json.loads(decision["case_numbers"])}
+        rows = conn.execute("SELECT * FROM source_items WHERE source_id='rii' AND listed_date=? AND listed_court=?",
+                            (decision["decision_date"], COURT_SITE_SOURCES[decision["source_id"]])).fetchall()
+        match = [r for r in rows if {case_key(c) for c in split_case_numbers(r["listed_case_numbers"] or "")} & keys]
+        if len(match) == 1:
+            def load_rii(item=match[0]):
+                from .sources.rii import RiiAdapter
+                body = cached_fetch(conn, decision["id"], "rii-xml", item["url"], http)
+                return RiiAdapter().parse(Capture(body, item["url"], "application/zip", "zip"), item)
+            out.append(Alternate("rii-xml", load_rii, "rii-xml" not in cached))
     return out
 
 
+def candidates_by_kind(conn: sqlite3.Connection, *, online: bool, source: str | None) -> dict[str, list[str]]:
+    rows: dict[str, list[str]] = {}
+    rows["capture"] = [r[0] for r in conn.execute(
+        """SELECT DISTINCT substr(failure_detail, 1, instr(failure_detail, ' ') - 1) FROM source_items
+           WHERE state='skipped' AND content_hash IS NOT NULL AND failure_kind='duplicate_identity'""")]
+    cached = conn.execute("SELECT decision_id, representation FROM verification_captures").fetchall()
+    for kind in ("nrwe-pdf", "rii-xml"):
+        rows[kind] = [d for d, rep in cached if rep == kind]
+    if online:
+        rows["nrwe-pdf"] += [r[0] for r in conn.execute("SELECT id FROM decisions WHERE source_id='nrw'")]
+        rows["rii-xml"] += [r[0] for r in conn.execute(
+            f"SELECT id FROM decisions WHERE source_id IN ({','.join('?' * len(COURT_SITE_SOURCES))})",
+            tuple(COURT_SITE_SOURCES))]
+    if source:
+        keep = {r[0] for r in conn.execute("SELECT id FROM decisions WHERE source_id=?", (source,))}
+        rows = {k: [d for d in v if d in keep] for k, v in rows.items()}
+    return {k: list(dict.fromkeys(v)) for k, v in rows.items()}
+
+
 def verify_sample(conn: sqlite3.Connection, *, sample: int, http=None, source: str | None = None,
-                  seed: int | None = None) -> dict:
+                  seed: int | None = None, kinds: set[str] | None = None, reuse_run: int | None = None) -> dict:
+    """Compare up to ``sample`` pairs, stratified over pair kinds; ``reuse_run`` re-checks exactly the pairs of an
+    earlier run (offline, from the cached captures)."""
     conn.executescript(SCHEMA)
     run = conn.execute("INSERT INTO verification_runs(started_at, sample, verifier_version) "
                        "VALUES(strftime('%Y-%m-%dT%H:%M:%S+00:00','now'), ?, ?)", (sample, VERIFIER_VERSION)).lastrowid
-    # Candidates: decisions that have an alternate representation (duplicates first: they cost no request).
-    dup_ids = [r[0] for r in conn.execute("""SELECT DISTINCT substr(failure_detail, 1, instr(failure_detail, ' ') - 1)
-                                             FROM source_items WHERE state='skipped' AND content_hash IS NOT NULL
-                                             AND failure_kind='duplicate_identity'""")]
-    where = ["(source_id = 'nrw' OR court_slug = 'bverwg')"] if http is not None else ["0"]
-    params: list = []
-    if source:
-        where.append("source_id = ?")
-        params.append(source)
-    online = [r[0] for r in conn.execute(f"SELECT id FROM decisions WHERE {' AND '.join(where)}", params)]
     rng = random.Random(seed)
-    rng.shuffle(online)
-    candidates = list(dict.fromkeys(dup_ids + online))[:sample]
+    if reuse_run is not None:
+        plan = [(r[0], r[1].split(":")[0]) for r in conn.execute(
+            "SELECT decision_id, representation_b FROM verification_checks WHERE run_id=? ORDER BY id", (reuse_run,))]
+    else:
+        pools = candidates_by_kind(conn, online=http is not None, source=source)
+        pools = {k: v for k, v in pools.items() if v and (not kinds or k in kinds)}
+        for pool in pools.values():
+            rng.shuffle(pool)
+        plan, quota = [], {k: max(1, sample // max(1, len(pools))) for k in pools}
+        if "capture" in pools:  # offline pairs cost nothing: take them all (within the sample)
+            quota["capture"] = min(len(pools["capture"]), sample)
+        for kind, pool in pools.items():
+            plan += [(d, kind) for d in pool[:quota[kind]]]
     counts = {"pairs": 0, "agreeing": 0, "findings": 0, "errors": 0}
-    for decision_id in candidates:
+    by_kind: dict[str, dict[str, int]] = {}
+    for decision_id, kind in plan:
         decision = conn.execute("SELECT * FROM decisions WHERE id=?", (decision_id,)).fetchone()
         if decision is None:
             continue
         stored = stored_representation(conn, decision_id)
-        for alt in alternates(conn, decision, http):
+        for alt in alternates(conn, decision, http, {kind}):
             counts["pairs"] += 1
             try:
                 other = parsed_representation(alt.label, alt.load())
@@ -312,11 +357,15 @@ def verify_sample(conn: sqlite3.Connection, *, sample: int, http=None, source: s
                 findings = [{"kind": "representation_error", "severity": "minor", "locator": None, "value_a": None,
                              "value_b": None, "detail": {"error": f"{type(exc).__name__}: {exc}"[:400]}}]
                 outcome = "error"
+            stat = by_kind.setdefault(alt.label.split(":")[0], {"pairs": 0, "agree": 0, "disagree": 0, "error": 0,
+                                                                "major_findings": 0})
+            stat["pairs"] += 1
+            stat[outcome] += 1
+            stat["major_findings"] += sum(1 for f in findings if f["severity"] == "major")
             counts["agreeing" if outcome == "agree" else ("errors" if outcome == "error" else "findings")] += 1
             conn.execute("""INSERT INTO verification_checks(run_id, decision_id, representation_a, representation_b,
                               outcome, detail, checked_at) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%S+00:00','now'))""",
-                         (run, decision_id, stored.label, alt.label, outcome,
-                          json.dumps({"findings": len(findings)})))
+                         (run, decision_id, stored.label, alt.label, outcome, json.dumps({"findings": len(findings)})))
             conn.executemany("""INSERT INTO verification_findings(run_id, decision_id, kind, severity, representation_a,
                                   representation_b, locator, value_a, value_b, detail, created_at)
                                 VALUES(?,?,?,?,?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%S+00:00','now'))""",
@@ -326,6 +375,6 @@ def verify_sample(conn: sqlite3.Connection, *, sample: int, http=None, source: s
     conn.execute("UPDATE verification_runs SET finished_at=strftime('%Y-%m-%dT%H:%M:%S+00:00','now'), pairs=?, "
                  "agreeing=?, findings=?, errors=? WHERE id=?",
                  (counts["pairs"], counts["agreeing"], counts["findings"], counts["errors"], run))
-    kinds = {r[0]: r[1] for r in conn.execute("SELECT kind, count(*) FROM verification_findings WHERE run_id=? "
-                                               "GROUP BY kind", (run,))}
-    return {"run_id": run, "candidates": len(candidates), **counts, "finding_kinds": kinds}
+    kinds_found = {f"{r[0]}/{r[1]}": r[2] for r in conn.execute(
+        "SELECT kind, severity, count(*) FROM verification_findings WHERE run_id=? GROUP BY kind, severity", (run,))}
+    return {"run_id": run, "planned": len(plan), **counts, "by_pair_kind": by_kind, "finding_kinds": kinds_found}
