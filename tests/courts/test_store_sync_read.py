@@ -276,3 +276,19 @@ def test_listing_complete_is_set_only_by_an_unbounded_full_listing(conn, fixture
     assert conn.execute("SELECT listing_complete FROM sources WHERE source_id='rii'").fetchone()[0] == 0
     sync_source(FixtureAdapter(fixture, [item()]), conn, FakeHttp())
     assert conn.execute("SELECT listing_complete FROM sources WHERE source_id='rii'").fetchone()[0] == 1
+
+
+def test_local_disk_full_stops_the_run_and_leaves_items_pending(conn, fixture, monkeypatch):
+    import errno
+    import courts.sync as sync_module
+
+    def no_space(*a, **k):
+        raise OSError(errno.ENOSPC, "No space left on device")
+    monkeypatch.setattr(sync_module, "write_capture", no_space)
+    result = sync_source(FixtureAdapter(fixture, [item("jb-A"), item("jb-B")]), conn, FakeHttp())
+    assert result["status"] == "failed" and result["failed"] == 0 and result["attempted"] == 1
+    states = {r[0] for r in conn.execute("SELECT state FROM source_items")}
+    assert states == {"pending"}
+    assert conn.execute("SELECT count(*) FROM failures").fetchone()[0] == 0
+    run = conn.execute("SELECT status, notes FROM sync_runs ORDER BY id DESC LIMIT 1").fetchone()
+    assert run["status"] == "failed" and "No space left" in run["notes"]
