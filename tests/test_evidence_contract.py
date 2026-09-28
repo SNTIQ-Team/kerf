@@ -105,6 +105,18 @@ def test_undeclared_argument_is_rejected_everywhere(client):
     assert "limit" in response.json()["allowed_arguments"]
 
 
+def test_transport_cache_keys_are_disclosed_not_silently_dropped(
+        client, monkeypatch):
+    monkeypatch.setattr(main, "_load", lambda name: [])
+    response = client.get("/feed?limit=1&t=1727500000000")
+    assert response.status_code == 200
+    assert response.headers["X-Lexgraph-Ignored-Arguments"] == "t"
+    # A cache key never excuses a material argument on the same request.
+    assert client.get("/feed?limit=1&t=1&at=2020-01-01").status_code == 422
+    # Only /digest treats d= as a cache key.
+    assert client.get("/feed?limit=1&d=2026-09-28").status_code == 422
+
+
 def test_search_declares_current_only_and_rejects_dates(client):
     capabilities = client.get("/capabilities").json()
     temporal = capabilities["temporal"]
