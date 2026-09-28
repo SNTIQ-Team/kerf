@@ -40,13 +40,13 @@ IVM_RE = re.compile(S + r"(?:,\s*)?(?:i\.\s?V\.\s?m\.|iVm\.?|in Verbindung mit|i
 CHAIN_SEP_RE = re.compile(S + r"(?:,|;|und|sowie|oder|bzw\.)" + S + r"(?=(?:§|Art))")
 ARTICLE_WORDS = r"(?:des|der|dem|den|im|zum|zur|nach)"
 EU_ACT_RE = re.compile(
-    S + ARTICLE_WORDS + S + r"(?P<name>[\w-]*?(?:Richtlinie|richtlinie|Verordnung|verordnung|RL|VO))"
+    S + r"(?:" + ARTICLE_WORDS + S + r")?(?P<name>[\w-]*?(?:Richtlinie|richtlinie|Verordnung|verordnung|RL|VO))"
     + S + r"(?:\((?P<fam>EU|EG|EWG)\)" + S + r")?(?:Nr\.?" + S + r")?"
     r"(?P<a>\d{1,4})/(?P<b>\d{1,4})(?:/(?P<suffix>EU|EG|EWG))?")
 ACT_TOKEN_RE = re.compile(
     S + r"(?:" + ARTICLE_WORDS + S + r")?"
     r"(?P<act>[A-ZÄÖÜ][A-Za-zÄÖÜäöüß]*(?:[-/][A-Za-zÄÖÜäöüß]+)*\.?)"
-    r"(?P<book>" + WS + r"(?:[IVX]{1,5}|\d{1,2})(?![\w/.]))?"
+    r"(?P<book>" + WS + r"(?:[IVX]{1,5}|\d{1,2})(?![\w/])(?!\.\d))?"
     r"(?P<land>" + WS + r"(?:NRW|NW|BW|Bln|Bbg|LSA|M-V|MV|SH|RP|RLP|Saarl|Nds|HB|HH|Bay)\.?(?![\w]))?"
     r"(?P<year>" + WS + r"(?:19|20)\d{2}(?![\w/]))?")
 LONG_NAME_RE = re.compile(S + ARTICLE_WORDS + S + r"(?P<name>(?:Bürgerlichen" + WS + r"Gesetzbuch(?:es|s)?|"
@@ -150,7 +150,7 @@ def _expand(values: list[str], is_range: bool) -> tuple[list[str], bool]:
     return values, False
 
 
-def _act_at(text: str, pos: int) -> tuple[ActRef | None, str, int] | None:
+def _act_at(text: str, pos: int, land: str | None = None) -> tuple[ActRef | None, str, int] | None:
     eu = EU_ACT_RE.match(text, pos)
     if eu:
         a, b = eu.group("a"), eu.group("b")
@@ -182,7 +182,7 @@ def _act_at(text: str, pos: int) -> tuple[ActRef | None, str, int] | None:
         candidates.append((token + m.group("land"), m.end("land")))
     candidates.append((token, m.end("act")))
     for raw, end in candidates:
-        ref = resolve_act(" ".join(raw.split()))
+        ref = resolve_act(" ".join(raw.split()), land)
         if ref.base or raw == token:
             year_end = m.end("year") if m.group("year") and end == m.end("act") else end
             return ref, " ".join(text[m.start("act"):year_end].split()), year_end
@@ -248,7 +248,7 @@ def _read_subs(text: str, item: _Item, item_start: int, cursor: int, plural: boo
     return item, item_start, cursor
 
 
-def extract_norms(text: str, paragraph_id: str | None = None) -> list[Relation]:
+def extract_norms(text: str, paragraph_id: str | None = None, *, land: str | None = None) -> list[Relation]:
     relations: list[Relation] = []
     pos = 0
     chain_no = 0
@@ -279,7 +279,7 @@ def extract_norms(text: str, paragraph_id: str | None = None) -> list[Relation]:
                 break
             item, item_start, cursor = _read_subs(text, item, item_start, cursor, plural, pending)
             pending.append((item, item_start, cursor))
-            act = _act_at(text, cursor)
+            act = _act_at(text, cursor, land)
             if act:
                 ref, raw_act, cursor = act
                 for it, s, e in pending:
@@ -486,5 +486,5 @@ def _quote_before(text: str, court_start: int) -> str | None:
 
 def extract_all(text: str, paragraph_id: str | None, *, own_court_id: str | None,
                 own_case_keys: set[str] = frozenset(), own_land: str | None = None) -> list[Relation]:
-    return extract_norms(text, paragraph_id) + extract_decisions(
+    return extract_norms(text, paragraph_id, land=own_land) + extract_decisions(
         text, paragraph_id, own_court_id=own_court_id, own_case_keys=own_case_keys, own_land=own_land)

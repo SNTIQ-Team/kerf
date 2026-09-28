@@ -122,3 +122,13 @@ def test_database_rejects_parser_legal_effect_relations():
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(insert, (relation, derived_by, verified))
     conn.execute(insert, ("interprets", "model", 0))  # model-assisted, unverified: allowed by the schema
+
+
+@pytest.mark.parametrize("text,land,expected", [
+    ("nach § 45 SGB X. Danach", None, ["de/bund/sgb10/para/45"]),           # Roman book before a full stop
+    ("Art. 42 Abs. 1 Satz 1 Buchst. h VO (EU) Nr. 604/2013", None, ["eu/32013R0604/art/42/abs/1/satz/1/buchst/h"]),
+    ("Art. 101 BV", "by", ["de/by/bv/art/101"]),                            # Bavarian constitution in a Bavarian court
+    ("Art. 101 BV", "nw", [None]),                                          # elsewhere "BV" stays unresolved
+])
+def test_norm_identities_in_context(text, land, expected):
+    assert [r.target_id for r in extract_norms(text, "p", land=land)] == expected

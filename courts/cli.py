@@ -11,7 +11,7 @@ from .http import PoliteHttp
 from .read import citing_decisions, coverage, get_decision, get_paragraph, open_db, search
 from .sources import get_adapter, registry
 from .store import connect, init_db
-from .sync import sync_source
+from .sync import reparse_source, sync_source
 
 
 def _date(value: str) -> str:
@@ -37,6 +37,15 @@ def cmd_sync(args) -> int:
                          retry_failed=args.retry_failed)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result["status"] in ("ok", "partial") else 1
+
+
+def cmd_reparse(args) -> int:
+    conn = connect()
+    init_db(conn)
+    sources = [args.source] if args.source else [r[0] for r in conn.execute("SELECT source_id FROM sources")]
+    for source_id in sources:
+        print(json.dumps({"source": source_id, **reparse_source(get_adapter(source_id), conn)}))
+    return 0
 
 
 def _table(rows: list[list[str]]) -> str:
@@ -108,6 +117,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--court", help="comma list of court ids/prefixes to restrict (e.g. bsg,bverwg)")
     p.add_argument("--retry-failed", action="store_true", help="also retry previously failed items")
     p.set_defaults(func=cmd_sync)
+    p = sub.add_parser("reparse", help="re-parse stored raw captures with the current parser (offline)")
+    p.add_argument("--source", help="one source (default: all)")
+    p.set_defaults(func=cmd_reparse)
     p = sub.add_parser("status", help="coverage per source")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_status)

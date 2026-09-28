@@ -64,3 +64,29 @@ def test_lists(fixture):
     assert press[0]["listed_court"] == "vgh-by" and press[0]["priority"] == 0
     assert any(p["listed_case_numbers"] == "10 ZB 24.2079" for p in press)
     assert all("%" in p["url"] or p["url"].isascii() for p in press)  # umlauts percent-encoded
+
+
+def test_paragraph_split_by_page_break_is_rejoined_without_rn():
+    text = ("Tatbestand:\n\nDie Klägerin begehrt die Zahlung von Mehrarbeits-\nzuschlägen für die Monate\n"
+            "2\n\f7 SLa 272/25\n\n                 -3-\n\nJanuar bis März 2024.\n\nDer Beklagte beantragt Abweisung.\n"
+            "\n\f   Seite 4/9\n\naa) Neuer Gliederungspunkt beginnt.\n")
+    blocks = [b for b in layout_blocks(text, running_headers={"7 SLa 272/25"}, headings={"tatbestand": "tatbestand"})
+              if b.kind != "pagebreak"]
+    texts = [b.text for b in blocks]
+    assert texts == ["Tatbestand:",
+                     "Die Klägerin begehrt die Zahlung von Mehrarbeitszuschlägen für die Monate Januar bis März 2024.",
+                     "Der Beklagte beantragt Abweisung.", "aa) Neuer Gliederungspunkt beginnt."]
+    assert all(b.label is None for b in blocks)
+
+
+def test_lag_list_attributes_first_instance_entries_to_the_arbg():
+    from courts.sources.by import parse_lag_list
+    markup = ('<div class="item odd"><div class="info"><h2>ArbG München - 6 BV 41/19</h2><span><strong>12.03.2021'
+              '</strong></span><br><p><a href="/die-arbeitsgerichtsbarkeit-in-bayern/lag-muenchen/entscheidungen/neue/'
+              '46586/index.php">x</a></p></div></div><div class="item even"><div class="info"><h2>4 Sa 871/20</h2>'
+              '<span><strong>01.02.2021</strong></span><br><p><a href="/die-arbeitsgerichtsbarkeit-in-bayern/'
+              'lag-muenchen/entscheidungen/neue/46590/index.php">y</a></p></div></div>')
+    first, second = parse_lag_list(markup, "muenchen")
+    assert (first["listed_court"], first["listed_case_numbers"]) == ("arbg-muenchen", "6 BV 41/19")
+    assert first["extra"]["court_name"] == "Arbeitsgericht München"
+    assert (second["listed_court"], second["listed_case_numbers"]) == ("lag-muenchen", "4 Sa 871/20")

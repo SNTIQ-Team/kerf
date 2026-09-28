@@ -11,7 +11,7 @@ reads it directly and read-only. This file is the contract between them.
 | Database | `courts.sqlite` (WAL mode; writers are `python -m courts sync` processes) |
 | Raw captures | `raw/<source_id>/<sha256[:2]>/<sha256>.<ext>.gz`: exact response bytes, gzip-compressed. `sha256` is taken over the **uncompressed** bytes and equals `decisions.content_hash`. |
 | Schema version | `PRAGMA user_version` = `1`, also `meta.schema_version`. |
-| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.0.0`). |
+| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.1.0`). |
 
 Readers must check `PRAGMA user_version == 1` and refuse any other value. Within v1, changes are additive only (new tables, new nullable columns, new views). Removing or renaming a column, or changing identity rules, bumps the version.
 

@@ -223,3 +223,16 @@ def test_malformed_ecli_is_not_used_as_decision_id(ecli, valid):
     if not valid:
         assert identity == "court:sg-cottbus/2023-05-25/S_1_AS_1-23"
         assert d.metadata["ecli_published_invalid"] == ecli
+
+
+def test_reparse_is_offline_and_only_rewrites_on_parser_change(conn, fixture, monkeypatch):
+    import courts.store as store_module
+    from courts.sync import reparse_source
+    seed(conn, fixture)
+    adapter = FixtureAdapter(fixture, [item()])
+    adapter.fetch = lambda *a, **k: pytest.fail("reparse must not fetch")
+    assert reparse_source(adapter, conn) == {"reparsed": 0, "unchanged": 1, "failed": 0}
+    monkeypatch.setattr(store_module, "PARSER_VERSION", "courts-parser/9.9.9")
+    assert reparse_source(adapter, conn) == {"reparsed": 1, "unchanged": 0, "failed": 0}
+    row = conn.execute("SELECT parser_version, first_seen, observed_at FROM decisions WHERE id=?", (ECLI,)).fetchone()
+    assert row["parser_version"] == "courts-parser/9.9.9"
