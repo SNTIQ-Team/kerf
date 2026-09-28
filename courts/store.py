@@ -698,7 +698,7 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
         _insert_relations(conn, decision_id, relations)
         _mark_item(conn, parsed, decision_id, content_hash)
         if superseded is not None:
-            conn.execute("""UPDATE source_items SET state='skipped', failure_kind='duplicate_identity',
+            conn.execute("""UPDATE source_items SET state='skipped', decision_id=NULL, failure_kind='duplicate_identity',
                             failure_detail=?, content_hash=coalesce(content_hash, ?)
                             WHERE source_id=? AND source_doc_id=?""",
                          (f"{decision_id} superseded by {parsed.source_id}:{parsed.source_doc_id} "
