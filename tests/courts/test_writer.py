@@ -144,3 +144,16 @@ def test_then_sources_start_when_a_slot_frees_up(monkeypatch):
     monkeypatch.setattr(cli, "space_ok", lambda what: True)
     assert cli.main(["sync", "--source", "nrw", "--then", "rii,bverwg"]) == 0
     assert order == ["nrw", "rii", "bverwg"]
+
+
+def test_a_source_carries_its_own_court_restriction(monkeypatch):
+    import courts.cli as cli
+    seen = {}
+
+    def fake_sync(adapter, conn, http, **kw):
+        seen[adapter.source_id] = kw["courts"]
+        return {"status": "ok"}
+    monkeypatch.setattr(cli, "sync_source", fake_sync)
+    monkeypatch.setattr(cli, "space_ok", lambda what: True)
+    assert cli.main(["sync", "--source", "be,sn:ovg", "--then", "bw"]) == 0
+    assert seen == {"be": None, "sn": ["ovg"], "bw": None}

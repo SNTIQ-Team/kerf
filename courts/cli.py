@@ -54,8 +54,14 @@ def cmd_sync(args) -> int:
     import threading
     from .sync import STOP_AFTER_ITEM
     from .writer import Maintenance, SharedConnection
-    sources = [s.strip() for s in args.source.split(",") if s.strip()]
-    queued = [s.strip() for s in (args.then or "").split(",") if s.strip()]
+    # A source may carry its own court restriction: "sn:ovg" (several: "sn:ovg+vg").
+    specs = {}
+    for spec in (args.source + "," + (args.then or "")).split(","):
+        if spec.strip():
+            source_id, _, restriction = spec.strip().partition(":")
+            specs[source_id] = [c for c in restriction.split("+") if c] or None
+    sources = [s.strip().partition(":")[0] for s in args.source.split(",") if s.strip()]
+    queued = [s.strip().partition(":")[0] for s in (args.then or "").split(",") if s.strip()]
     if len(sources) > MAX_PARALLEL_SOURCES:
         print(json.dumps({"status": "invalid_argument",
                           "detail": f"at most {MAX_PARALLEL_SOURCES} sources per writer process"}), file=sys.stderr)
@@ -73,7 +79,7 @@ def cmd_sync(args) -> int:
     def run(adapter):
         try:
             results[adapter.source_id] = sync_source(adapter, conn, http_for(adapter), since=args.since,
-                                                     limit=args.limit, courts=courts,
+                                                     limit=args.limit, courts=specs.get(adapter.source_id) or courts,
                                                      retry_failed=args.retry_failed, maintenance=maintenance)
         except SourceBusy as exc:
             results[adapter.source_id] = {"status": "busy", "detail": str(exc)}
@@ -441,7 +447,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m courts", description="Local German court decision corpus")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("sync", help="incremental sync of one or more sources (one writer process)")
-    p.add_argument("--source", required=True, help="comma list, at most 6: rii | nrw | by | <land> ("
+    p.add_argument("--source", required=True, help="comma list, at most 6 (a court restriction per source: "
+                   "sn:ovg): rii | nrw | by | <land> ("
                    + ", ".join(sorted(registry())) + ")")
     p.add_argument("--since", type=_date, help="only decisions dated on/after YYYY-MM-DD")
     p.add_argument("--limit", type=_positive, help="fetch at most N decisions (priority order)")
