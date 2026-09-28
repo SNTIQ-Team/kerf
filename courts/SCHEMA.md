@@ -11,7 +11,7 @@ reads it directly and read-only. This file is the contract between them.
 | Database | `courts.sqlite` (WAL mode; writers are `python -m courts sync` processes) |
 | Raw captures | Packed: `packs/<source_id>/<source_id>-<NNNN>.pack`, append-only, rotated at 512 MiB (O(100) files in total, not one file per capture; per-file storage exhausted btrfs metadata). Indexed by table `captures`. |
 | Schema version | `PRAGMA user_version` = `3`, also `meta.schema_version`. |
-| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.5.0`). |
+| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.6.0`). |
 
 Readers must check `PRAGMA user_version == 3` and refuse any other value. Within a version, changes are additive only (new tables, new nullable columns, new views). Removing or renaming a column, or changing identity or storage rules, bumps the version. v1 → v2 (2026-09-28): added `captures` and the `sources` policy columns; `decisions.capture_path` became a pack reference. `init_db` upgrades v1 in place, and `python -m courts migrate-captures --delete-legacy` moves v1 `raw/*.gz` files into packs, verifying every hash before anything is deleted. v2 → v3 (2026-09-28): `decisions.court_id` became the Amtsgraph court id (`court:de:<XJustiz-ID>`, `court:eu:<ECLI code>`) where one is mapped, and the corpus slug moved to the new column `decisions.court_slug`. Added the tables `relation_assessments`, `corrections`, `verification_runs`, `verification_checks`, `verification_findings`, `amtsgraph_courts` and `court_map`, all documented below. `init_db` upgrades v1/v2 in place.
 
@@ -86,7 +86,7 @@ Typed citation statements. Never a generic "cites".
 | Column | Meaning |
 |---|---|
 | `decision_id` | Citing decision. |
-| `relation` | Parser rows: `mentions`, `quotes`, `procedural_reference` only (enforced by CHECK). `procedural_reference` covers decision citations of the procedural history (Vorinstanz etc.) and, since parser 1.5.0, norms that only ground a procedural step of the decision: costs, provisional enforceability, legal aid, finality, court and lawyers' fees (§§ 154–167 VwGO, § 193 SGG, §§ 91–107 and 708–720 ZPO, § 83b AsylG, GKG, RVG, …; `detail.procedural_basis` names the group, list in `courts/citations.py` `PROCEDURAL_NORMS`). Stronger relations (`applies`, `interprets`, …) may only come from `derived_by = 'model'` with `legal_effect_verified = 0`, or from `'user'`. |
+| `relation` | Parser rows: `mentions`, `quotes`, `procedural_reference` only (enforced by CHECK). `procedural_reference` covers decision citations of the procedural history (Vorinstanz etc.) and, since parser 1.5.0, norms that only ground a procedural step of the decision: costs, provisional enforceability, legal aid, finality, court and lawyers' fees (§§ 154–167 VwGO, § 193 SGG, §§ 91–107 and 708–720 ZPO, § 83b AsylG, GKG, RVG, …; `detail.procedural_basis` names the group, list in `courts/citations.py` `PROCEDURAL_NORMS`); since parser 1.6.0 also every norm cited in the court's own ruling on costs, provisional enforceability, the value in dispute or the admission of an appeal (a sentence opened by "Die Kostenentscheidung …", "Der Streitwert …", "Die Kosten des Verfahrens trägt …"; Land and disciplinary cost laws included; `detail.procedural_basis` = `cost/enforceability/value ruling`). Stronger relations (`applies`, `interprets`, …) may only come from `derived_by = 'model'` with `legal_effect_verified = 0`, or from `'user'`. |
 | `target_kind` | `norm` or `decision`. |
 | `target_id` | Norm id, decision id (ECLI or `court:` synthetic id), or NULL when unresolved. |
 | `target_decision_id` | Corpus decision the citation resolves to (filled by the relink step: ECLI, or court + date + case_key). |
@@ -97,13 +97,15 @@ Typed citation statements. Never a generic "cites".
 | `derived_by`, `legal_effect_verified`, `confidence` | `derived_by` ∈ `parser, model, user`. `legal_effect_verified` is 0 for everything the parser writes. |
 | `detail` | JSON: act, act_key, act_resolution (`gii_catalog, alias, land_affix, eu, eu_citation, international, unresolved`), chain, `in_conjunction_with` (i.V.m.), `following` (`f`/`ff`), `via_range`, `pinpoint_extra` (Alt./Hs.), court/date/case_number for decisions. |
 
+Indexes: `decision_id`, `paragraph_id` (added 2026-09-28, additive), `target_id`, `target_decision_id`, `(target_court_id, target_date, target_case_key)`.
+
 Norm prefix query (segment-exact, index-friendly): `target_id = :n OR (target_id >= :n || '/' AND target_id < :n || '0')`. This matches `…/para/75` and `…/para/75/abs/1`, but not `…/para/750`.
 
 ### `captures`
 `(sha256 PK, source_id, extension, pack, offset, stored_size, raw_size, codec, stored_at)`: one row per distinct capture. It includes captures that failed to parse, which remain available for re-parsing.
 
 ### `relation_assessments`
-Proposals from the separate polarity stage (`courts/polarity.py`, classifier `courts-polarity-rules/1.2.0`) and user decisions. Parser rows in `relations` are never changed. Only `mentions`/`quotes` relations in court-authored text are assessed (never `procedural_reference`). Precision is measured against hand-labelled gold files (`conformance/gold/polarity-*.json`, scored by `python -m courts.polarity_eval`); a rule whose assessment type stays below 0.9 precision is demoted: `assess()` reports it as `mentions_with_cue` (neutral, no polarity claim), and on schema v3 such proposals are not stored at all (the `assessment` CHECK list is part of the v3 contract), i.e. the rule is disabled in the corpus.
+Proposals from the separate polarity stage (`courts/polarity.py`, classifier `courts-polarity-rules/1.3.3`) and user decisions. Parser rows in `relations` are never changed. Only `mentions`/`quotes` relations in court-authored text are assessed (never `procedural_reference`). Precision is measured against hand-labelled gold files (`conformance/gold/polarity-*.json`, scored by `python -m courts.polarity_eval`); a rule whose assessment type stays below 0.9 precision is demoted: `assess()` reports it as `mentions_with_cue` (neutral, no polarity claim), and on schema v3 such proposals are not stored at all (the `assessment` CHECK list is part of the v3 contract), i.e. the rule is disabled in the corpus. Demoted in 1.3.3 (precision on fresh samples in brackets): `norm.auslegung_des` (0.73), `decision.entgegen` (0.59), `decision.anders_als_meint` (0/3), `decision.nicht_vergleichbar`, `norm.unter_anwendung`, `norm.auf_grundlage`. Unresolved norm citations (`target_id` NULL) are not assessed. Gold files: `polarity-gold-2026-09-28.json` (tuning sample of 1.1.0 proposals), `…-heldout.json` (1.2.0 proposals, held out), `…-validation.json` (fresh samples of 1.3.0-1.3.3, `sampled_with` per item).
 
 | Column | Meaning |
 |---|---|
