@@ -543,7 +543,8 @@ def run_pipeline(conn: sqlite3.Connection, specs: list[SourceSpec], *, since=Non
     from .sync import log as default_log
     from .writer import Maintenance, checkpoint
     log = log or default_log
-    maintenance = maintenance or Maintenance(conn, home)
+    # Checkpoint + space guard every 200 documents or 60 s (the btrfs probes are subprocesses).
+    maintenance = maintenance or Maintenance(conn, home, every_items=200, every_seconds=60)
     governors = governors or Governors(log=log)
     for spec in [*specs, *(queued or [])]:
         governors.declare(host_of(spec.adapter.base_url), concurrency_of(spec.adapter), spec.adapter.min_interval)

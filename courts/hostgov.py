@@ -35,6 +35,7 @@ MIN_SAMPLES = 10
 SPIKE_SAMPLES = 20
 GROW_BELOW = 2.0
 SPIKE_ABOVE = 3.0
+SPIKE_MARGIN = 1.0      # and at least this many seconds above the baseline (small baselines are noisy)
 MIN_BASELINE = 0.2
 
 
@@ -136,8 +137,9 @@ class HostGovernor:
             self.recent.append(latency)
             if self.baseline is None:
                 return
+            spike = _p95(self.recent)
             if len(self.recent) >= SPIKE_SAMPLES and len(self.window) >= MIN_SAMPLES \
-                    and _p95(self.recent) > SPIKE_ABOVE * self.baseline:
+                    and spike > SPIKE_ABOVE * self.baseline and spike > self.baseline + SPIKE_MARGIN:
                 self._throttle(now, f"latency spike p95 {_p95(self.recent):.2f}s > {SPIKE_ABOVE:.0f}x baseline "
                                     f"{self.baseline:.2f}s", retry_after=None, block=False)
                 self.recent.clear()

@@ -91,7 +91,7 @@ def test_latency_spike_halves():
     for _ in range(20):
         g.answered(0.3)
     for _ in range(20):
-        g.answered(2.0)                        # p95 > 3x baseline
+        g.answered(2.0)                        # p95 > 3x baseline and > baseline + 1 s
     assert g.limit == 3 and "latency spike" in logs[-1]
 
 
@@ -285,3 +285,13 @@ def test_existing_source_items_get_the_claim_columns(tmp_path):
     conn.execute("UPDATE source_items SET state='claimed' WHERE source_doc_id='a'")   # the CHECK admits it
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
     assert "source_items_claim" in names and "source_items_frontier" not in names
+
+
+def test_a_small_baseline_does_not_turn_noise_into_spikes():
+    clock, logs = Clock(), []
+    g = governor(clock, logs, start=4)
+    for _ in range(20):
+        g.answered(0.2)
+    for _ in range(20):
+        g.answered(0.9)                        # 4.5x the baseline, but only 0.7 s above it
+    assert g.limit == 4
