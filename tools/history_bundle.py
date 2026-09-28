@@ -54,6 +54,8 @@ ROLE_BY_SOURCE = {
     "wayback_gii_xml": "archived_capture",
     "wayback_bayern": "archived_capture",
     "neuris": "official_consolidation",
+    "gvbl": "official_promulgation",
+    "bgbl": "official_promulgation",
     "bayern_recht": "official_consolidation",
     "gii": "official_consolidation",
 }
@@ -64,7 +66,10 @@ CREATE TABLE captures(
     source_role TEXT NOT NULL, original_url TEXT, archive_url TEXT,
     captured_at TEXT NOT NULL, sha256 TEXT NOT NULL, stand TEXT,
     complete INTEGER NOT NULL, parser TEXT, norm_count INTEGER NOT NULL,
-    warnings_json TEXT NOT NULL);
+    warnings_json TEXT NOT NULL, first_captured_at TEXT,
+    last_captured_at TEXT, capture_count INTEGER NOT NULL DEFAULT 1,
+    captures_json TEXT NOT NULL DEFAULT '[]', layout TEXT,
+    source_identifiers_json TEXT);
 CREATE INDEX captures_act ON captures(act_id, captured_at);
 CREATE TABLE capture_texts(
     text_id INTEGER PRIMARY KEY, identity TEXT UNIQUE NOT NULL,
@@ -120,14 +125,23 @@ class CorpusWriter:
                  and str(n.get("enbez") or "").strip()]
         role = str(parsed.get("source_role") or ROLE_BY_SOURCE.get(
             source, "archived_capture"))
+        captures = parsed.get("captures") or []
+        first = str(parsed.get("first_captured_at") or captured)
+        last = str(parsed.get("last_captured_at") or captured)
         self.db.execute(
-            "INSERT INTO captures VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO captures VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (capture_id, act_id, source, role, parsed.get("original_url"),
-             parsed.get("archive_url"), captured, sha,
+             parsed.get("archive_url"), first, sha,
              _stand_text(parsed.get("stand")),
              int(bool(parsed.get("complete", True))), parsed.get("parser"),
              len(norms), json.dumps(parsed.get("warnings") or [],
-                                    ensure_ascii=False)))
+                                    ensure_ascii=False),
+             first, last, max(1, len(captures)),
+             json.dumps(captures, ensure_ascii=False)[:20000],
+             parsed.get("layout"),
+             json.dumps(parsed.get("source_identifiers"), ensure_ascii=False)
+             if parsed.get("source_identifiers") else None))
         for order, norm in enumerate(norms):
             identity = norm_identity(norm.get("enbez"), norm.get("titel"),
                                      norm.get("text"))
@@ -176,13 +190,14 @@ def iter_parsed(archive: Path, sources: Iterable[str] | None = None
 
 def export(archive: Path, out: Path, *, change_dates: Path | None = None,
            bavarian: Path | None = None, key: Path | None = None,
-           acts: set[str] | None = None) -> dict[str, Any]:
+           acts: set[str] | None = None,
+           sources: set[str] | None = None) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     corpus = out / "corpus.sqlite"
     writer = CorpusWriter(corpus)
     per_act: dict[str, int] = {}
     parsers: set[str] = set()
-    for parsed in iter_parsed(archive):
+    for parsed in iter_parsed(archive, sources):
         if acts and parsed.get("act_id") not in acts:
             continue
         if writer.add(parsed):
@@ -277,6 +292,8 @@ def main(argv: list[str] | None = None) -> int:
     ex.add_argument("--bavarian", type=Path)
     ex.add_argument("--key", type=Path)
     ex.add_argument("--acts", default="")
+    ex.add_argument("--sources", default="wayback_gii,neuris",
+                    help="parsed sources to include (comma-separated)")
     ve = sub.add_parser("verify")
     ve.add_argument("bundle", type=Path)
     ve.add_argument("--signers", type=Path)
@@ -291,7 +308,9 @@ def main(argv: list[str] | None = None) -> int:
         manifest = export(args.archive, args.out,
                           change_dates=args.change_dates,
                           bavarian=args.bavarian, key=args.key,
-                          acts={a for a in args.acts.split(",") if a} or None)
+                          acts={a for a in args.acts.split(",") if a} or None,
+                          sources={x for x in args.sources.split(",") if x}
+                          or None)
     elif args.command == "install":
         manifest = install(args.incoming, args.root, signers=args.signers)
     else:
