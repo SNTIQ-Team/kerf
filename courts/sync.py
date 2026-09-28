@@ -1,11 +1,16 @@
 """Incremental, prioritised, rate-limited synchronisation of one source."""
 from __future__ import annotations
 
+import contextlib
+import fcntl
+import os
 import sqlite3
 import sys
 import time
 import traceback
+from pathlib import Path
 
+from .config import data_home
 from .errors import UpstreamFailure
 from .http import PoliteHttp
 from .sources.base import Adapter
@@ -26,9 +31,38 @@ def _result(counts: dict, status: str, run_id: int, http: PoliteHttp, requests_b
     return counts | {"status": status, "run_id": run_id}
 
 
+class SourceBusy(RuntimeError):
+    """Another process is already syncing this source (its per-host pacing would be bypassed)."""
+
+
+@contextlib.contextmanager
+def source_lock(source_id: str, home=None):
+    """Exclusive per-source lock: two processes on one host would double the request rate."""
+    directory = Path(home or data_home()) / "locks"
+    directory.mkdir(parents=True, exist_ok=True)
+    with open(directory / f"{source_id}.lock", "w") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise SourceBusy(f"source {source_id!r} is already being synced by another process") from exc
+        handle.write(str(os.getpid()))
+        handle.flush()
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *, since: str | None = None,
                 limit: int | None = None, courts: list[str] | None = None, retry_failed: bool = False,
                 home=None) -> dict:
+    with source_lock(adapter.source_id, home):
+        return _sync_source(adapter, conn, http, since=since, limit=limit, courts=courts,
+                            retry_failed=retry_failed, home=home)
+
+
+def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *, since: str | None,
+                 limit: int | None, courts: list[str] | None, retry_failed: bool, home) -> dict:
     register_source(conn, adapter.source_id, adapter.label, adapter.base_url, adapter.land, adapter.adapter_name)
     run_id = start_run(conn, adapter.source_id, since, limit)
     conn.execute("UPDATE sources SET status='partial', status_reason='first sync in progress' "
