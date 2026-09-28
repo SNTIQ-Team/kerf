@@ -335,6 +335,10 @@ def verify_sample(conn: sqlite3.Connection, *, sample: int, http=None, source: s
         pools = {k: v for k, v in pools.items() if v and (not kinds or k in kinds)}
         for pool in pools.values():
             rng.shuffle(pool)
+        if "rii-xml" in pools:  # every court site represented: the smaller ones first, BAG fills the rest
+            site = {r[0]: r[1] for r in conn.execute("SELECT id, source_id FROM decisions WHERE source_id IN "
+                                                      "('bsg','bverwg','bverfg')")}
+            pools["rii-xml"].sort(key=lambda d: 0 if d in site else 1)
         plan, quota = [], {k: max(1, sample // max(1, len(pools))) for k in pools}
         if "capture" in pools:  # offline pairs cost nothing: take them all (within the sample)
             quota["capture"] = min(len(pools["capture"]), sample)
