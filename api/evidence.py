@@ -50,6 +50,10 @@ HTTP_STATUS = {
     "upstream_representation_unusable": 502,
 }
 
+# Transport-only cache keys deployed clients append (``?t=<ms>``); they
+# never select content and are disclosed in X-Lexgraph-Ignored-Arguments.
+CACHE_KEY_ARGUMENTS = frozenset({"t", "_", "cb"})
+
 TEMPORAL_ARGUMENTS = frozenset({
     "at", "as_of", "valid_at", "known_at", "date", "from", "to",
     "valid_from", "valid_until", "effective_at", "stichtag",

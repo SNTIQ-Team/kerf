@@ -38,8 +38,8 @@ from typing import Any, Callable, Iterable
 
 from fastapi import APIRouter, Request
 
-from api.evidence import (EnvelopeError, envelope, error_envelope, response,
-                          unknown_argument_payload)
+from api.evidence import (CACHE_KEY_ARGUMENTS, EnvelopeError, envelope,
+                          error_envelope, response, unknown_argument_payload)
 from api.legislative_materials import (RELATION_TYPES, ROLES, compact_norm,
                                        expand_norm, mention_context,
                                        parse_citation, relation_row)
@@ -662,7 +662,7 @@ def materials_for_norm(data_dir: Path, canonical_id: str, *,
 
 def _strict(request: Request, route: str, allowed: frozenset[str]):
     params = request.query_params
-    unknown = sorted(set(params.keys()) - allowed)
+    unknown = sorted(set(params.keys()) - allowed - CACHE_KEY_ARGUMENTS)
     repeated = sorted(key for key in set(params.keys())
                       if len(params.getlist(key)) > 1)
     if unknown or repeated:
