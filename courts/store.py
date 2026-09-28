@@ -463,6 +463,10 @@ def decision_identity(parsed: ParsedDecision) -> str:
         # A malformed ECLI (e.g. without the ordinal part) cannot be a unique id.
         parsed.metadata["ecli_published_invalid"] = parsed.ecli
         parsed.ecli = None
+    conflict = ecli_date_conflict(parsed.ecli, parsed.decision_date) if parsed.ecli else None
+    if conflict:
+        parsed.metadata["ecli_published_other_document"] = {"ecli": parsed.ecli, "reason": conflict}
+        parsed.ecli = None
     if parsed.ecli:
         return parsed.ecli
     if not parsed.case_numbers:
@@ -471,8 +475,91 @@ def decision_identity(parsed: ParsedDecision) -> str:
     return synthetic_decision_id(parsed.court_id, parsed.decision_date, parsed.case_numbers[0])
 
 
+REMEDY_HEADING = re.compile(r"^\s*(?:Rechtsbehelfsbelehrung(?:en)?|Rechtsmittelbelehrung(?:en)?|"
+                            r"Belehrung\s+über\s+(?:die\s+)?Rechts(?:mittel|behelfe)|Rechtsmittelbelehrung\s*:)\s*:?\s*$",
+                            re.I | re.M)
+REASON_SECTIONS = {"gruende", "entscheidungsgruende", "sonstiger_langtext", "tatbestand"}
+REMEDY_MAX_CHARS = 6000  # Belehrungen with signatures run to ~3000 characters
+
+
+def split_remedy_instructions(sections: list) -> list:
+    """The Rechtsmittelbelehrung is not part of the last Randnummer.
+
+    Sources differ: bverwg.de prints it inside the last Rn's <p> (after <br/>), others as unnumbered trailing
+    blocks, which the Rn rule would otherwise attach to the last Rn.  From a line that is exactly a remedy
+    heading onwards, text moves into its own section 'rechtsmittelbelehrung' - but only if no explicitly
+    numbered block follows (the heading then really ends the reasons).
+    """
+    from .model import Block, Section
+    out = []
+    for section in sections:
+        if section.name not in REASON_SECTIONS:
+            out.append(section)
+            continue
+        split_at = None
+        for index, block in enumerate(section.blocks):
+            m = REMEDY_HEADING.search(block.text)
+            if m and not any(b.label for b in section.blocks[index + 1:]):
+                if m.start() == 0 and block.label:
+                    break  # a numbered Rn that *is* the Belehrung: the court numbered it, keep it
+                tail = len(block.text) - m.start() + sum(len(b.text) for b in section.blocks[index + 1:])
+                if tail > REMEDY_MAX_CHARS:
+                    break  # too long for a Belehrung: a quoted one inside unnumbered reasons, not the end
+                split_at = (index, m.start())
+                break
+        if split_at is None:
+            out.append(section)
+            continue
+        index, offset = split_at
+        block = section.blocks[index]
+        head_text = block.text[:offset].rstrip()
+        tail_text = block.text[offset:].strip()
+        kept = section.blocks[:index] + ([Block(head_text, block.label, block.kind, block.locator)] if head_text else [])
+        moved = [Block(line.strip(), None, "text", f"{block.locator}+remedy[{i}]")
+                 for i, line in enumerate(tail_text.split("\n"), 1) if line.strip()]
+        moved += [Block(b.text, None, b.kind, b.locator) for b in section.blocks[index + 1:]]
+        out.append(Section(section.name, section.authorship, section.authorship_basis, kept, section.heading))
+        out.append(Section("rechtsmittelbelehrung", "court",
+                           "Rechtsbehelfs-/Rechtsmittelbelehrung (split from the reasons at its heading)", moved,
+                           heading=moved[0].text if moved else None))
+    return out
+
+
+GERMAN_ECLI_DATE = re.compile(r"^(?:[a-z]{2})?(?:(?P<y4>\d{4})(?P<m4>\d{2})(?P<d4>\d{2})|(?P<d>\d{2})(?P<m>\d{2})(?P<y>\d{2})"
+                              r"(?=\.?[A-Z])|(?P<mm>\d{2})(?P<dd>\d{2})\.)")
+
+
+# Federal ECLI ordinals encode the decision date by construction (ddmmyy + U/B/G, BVerfG yyyymmdd); a
+# federal ECLI naming another date belongs to another document.  Länder ECLIs (juris "mmdd.") are often a
+# few days off the portal's decision date for the same document, so they are not used to judge identity.
+FEDERAL_ECLI_COURTS = {"BGH", "BVerwG", "BSG", "BFH", "BAG", "BVerfG", "BPatG"}
+
+
+def ecli_date_conflict(ecli: str, decision_date: str) -> str | None:
+    """A federal German ECLI whose ordinal names another date than the decision: it belongs to another
+    document (RII publishes e.g. an Urteil with the ECLI of its later Berichtigungsbeschluss, or a
+    Beschluss with the judgment's ECLI - two documents, one ECLI, and the second was lost as a duplicate)."""
+    parts = ecli.split(":")
+    if len(parts) != 5 or parts[1] != "DE" or parts[2] not in FEDERAL_ECLI_COURTS:
+        return None
+    year = parts[3]
+    if year.isdigit() and decision_date[:4] != year:
+        return f"ECLI year {year} != decision year {decision_date[:4]}"
+    m = GERMAN_ECLI_DATE.match(parts[4])
+    if not m:
+        return None
+    if m.group("y4"):
+        encoded = f"{m.group('y4')}-{m.group('m4')}-{m.group('d4')}"
+    elif m.group("d"):
+        encoded = f"20{m.group('y')}-{m.group('m')}-{m.group('d')}"
+    else:
+        encoded = f"{year}-{m.group('mm')}-{m.group('dd')}"
+    return None if encoded == decision_date else f"ECLI encodes {encoded}, decision dated {decision_date}"
+
+
 def finalise(parsed: ParsedDecision) -> ParsedDecision:
     """Fill court identity fields and validate the minimum decision contract."""
+    parsed.sections = split_remedy_instructions(parsed.sections)
     if not parsed.court_id:
         info = resolve_court(parsed.court_name, default_land=parsed.land)
         parsed.court_id = info.court_id
@@ -497,16 +584,24 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
     text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
     observed_at = observed_at or utcnow()
     existing = conn.execute("SELECT id, content_hash, text_hash, parser_version, first_seen, source_id, "
-                            "source_doc_id FROM decisions WHERE (source_id=? AND source_doc_id=?) OR id=?",
+                            "source_doc_id, numbering FROM decisions WHERE (source_id=? AND source_doc_id=?) OR id=?",
                             (parsed.source_id, parsed.source_doc_id, decision_id)).fetchall()
+    superseded = None
     for row in existing:
         if (row["source_id"], row["source_doc_id"]) != (parsed.source_id, parsed.source_doc_id):
+            if row["numbering"] == "none" and numbering == "rn":
+                # Precedence (SCHEMA.md "Duplicates"): the representation with explicit Randnummern wins; the
+                # unnumbered copy (e.g. bsg.bund.de without Rn, RII with Rn) stays as a skipped item + capture.
+                superseded = row
+                continue
             raise UpstreamFailure("duplicate_identity",
                                   f"{decision_id} already stored from {row['source_id']}:{row['source_doc_id']}",
                                   url=parsed.source_url)
-    first_seen = existing[0]["first_seen"] if existing else observed_at
-    if not force and existing and existing[0]["id"] == decision_id and existing[0]["text_hash"] == text_hash \
-            and existing[0]["parser_version"] == PARSER_VERSION:
+    first_seen = min(r["first_seen"] for r in existing) if existing else observed_at
+    own = [r for r in existing if superseded is None or r["id"] != superseded["id"]
+           or (r["source_id"], r["source_doc_id"]) == (parsed.source_id, parsed.source_doc_id)]
+    if not force and superseded is None and own and own[0]["id"] == decision_id \
+            and own[0]["text_hash"] == text_hash and own[0]["parser_version"] == PARSER_VERSION:
         conn.execute("UPDATE decisions SET observed_at=?, content_hash=?, capture_path=? WHERE id=?",
                      (observed_at, content_hash, capture_path, decision_id))
         _mark_item(conn, parsed, decision_id, content_hash)
@@ -561,6 +656,13 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
                               block_count, blocks, text, text_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", paragraph_rows)
         _insert_relations(conn, decision_id, relations)
         _mark_item(conn, parsed, decision_id, content_hash)
+        if superseded is not None:
+            conn.execute("""UPDATE source_items SET state='skipped', failure_kind='duplicate_identity',
+                            failure_detail=?, content_hash=coalesce(content_hash, ?)
+                            WHERE source_id=? AND source_doc_id=?""",
+                         (f"{decision_id} superseded by {parsed.source_id}:{parsed.source_doc_id} "
+                          "(explicit Randnummern take precedence)", superseded["content_hash"],
+                          superseded["source_id"], superseded["source_doc_id"]))
         conn.execute("COMMIT")
     except BaseException:
         conn.execute("ROLLBACK")

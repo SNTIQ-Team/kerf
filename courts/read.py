@@ -268,14 +268,22 @@ def context_for(conn, r) -> str:
     return " ".join(text[max(0, r["span_start"] - CONTEXT_WIDTH):r["span_end"] + CONTEXT_WIDTH].split())
 
 
+# Which relation_assessments rows belong to parser relation r (alias a / r).  Rule rows carry relation_id.
+# User rows (corrections ledger) carry none: they attach within their own decision only - a paragraph-level
+# row to the relations of that paragraph with the same target, a decision-level row (paragraph_id NULL) to
+# every relation of the decision with that target.  The single definition, used by every reader.
+ASSESSMENT_OF_RELATION = ("(a.relation_id = r.id OR (a.relation_id IS NULL AND a.decision_id = r.decision_id"
+                          " AND a.target_id IS r.target_id AND (a.paragraph_id IS NULL"
+                          " OR a.paragraph_id = r.paragraph_id)))")
+
+
 def assessments_for(conn, r) -> list[dict]:
     """Classifier proposals and user decisions for one parser relation (polarity always explicit)."""
-    rows = conn.execute("""SELECT assessment, polarity, cue, rule_id, derived_by, legal_effect_verified, status,
-                                  confidence, classifier_version
-                           FROM relation_assessments
-                           WHERE (relation_id = ?) OR (relation_id IS NULL AND paragraph_id IS ? AND target_id IS ?)
-                           ORDER BY derived_by DESC, confidence DESC""",
-                        (r["id"], r["paragraph_id"], r["target_id"])).fetchall()
+    rows = conn.execute(f"""SELECT a.assessment, a.polarity, a.cue, a.rule_id, a.derived_by, a.legal_effect_verified,
+                                   a.status, a.confidence, a.classifier_version
+                            FROM relation_assessments a JOIN relations r ON r.id = ?
+                            WHERE {ASSESSMENT_OF_RELATION}
+                            ORDER BY a.derived_by DESC, a.confidence DESC""", (r["id"],)).fetchall()
     return [dict(x, legal_effect_verified=bool(x["legal_effect_verified"])) for x in rows]
 
 
@@ -321,12 +329,12 @@ def citing_decisions(conn: sqlite3.Connection, target: str, *, relation: str | N
         cond += " AND r.relation = ?"
         params.append(relation)
     if assessment:
-        from .polarity import ASSESSMENTS
-        if assessment not in ASSESSMENTS:
-            return {"status": "invalid_argument", "warnings": [f"assessment must be one of {sorted(ASSESSMENTS)}"]}
+        from .polarity import STORED_ASSESSMENTS
+        if assessment not in STORED_ASSESSMENTS:
+            return {"status": "invalid_argument",
+                    "warnings": [f"assessment must be one of {sorted(STORED_ASSESSMENTS)}"]}
         cond += (" AND EXISTS (SELECT 1 FROM relation_assessments a WHERE a.assessment = ? AND a.status <> 'rejected'"
-                 " AND (a.relation_id = r.id OR (a.relation_id IS NULL AND a.paragraph_id IS r.paragraph_id"
-                 " AND a.target_id IS r.target_id)))")
+                 f" AND {ASSESSMENT_OF_RELATION})")
         params.append(assessment)
     total = conn.execute(f"SELECT count(*) FROM relations r WHERE {cond}", params).fetchone()[0]
     rows = conn.execute(f"SELECT r.* FROM relations r JOIN decisions d ON d.id = r.decision_id WHERE {cond} "

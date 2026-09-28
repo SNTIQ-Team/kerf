@@ -209,24 +209,32 @@ def test_reader_refuses_other_schema_versions(conn):
     assert db_path().exists()
 
 
-@pytest.mark.parametrize("ecli,valid", [
-    ("ECLI:DE:BVerwG:2016:160316B1B19.16.0", True),
-    ("ECLI:DE:LSGNRW:2026:0813.L9SO202.26B.ER.UN.00", True),
-    ("ECLI:DE:SGCOTTB:2023:0525.00", False),   # published by a portal without the Az part: not unique
-    ("ECLI:DE:BVerwG:2016", False),
+@pytest.mark.parametrize("ecli,date,valid,reason", [
+    ("ECLI:DE:BVerwG:2016:160316B1B19.16.0", "2016-03-16", True, None),
+    ("ECLI:DE:LSGNRW:2026:0813.L9SO202.26B.ER.UN.00", "2026-08-13", True, None),
+    ("ECLI:DE:SGCOTTB:2023:0525.00", "2023-05-25", False, "ecli_published_invalid"),  # no Az part: not unique
+    ("ECLI:DE:BVerwG:2016", "2016-03-16", False, "ecli_published_invalid"),
+    # RII: a Tatbestandsberichtigungsbeschluss (31.08.2023) published with the judgment's ECLI (15.02.2023).
+    ("ECLI:DE:BSG:2023:150223UB11AL4221R0", "2023-08-31", False, "ecli_published_other_document"),
+    ("ECLI:DE:BSG:2023:150223UB11AL4221R0", "2023-02-15", True, None),
+    ("ECLI:DE:BVerfG:2012:ls20120718.1bvl001010", "2012-07-18", True, None),
+    # Länder ECLIs are often a few days off the portal date for the same document: kept.
+    ("ECLI:DE:OVGNRW:2026:0916.4B21.26.00", "2026-09-17", True, None),
+    ("ECLI:DE:BSG:2021:301121BB14AS4120R0", "2021-11-11", False, "ecli_published_other_document"),
 ])
-def test_malformed_ecli_is_not_used_as_decision_id(ecli, valid):
+def test_malformed_ecli_is_not_used_as_decision_id(ecli, date, valid, reason):
     from courts.model import Block, ParsedDecision, Section
-    from courts.store import decision_identity
+    from courts.store import decision_identity, finalise
     d = ParsedDecision(source_id="x", source_doc_id="1", source_url="https://x", court_name="Sozialgericht Cottbus",
-                       decision_date="2023-05-25", case_numbers_raw="S 1 AS 1/23", case_numbers=["S 1 AS 1/23"],
+                       decision_date=date, case_numbers_raw="S 1 AS 1/23", case_numbers=["S 1 AS 1/23"],
                        decision_type="Urteil", sections=[Section("gruende", "court", "t", [Block("x")])],
                        ecli=ecli, court_id="sg-cottbus")
-    identity = decision_identity(d)
+    identity = decision_identity(finalise(d))
     assert (identity == ecli) is valid
     if not valid:
-        assert identity == "court:sg-cottbus/2023-05-25/S_1_AS_1-23"
-        assert d.metadata["ecli_published_invalid"] == ecli
+        assert identity == f"court:sg-cottbus/{date}/S_1_AS_1-23"
+        published = d.metadata[reason]
+        assert published == ecli or published["ecli"] == ecli
 
 
 def test_reparse_is_offline_and_only_rewrites_on_parser_change(conn, fixture, monkeypatch):
@@ -364,3 +372,85 @@ def test_parallel_init_db_does_not_race(isolated_corpus):
     for t in threads:
         t.join()
     assert errors == []
+
+
+def test_explicit_rn_representation_supersedes_unnumbered_duplicate():
+    """bsg.bund.de prints no Randnummern, RII does: whichever arrives second, the Rn copy is stored."""
+    from courts.model import Block, ParsedDecision, Section
+    from courts.store import connect, init_db, store_decision
+    from courts.errors import UpstreamFailure
+    conn = connect()
+    init_db(conn)
+    ecli = "ECLI:DE:BSG:2024:120324UB1KR1223R0"
+
+    def decision(source, doc, labels):
+        return ParsedDecision(source_id=source, source_doc_id=doc, source_url=f"https://x/{doc}",
+                              court_name="Bundessozialgericht", decision_date="2024-03-12",
+                              case_numbers_raw="B 1 KR 12/23 R", case_numbers=["B 1 KR 12/23 R"],
+                              decision_type="Urteil", ecli=ecli,
+                              sections=[Section("gruende", "court", "t",
+                                                [Block(t, label) for t, label in zip(("Erster Satz.", "Zweiter Satz."),
+                                                                                     labels)])])
+    for source in ("bsg", "rii"):
+        conn.execute("INSERT OR IGNORE INTO source_items(source_id, source_doc_id, url) VALUES(?,?,?)",
+                     (source, "d-" + source, "https://x"))
+    store_decision(conn, decision("bsg", "d-bsg", (None, None)), content_hash="h1", capture_path="-",
+                   media_type="text/html")
+    _, changed = store_decision(conn, decision("rii", "d-rii", ("1", "2")), content_hash="h2", capture_path="-",
+                                media_type="application/zip")
+    assert changed
+    row = conn.execute("SELECT source_id, numbering FROM decisions WHERE id=?", (ecli,)).fetchone()
+    assert tuple(row) == ("rii", "rn")
+    item = conn.execute("SELECT state, failure_detail, content_hash FROM source_items WHERE source_id='bsg'").fetchone()
+    assert item["state"] == "skipped" and "superseded by rii:d-rii" in item["failure_detail"] and item["content_hash"] == "h1"
+    # The unnumbered copy arriving later stays a duplicate.
+    with pytest.raises(UpstreamFailure) as exc:
+        store_decision(conn, decision("bsg", "d-bsg", (None, None)), content_hash="h1", capture_path="-",
+                       media_type="text/html")
+    assert exc.value.kind == "duplicate_identity"
+
+
+def test_reexamine_skipped_stores_the_second_document_of_a_shared_federal_ecli():
+    """RII published a Beschluss (31.08.2023) with the judgment's ECLI (15.02.2023): the judgment arrived
+    second and was skipped as a duplicate.  Under the ECLI date rule both are kept."""
+    from courts.model import Block, ParsedDecision, Section
+    from courts.sources.base import Adapter
+    from courts.store import connect, init_db, store_decision, write_capture
+    from courts.sync import reexamine_skipped
+    conn = connect()
+    init_db(conn)
+    ecli = "ECLI:DE:BSG:2023:150223UB11AL4221R0"
+
+    def decision(doc, date, dtype):
+        return ParsedDecision(source_id="rii", source_doc_id=doc, source_url="https://x", court_name="Bundessozialgericht",
+                              decision_date=date, case_numbers_raw="B 11 AL 42/21 R", case_numbers=["B 11 AL 42/21 R"],
+                              decision_type=dtype, ecli=ecli,
+                              sections=[Section("gruende", "court", "t", [Block(f"{dtype} vom {date}.", "1")])])
+
+    class Stub(Adapter):
+        source_id = "rii"
+
+        def parse(self, capture, item):
+            return decision(item["source_doc_id"], "2023-02-15", "Urteil")
+    content_hash, ref = write_capture(b"<judgment/>", "rii", "xml", conn=conn)
+    conn.execute("INSERT INTO source_items(source_id, source_doc_id, url, state, content_hash, failure_kind, "
+                 "failure_detail) VALUES('rii','judgment','https://x','skipped',?,'duplicate_identity',?)",
+                 (content_hash, f"{ecli} already stored from rii:beschluss"))
+    conn.execute("INSERT INTO source_items(source_id, source_doc_id, url) VALUES('rii','beschluss','https://x')")
+    # Stored under the old rule: the Beschluss holds the ECLI as its id.
+    import courts.store as store_module
+    original = store_module.ecli_date_conflict
+    store_module.ecli_date_conflict = lambda *a: None
+    try:
+        store_decision(conn, decision("beschluss", "2023-08-31", "Beschluss"), content_hash="b", capture_path="-",
+                       media_type="application/xml")
+    finally:
+        store_module.ecli_date_conflict = original
+    # Re-parse under the new rule frees the ECLI; re-examining the skipped item stores the judgment under it.
+    store_decision(conn, decision("beschluss", "2023-08-31", "Beschluss"), content_hash="b", capture_path="-",
+                   media_type="application/xml")
+    counts = reexamine_skipped(Stub(), conn)
+    assert counts["skipped_stored"] == 1
+    rows = {r["id"]: r["decision_date"] for r in conn.execute("SELECT id, decision_date FROM decisions")}
+    assert rows[ecli] == "2023-02-15"
+    assert "court:bsg/2023-08-31/B_11_AL_42-21_R" in rows

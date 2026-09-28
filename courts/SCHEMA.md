@@ -11,7 +11,7 @@ reads it directly and read-only. This file is the contract between them.
 | Database | `courts.sqlite` (WAL mode; writers are `python -m courts sync` processes) |
 | Raw captures | Packed: `packs/<source_id>/<source_id>-<NNNN>.pack`, append-only, rotated at 512 MiB (O(100) files in total, not one file per capture; per-file storage exhausted btrfs metadata). Indexed by table `captures`. |
 | Schema version | `PRAGMA user_version` = `3`, also `meta.schema_version`. |
-| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.4.0`). |
+| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.5.0`). |
 
 Readers must check `PRAGMA user_version == 3` and refuse any other value. Within a version, changes are additive only (new tables, new nullable columns, new views). Removing or renaming a column, or changing identity or storage rules, bumps the version. v1 → v2 (2026-09-28): added `captures` and the `sources` policy columns; `decisions.capture_path` became a pack reference. `init_db` upgrades v1 in place, and `python -m courts migrate-captures --delete-legacy` moves v1 `raw/*.gz` files into packs, verifying every hash before anything is deleted. v2 → v3 (2026-09-28): `decisions.court_id` became the Amtsgraph court id (`court:de:<XJustiz-ID>`, `court:eu:<ECLI code>`) where one is mapped, and the corpus slug moved to the new column `decisions.court_slug`. Added the tables `relation_assessments`, `corrections`, `verification_runs`, `verification_checks`, `verification_findings`, `amtsgraph_courts` and `court_map`, all documented below. `init_db` upgrades v1/v2 in place.
 
@@ -31,12 +31,12 @@ Open the database read-only: `new DatabaseSync(path, { readOnly: true })`, or th
 
 | Object | Identifier |
 |---|---|
-| Decision | ECLI when published (`ECLI:DE:BVerwG:2016:160316B1B19.16.0`), otherwise `court:<court_id>/<YYYY-MM-DD>/<first Az>`. In the Az component, whitespace becomes `_` and `/` becomes `-`, e.g. `court:vgh-by/2026-06-16/10_ZB_24.2079`. |
-| Paragraph | `<decision_id>#rn-<n>` for an explicit Randnummer. Other forms: `#<section>-<k>` (positional, for sections without Rn such as `tenor`, `leitsatz`, `titel`); `#<section>-u<k>` (unnumbered blocks before a section's first Rn); `#<section>-rn-<n>` (a Rn number that repeats, e.g. a dissent restarting at 1); `#p-<n>` (decision without any Rn: `decisions.numbering = 'none'`). |
+| Decision | ECLI when published (`ECLI:DE:BVerwG:2016:160316B1B19.16.0`), otherwise `court:<court_id>/<YYYY-MM-DD>/<first Az>`. In the Az component, whitespace becomes `_` and `/` becomes `-`, e.g. `court:vgh-by/2026-06-16/10_ZB_24.2079`. A published ECLI is not used as the id when it is malformed (`metadata.ecli_published_invalid`) or when it is a federal ECLI (BGH, BVerwG, BSG, BFH, BAG, BVerfG, BPatG, whose ordinal encodes the decision date) naming another date than the decision: it then belongs to another document, e.g. RII publishing a Beschluss with the ECLI of the judgment it corrects (`metadata.ecli_published_other_document` = `{ecli, reason}`; `decisions.ecli` is NULL). Länder ECLIs (`mmdd.` ordinals) are often a few days off the portal date for the same document and are kept. |
+| Paragraph | `<decision_id>#rn-<n>` for an explicit Randnummer. Other forms: `#<section>-<k>` (positional, for sections without Rn such as `tenor`, `leitsatz`, `titel`, `rechtsmittelbelehrung`); `#<section>-u<k>` (unnumbered blocks before a section's first Rn); `#<section>-rn-<n>` (a Rn number that repeats, e.g. a dissent restarting at 1); `#p-<n>` (decision without any Rn: `decisions.numbering = 'none'`). |
 | Court | `<type>-<place>`: federal courts are bare (`bverwg`, `bsg`, …); Land-level courts use ISO 3166-2 codes (`lsg-nw`, `ovg-nw`, `vgh-by`, `lsg-bebb`, `lsg-nihb`); local courts use the seat (`vg-muenchen`, `sg-dortmund`). |
 | Norm | Lexgraph's canonical identity, from `api.norm_identity.ActResolver` (the same implementation as `/norms/resolve`; courts keeps no table of its own): `de/bund/<GII slug>/<para|art>/<n>[/abs/<n>][/satz/<n>][/nr/<n>][/buchst/<x>]` (e.g. `de/bund/sgb_14/para/37/abs/2/nr/3`, `de/bund/asylvfg_1992/para/24`, `de/bund/s_g/para/5` for SÜG). Bavarian acts are `de/by/<slug>` and other Länder `de/<land>/<key>`; EU acts are `eu/<CELEX>/art/<n>/…` and treaties `int/emrk/art/<n>`. `relations.detail.act_resolution` records the basis (`act_index`, `alias`, `gii_catalog`, `land_affix`, `land_context`, `eu`, `eu_citation`, `international`, `ambiguous`, `unresolved`). An unresolved or ambiguous act gives `target_id` NULL; the raw text is kept and nothing is guessed. |
 
-Paragraph rules: a Randnummer runs until the next explicitly numbered block. Unnumbered blocks continue the previous Rn of the same section. Page breaks never create or split a Rn. Block boundaries are preserved: `paragraphs.blocks` is a JSON array, and `paragraphs.text` joins the blocks with `\n\n`.
+Paragraph rules: a Randnummer runs until the next explicitly numbered block. Unnumbered blocks continue the previous Rn of the same section. Page breaks never create or split a Rn. The Rechtsbehelfs-/Rechtsmittelbelehrung is not part of the last Rn: from a line that is exactly its heading (inside the last Rn's block, as bverwg.de prints it after `<br/>`, or as trailing unnumbered blocks) the text moves into its own section `rechtsmittelbelehrung`, provided no numbered block follows (parser 1.5.0). Nested-list wrapper Rn without own text (NRWE numbers an `<ol>` and its first `<li>`) produce no paragraph and are listed in `decisions.metadata.rn_without_own_text`. Block boundaries are preserved: `paragraphs.blocks` is a JSON array, and `paragraphs.text` joins the blocks with `\n\n`.
 
 ## Tables
 
@@ -63,7 +63,7 @@ One row per decision. Keys: `id` PK, `UNIQUE(source_id, source_doc_id)`.
 
 ### `sections`
 `(decision_id, position, name, authorship, authorship_basis, heading)`.
-- `name` ∈ `titel, leitsatz, orientierungssatz, tenor, tatbestand, entscheidungsgruende, gruende, abweichende_meinung, sonstiger_langtext`.
+- `name` ∈ `titel, leitsatz, orientierungssatz, tenor, tatbestand, entscheidungsgruende, gruende, abweichende_meinung, sonstiger_langtext, rechtsmittelbelehrung` (the last one since parser 1.5.0).
 - `authorship` ∈ `court | editorial | unknown`; `authorship_basis` says why. RII `<leitsatz>` is court-authored; RII `<sonstosatz>` (Orientierungssatz) and `<titelzeile>` are editorial.
 
 ### `paragraphs` and `paragraphs_fts`
@@ -86,7 +86,7 @@ Typed citation statements. Never a generic "cites".
 | Column | Meaning |
 |---|---|
 | `decision_id` | Citing decision. |
-| `relation` | Parser rows: `mentions`, `quotes`, `procedural_reference` only (enforced by CHECK). Stronger relations (`applies`, `interprets`, …) may only come from `derived_by = 'model'` with `legal_effect_verified = 0`, or from `'user'`. |
+| `relation` | Parser rows: `mentions`, `quotes`, `procedural_reference` only (enforced by CHECK). `procedural_reference` covers decision citations of the procedural history (Vorinstanz etc.) and, since parser 1.5.0, norms that only ground a procedural step of the decision: costs, provisional enforceability, legal aid, finality, court and lawyers' fees (§§ 154–167 VwGO, § 193 SGG, §§ 91–107 and 708–720 ZPO, § 83b AsylG, GKG, RVG, …; `detail.procedural_basis` names the group, list in `courts/citations.py` `PROCEDURAL_NORMS`). Stronger relations (`applies`, `interprets`, …) may only come from `derived_by = 'model'` with `legal_effect_verified = 0`, or from `'user'`. |
 | `target_kind` | `norm` or `decision`. |
 | `target_id` | Norm id, decision id (ECLI or `court:` synthetic id), or NULL when unresolved. |
 | `target_decision_id` | Corpus decision the citation resolves to (filled by the relink step: ECLI, or court + date + case_key). |
@@ -103,12 +103,12 @@ Norm prefix query (segment-exact, index-friendly): `target_id = :n OR (target_id
 `(sha256 PK, source_id, extension, pack, offset, stored_size, raw_size, codec, stored_at)`: one row per distinct capture. It includes captures that failed to parse, which remain available for re-parsing.
 
 ### `relation_assessments`
-Proposals from the separate polarity stage (`courts/polarity.py`, classifier `courts-polarity-rules/1.0.0`) and user decisions. Parser rows in `relations` are never changed.
+Proposals from the separate polarity stage (`courts/polarity.py`, classifier `courts-polarity-rules/1.2.0`) and user decisions. Parser rows in `relations` are never changed. Only `mentions`/`quotes` relations in court-authored text are assessed (never `procedural_reference`). Precision is measured against hand-labelled gold files (`conformance/gold/polarity-*.json`, scored by `python -m courts.polarity_eval`); a rule whose assessment type stays below 0.9 precision is demoted: `assess()` reports it as `mentions_with_cue` (neutral, no polarity claim), and on schema v3 such proposals are not stored at all (the `assessment` CHECK list is part of the v3 contract), i.e. the rule is disabled in the corpus.
 
 | Column | Meaning |
 |---|---|
 | `id` | PK |
-| `relation_id` | `relations.id` of the parser relation assessed. Rule rows are recomputed whenever the decision is stored or re-parsed, so relation ids are not stable across re-parses. For user rows it is NULL: join those on `paragraph_id` + `target_id`. |
+| `relation_id` | `relations.id` of the parser relation assessed. Rule rows are recomputed whenever the decision is stored or re-parsed, so relation ids are not stable across re-parses. For user rows it is NULL: join those within the same decision only - `decision_id` = the relation's decision and `target_id` equal, and either `paragraph_id` equal (paragraph-level row) or `paragraph_id` NULL (decision-level row: it attaches to every relation of that decision with that target). `courts.read.ASSESSMENT_OF_RELATION` is the one SQL definition (alias `a` for the assessment, `r` for the relation). |
 | `decision_id`, `paragraph_id`, `target_kind` (`norm`/`decision`), `target_id`, `span_start`, `span_end` | The parser relation's identity and citation span. |
 | `assessment` | `applies`, `interprets`, `holds_inapplicable`, `rejects_application_of`, `follows`, `departs_from`, `overrules` or `distinguishes`. |
 | `polarity` | `positive` (applies, follows), `neutral` (interprets) or `negative` (holds_inapplicable, rejects_application_of, departs_from, overrules, distinguishes). Views of "supporting" case law must exclude `negative`. |
@@ -124,7 +124,9 @@ Columns: `id` PK, `target` (decision id, or paragraph id `<decision>#rn-10`), `k
 - `verification_runs`: `id`, `started_at`, `finished_at`, `sample`, `pairs`, `agreeing`, `findings`, `errors`, `verifier_version`.
 - `verification_checks` (one row per compared pair): `id`, `run_id`, `decision_id`, `representation_a` (e.g. `stored:nrw`), `representation_b` (`nrwe-pdf`, `bverwg-html`, `rii-xml`, `capture:<source>`), `outcome` ∈ `agree, disagree, error`, `detail` (JSON), `checked_at`.
 - `verification_findings` (one row per disagreement): `id`, `run_id`, `decision_id`, `kind` ∈ `numbering_mismatch, rn_count_mismatch, rn_boundary_mismatch, text_mismatch, case_numbers_mismatch, representation_error`, `severity` ∈ `major, minor`, `representation_a`, `representation_b`, `locator` (`rn-<n>` or `body`), `value_a`, `value_b` (JSON), `detail` (JSON: similarity, normalised text hashes, next Rn), `created_at`, `status` ∈ `open, explained, corrected`.
-- The stored decision is never changed by verification. CLI: `python -m courts verify --sample N [--source S] [--offline]`.
+- Known representation differences are recorded as `minor` with `detail.explained`: `url_clipped` (PDFs clip overlong URLs at the page edge), `list_marker` (an `<ol>` number printed in one representation only), `reading_order` (the same words in another order: table cells, two-column layouts), `alternate_unnumbered` (the stored copy has explicit Rn, the alternate prints none), `docket_subset` (one representation lists related dockets the other omits, e.g. RII adding the Revision Az of a continued Nichtzulassungsbeschwerde). Everything else that touches Rn assignment or wording stays `major`.
+- The NRWE PDF reader works on word boxes (`pdftotext -bbox-layout`): the Rn column is the dominant right edge of numeric words in the outer fifth of the page, nested-list labels sit ~4 pt to its right, and several labels on one row are nested-list wrappers (all but the last without own text), matching the HTML model.
+- The stored decision is never changed by verification. CLI: `python -m courts verify --sample N [--source S] [--offline] [--kinds capture,nrwe-pdf,rii-xml] [--rerun RUN_ID]`.
 
 ### Court identity (`amtsgraph_courts`, `court_map`)
 - `amtsgraph_courts`: a copy of Amtsgraph `/v1/courts/mapping` with `court_id` PK, `official_name`, `xjustiz_id`, `ecli_court_code`, `kind`, `land_code` (AGS), `status`, `unit_type`, `parent_court_id`, `aliases` (JSON), `snapshot_id`, `fetched_at`.
@@ -136,7 +138,7 @@ Columns: `id` PK, `target` (decision id, or paragraph id `<decision>#rn-10`), `k
 | Table | Content |
 |---|---|
 | `sources` | One row per portal. `status` ∈ `ok, partial, unavailable, blocked, never_synced`; `status_reason`; `upstream_listed`; `listing_complete` (1 only after an unbounded run listed the whole upstream archive); access policy `robots_policy` ∈ `respect, ignore_by_operator_decision` with `policy_decided_at` (date) and `policy_basis` (text), and `min_interval` (seconds between requests per host); last sync timestamps. `ignore_by_operator_decision` means that robots.txt, Crawl-delay and TDM reservations were deliberately not applied for that source on the operator's (user's) decision. Challenges, CAPTCHAs and logins are never bypassed; 429/503 and Retry-After are honoured. Coverage output must show this flag. |
-| `source_items` | The incremental frontier: every listed upstream document with `state` ∈ `pending, stored, failed, skipped` (`skipped` + `failure_kind = duplicate_identity`: the same decision is already stored from another official source, e.g. RII and the court's own site); `priority` (0 = social/administrative courts first); `listed_modified` versus `fetched_modified` (a change re-queues the item); typed `failure_kind`. |
+| `source_items` | The incremental frontier: every listed upstream document with `state` ∈ `pending, stored, failed, skipped` (`skipped` + `failure_kind = duplicate_identity`: the same decision is already stored from another official source, e.g. RII and the court's own site. Precedence: a representation with explicit Randnummern replaces an unnumbered one - bsg.bund.de prints none, RII does - whichever arrives first; the replaced item becomes `skipped` with `failure_detail` "… superseded by …" and keeps its capture. `reparse --include-skipped` re-examines skipped items offline after rule changes); `priority` (0 = social/administrative courts first); `listed_modified` versus `fetched_modified` (a change re-queues the item); typed `failure_kind`. |
 | `sync_runs` | One row per run: counts, request total, status; `notes = 'listing incomplete…'` marks runs that cannot serve as an incremental baseline. |
 | `failures` | Typed failures (`challenge, login, error_page, http_error, rate_limited, network, robots_disallowed, unexpected_representation, parse_error, identity_mismatch, empty_document, duplicate_identity`). A failure is never stored as a decision. |
 | `http_validators` | ETag / Last-Modified per URL, for conditional requests. |

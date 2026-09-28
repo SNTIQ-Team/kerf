@@ -305,6 +305,47 @@ def extract_norms(text: str, paragraph_id: str | None = None, *, land: str | Non
     return relations
 
 
+# Cost, enforceability, value-in-dispute, legal-aid and finality provisions: citing them records a
+# procedural step of the decision (Kostenentscheidung, vorläufige Vollstreckbarkeit, Streitwert,
+# PKH, Unanfechtbarkeit), not the application of substantive law.  Parser relation: procedural_reference.
+def _span(*ranges: tuple[int, int] | str) -> set[int | str]:
+    """Integer ranges match a paragraph with any letter suffix (§ 73a SGG); a string matches exactly."""
+    return {n for r in ranges for n in ([r] if isinstance(r, str) else range(r[0], r[1] + 1))}
+
+
+PROCEDURAL_NORMS: dict[str, tuple[str, set[int] | None]] = {
+    "de/bund/vwgo": ("costs/enforceability/legal aid/finality", _span((152, 152), (154, 167))),
+    "de/bund/sgg": ("costs/legal aid/finality", _span((73, 73), (177, 177), (183, 197))),
+    "de/bund/zpo": ("costs/legal aid/provisional enforceability/enforcement costs", _span((91, 107), (114, 127), (708, 720), (788, 788), (891, 891))),
+    "de/bund/fgo": ("costs/legal aid", _span((135, 143))),
+    "de/bund/arbgg": ("costs/enforceability", _span((12, 12), (62, 62))),
+    "de/bund/asylvfg_1992": ("court fees/finality", _span((80, 80), "83b")),
+    "de/bund/famfg": ("costs", _span((80, 85))),
+    "de/bund/stpo": ("costs", _span((464, 473))),
+    "de/bund/bverfgg": ("costs", _span((34, 34))),
+    "de/bund/gkg_2004": ("court fees/value in dispute", None),
+    "de/bund/rvg": ("lawyers' fees", None),
+    "de/bund/jveg": ("witness/expert fees", None),
+    "de/bund/gnotkg": ("court/notary fees", None),
+}
+
+
+def procedural_basis(target: str | None) -> str | None:
+    if not target or not target.startswith("de/bund/"):
+        return None
+    parts = target.split("/")
+    rule = PROCEDURAL_NORMS.get("/".join(parts[:3]))
+    if rule is None:
+        return None
+    label, numbers = rule
+    if numbers is None:
+        return label
+    if len(parts) <= 4 or parts[3] != "para":
+        return None
+    m = re.match(r"\d+", parts[4])
+    return label if parts[4] in numbers or (m and int(m.group()) in numbers) else None
+
+
 def _item_relations(item: _Item, ref: ActIdentity | None, raw_act: str, text: str, start: int, end: int,
                     chain_text: str, paragraph_id: str | None, chain_no: int, in_conjunction: bool,
                     quoted: bool) -> list[Relation]:
@@ -335,8 +376,12 @@ def _item_relations(item: _Item, ref: ActIdentity | None, raw_act: str, text: st
             detail["pinpoint_extra"] = item.extra_raw
         if in_conjunction:
             detail["in_conjunction_with"] = True
+        procedural = procedural_basis(target)
+        if procedural:
+            detail["procedural_basis"] = procedural
         out.append(Relation(
-            relation="quotes" if quoted else "mentions", target_kind="norm", target_id=target,
+            relation="quotes" if quoted else ("procedural_reference" if procedural else "mentions"),
+            target_kind="norm", target_id=target,
             target_raw=raw, paragraph_id=paragraph_id, span_start=start, span_end=end,
             quoted_context=context_window(text, start, end),
             confidence=0.9 if target else 0.4, detail=detail))

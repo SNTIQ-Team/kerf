@@ -41,7 +41,7 @@ conformance/
 - `match`: `subset` (default) means every key in `expected` must be present in the actual output with an equal
   value; lists compare element by element and dicts recursively, and extra keys in the actual output are
   ignored. `exact` means whole-value equality.
-- Operators on list values: `{"$contains": [..]}` requires the items to be present, and `{"$excludes": [..]}` requires them to be absent (negative cases, e.g. "no `applies` proposal").
+- Operators on list values: `{"$contains": [..]}` requires the items to be present, and `{"$excludes": [..]}` requires them to be absent (negative cases, e.g. "no `applies` proposal"). On string values the same operators take a substring: `{"$contains": "1. des Schriftsatzes"}`.
 - Input files are addressed relative to the repository root. A path ending in `.gz` is decompressed before use
   unless the kind expects compressed bytes.
 

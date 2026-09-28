@@ -77,11 +77,15 @@ def cmd_reparse(args) -> int:
     if ids is not None:
         sources = [r[0] for r in conn.execute(
             f"SELECT DISTINCT source_id FROM decisions WHERE id IN ({','.join('?' * len(ids))})", sorted(ids))]
+    if args.include_skipped and ids is None:
+        from .verify import adopt_verification_captures
+        print(json.dumps({"adopted_verification_captures": adopt_verification_captures(conn)}))
     for source_id in sources:
         try:
             with source_lock(source_id):
-                print(json.dumps({"source": source_id, **reparse_source(get_adapter(source_id), conn,
-                                                                        decision_ids=ids, force=args.force)}))
+                print(json.dumps({"source": source_id, **reparse_source(
+                    get_adapter(source_id), conn, decision_ids=ids, force=args.force,
+                    include_skipped=args.include_skipped and ids is None)}))
         except SourceBusy as exc:
             print(json.dumps({"source": source_id, "status": "busy", "detail": str(exc)}))
     return 0
@@ -336,6 +340,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--stale-norm-ids", action="store_true",
                    help="only decisions with federal norm ids that the Lexgraph resolver does not know")
     p.add_argument("--force", action="store_true", help="rewrite even if text and parser version are unchanged")
+    p.add_argument("--include-skipped", action="store_true",
+                   help="also re-examine skipped duplicates (store from their capture, or re-queue them when the "
+                        "decision they collided with changed id or is unnumbered)")
     p.set_defaults(func=cmd_reparse)
     p = sub.add_parser("migrate-captures", help="move legacy raw/*.gz captures into packs and verify")
     p.add_argument("--delete-legacy", action="store_true", help="delete legacy files after full verification")

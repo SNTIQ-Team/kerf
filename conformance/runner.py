@@ -41,7 +41,11 @@ def matches(expected: Any, actual: Any, mode: str = "subset") -> bool:
     if mode == "exact":
         return expected == actual
     if isinstance(expected, dict) and expected and all(k.startswith("$") for k in expected):
-        # Operators on lists: {"$contains": [...]} / {"$excludes": [...]} (negative expectations).
+        # Operators on lists: {"$contains": [...]} / {"$excludes": [...]} (negative expectations);
+        # on strings: {"$contains": "substring"} / {"$excludes": "substring"}.
+        if isinstance(actual, str):
+            contains, excludes = expected.get("$contains", ""), expected.get("$excludes")
+            return isinstance(contains, str) and contains in actual and not (excludes and excludes in actual)
         if not isinstance(actual, list):
             return False
         return all(item in actual for item in expected.get("$contains", [])) and \

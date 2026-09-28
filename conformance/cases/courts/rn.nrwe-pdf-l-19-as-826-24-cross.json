@@ -1,0 +1,39 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.rn.nrwe-pdf-l-19-as-826-24-cross",
+  "module": "courts",
+  "kind": "cross_representation",
+  "description": "LSG NRW L 19 AS 826/24: the NRWE PDF must yield the same 57 Rn as the HTML. Past Rn 20 the PDF prints nested-list Rn on one row (19 and 20, ..., 27 and 28, 58 and 59, 4pt apart) and one justified line ends one space before 'Rn 21'; the -layout reader lost every Rn after 20.",
+  "origin": "verification run 1 (major finding, rn_count_mismatch 63 vs 20); operator priority: exact Rn",
+  "status": "active",
+  "input": {
+    "adapter": "nrw",
+    "fixture": "conformance/fixtures/decisions/nrwe-L_19_AS_826_24.html.gz",
+    "item": {
+      "source_doc_id": "sgs/lsg_nrw/j2024/L_19_AS_826_24_Urteil_20241121",
+      "url": "https://nrwe.justiz.nrw.de/sgs/lsg_nrw/j2024/L_19_AS_826_24_Urteil_20241121.html",
+      "listed_date": "2024-11-21",
+      "listed_court": "lsg-nw"
+    },
+    "other": {
+      "kind": "nrwe-pdf",
+      "fixture": "conformance/fixtures/decisions/nrwe-L_19_AS_826_24.pdf",
+      "url": "https://nrwe.justiz.nrw.de/sgs/lsg_nrw/j2024/L_19_AS_826_24_Urteil_20241121.pdf"
+    },
+    "show_rn": ["20", "22", "28", "59"]
+  },
+  "expected": {
+    "numbering": ["rn", "rn"],
+    "rn_labels_equal": true,
+    "rn_count": [57, 57],
+    "rn_without_own_text": [["19", "21", "23", "25", "27", "58"], ["19", "21", "23", "25", "27", "58"]],
+    "major_findings": [],
+    "rn_texts_other": {
+      "20": {"$contains": "1. des Schriftsatzes vom 24.06.2015"},
+      "22": {"$contains": "2. des Schriftsatzes vom 13.07.2015"},
+      "59": {"$contains": "Der Beklagte wird verurteilt"},
+      "28": {"$contains": "5. Ignorierung des Urteils"}
+    }
+  },
+  "match": "subset"
+}

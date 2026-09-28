@@ -200,6 +200,10 @@ def test_store_roundtrip(urteil):
     assert changed and decision_id == urteil.ecli
     row = conn.execute("SELECT numbering, paragraph_count FROM decisions WHERE id=?", (decision_id,)).fetchone()
     assert row["numbering"] == "rn" and row["paragraph_count"] == 36
-    rel = conn.execute("SELECT origin, target_id FROM relations WHERE decision_id=? AND relation='procedural_reference'",
-                       (decision_id,)).fetchone()
+    rel = conn.execute("SELECT origin, target_id FROM relations WHERE decision_id=? AND relation='procedural_reference'"
+                       " AND target_kind='decision'", (decision_id,)).fetchone()
     assert rel["origin"] == "decision_text" and rel["target_id"] == "court:lag-hh/2025-03-27/1_SLa_24-24"
+    # Cost norms are procedural steps of the decision, not applied substantive law (parser 1.5.0).
+    costs = {r[0] for r in conn.execute("SELECT target_id FROM relations WHERE decision_id=? AND "
+                                        "relation='procedural_reference' AND target_kind='norm'", (decision_id,))}
+    assert "de/bund/zpo/para/97/abs/1" in costs

@@ -268,8 +268,8 @@ def test_store_roundtrip(urteil):
     assert changed and decision_id == urteil.ecli
     row = conn.execute("SELECT numbering, paragraph_count FROM decisions WHERE id=?", (decision_id,)).fetchone()
     assert row["numbering"] == "rn" and row["paragraph_count"] == 21
-    rel = conn.execute("SELECT origin, detail FROM relations WHERE decision_id=? AND relation='procedural_reference'",
-                       (decision_id,)).fetchall()
+    rel = conn.execute("SELECT origin, detail FROM relations WHERE decision_id=? AND relation='procedural_reference'"
+                       " AND target_kind='decision'", (decision_id,)).fetchall()
     assert len(rel) == 2 and {r["origin"] for r in rel} == {"source_metadata"}
 
 
