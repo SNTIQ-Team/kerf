@@ -276,6 +276,10 @@ class NrwAdapter(Adapter):
             branches = [b for b in BRANCHES if b[0].split()[0].lower()[:5] in {w[:5] for w in wanted}] or BRANCHES
         items: list[dict] = []
         totals = 0
+        # One request for the size of the whole archive (all courts), for coverage reporting.
+        response = http.post(SEARCH_URL, data=search_form(branch="", von="01.01.1900", bis=today, von2=None, page=1),
+                             timeout=90)
+        archive_total, _ = parse_result_list(decode_html(response.body, response.headers))
         first_priority = [b for b in branches if b[1] == 0]
         quota = {b[0]: (math.ceil(limit / max(1, len(first_priority))) if limit and b[1] == 0 else limit)
                  for b in branches}
@@ -291,12 +295,18 @@ class NrwAdapter(Adapter):
                 if page == 1:
                     totals += total
                 items.extend(rows)
-                got += len(rows)
+                # Only rows not stored yet count towards the quota, so a later backfill run
+                # pages past what the corpus already holds instead of stopping at the top.
+                ids = [r["source_doc_id"] for r in rows]
+                stored = {r[0] for r in conn.execute(
+                    f"SELECT source_doc_id FROM source_items WHERE source_id='nrw' AND state='stored' "
+                    f"AND source_doc_id IN ({','.join('?' * len(ids))})", ids)} if ids else set()
+                got += len(ids) - len(stored)
                 if not rows or page >= math.ceil(total / PAGE_SIZE) or (wanted and got >= wanted):
                     break
                 page += 1
         complete_listing = not von2 and branches == BRANCHES and not (limit and len(items) >= limit)
-        return Listing(items=items, upstream_total=totals if complete_listing else None, complete=not limit)
+        return Listing(items=items, upstream_total=archive_total, complete=complete_listing)
 
     def fetch(self, http: PoliteHttp, item) -> Capture:
         response = http.get(item["url"], timeout=90)
