@@ -539,3 +539,30 @@ def test_reexamine_twins_keeps_the_first_of_two_numbered_copies(monkeypatch):
     assert [r[0] for r in conn.execute("SELECT source_id FROM decisions")] == ["bb"]
     item = conn.execute("SELECT state, failure_detail FROM source_items WHERE source_id='be'").fetchone()
     assert item["state"] == "skipped" and item["failure_detail"].startswith("ECLI:DE:BSG:2025:180625UB6KA424R0 already")
+
+
+def test_two_documents_of_one_portal_with_one_ecli_are_both_kept():
+    """ThürVerfGH 112/20, 06.04.2022: two Beschlüsse (Verfassungsbeschwerde; Befangenheit) with one ECLI."""
+    from courts.model import Block, ParsedDecision, Section
+    from courts.store import connect, init_db, store_decision
+    from courts.read import resolve_decision
+    conn = connect()
+    init_db(conn)
+    ecli = "ECLI:DE:VERFGHT:2022:0406.112.20.00"
+
+    def doc(doc_id, text):
+        return ParsedDecision(source_id="th", source_doc_id=doc_id, source_url="https://x", court_name="VerfGH Weimar",
+                              decision_date="2022-04-06", case_numbers_raw="112/20", case_numbers=["112/20"],
+                              decision_type="Beschluss", ecli=ecli, court_id="verfgh-th",
+                              sections=[Section("gruende", "court", "t", [Block(text, "1")])])
+    first, _ = store_decision(conn, doc("NJRE001499442", "Die Verfassungsbeschwerde ist unzulässig."),
+                              content_hash="a", capture_path="-", media_type="x")
+    second, _ = store_decision(conn, doc("NJRE001499463", "Das Ablehnungsgesuch ist unbegründet."),
+                               content_hash="b", capture_path="-", media_type="x")
+    assert first == ecli and second == "court:verfgh-th/2022-04-06/112-20"
+    assert conn.execute("SELECT count(*) FROM decisions WHERE ecli=?", (ecli,)).fetchone()[0] == 2
+    status, ids = resolve_decision(conn, ecli)
+    assert status == "ambiguous_identity" and set(ids) == {first, second}
+    # Re-storing either keeps its id; an identical re-listing stays a duplicate.
+    assert store_decision(conn, doc("NJRE001499463", "Das Ablehnungsgesuch ist unbegründet."), content_hash="b",
+                          capture_path="-", media_type="x")[0] == second
