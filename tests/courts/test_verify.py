@@ -47,7 +47,16 @@ def test_verify_sample_uses_packed_duplicate_capture_and_never_changes_the_decis
             parsed = RiiAdapter().parse(capture, dict(it, source_doc_id=DOC))
             parsed.source_id, parsed.source_doc_id = "bverwg", it["source_doc_id"]
             return parsed
-    sync_source(CourtSite(fixture, [item("160316B1B19.16.0")]), conn, FakeHttp())
+    # Since 2026-09-28 bverwg.de items that RII lists are not fetched at all (pipeline.dedupe_before_fetch);
+    # a capture of the court site exists only for items fetched before that (here: simulated by fetching
+    # with the pre-fetch dedupe switched off).
+    import courts.pipeline as pipeline
+    saved = pipeline.DEFERS_TO
+    pipeline.DEFERS_TO = {}
+    try:
+        sync_source(CourtSite(fixture, [item("160316B1B19.16.0")]), conn, FakeHttp())
+    finally:
+        pipeline.DEFERS_TO = saved
     before = conn.execute("SELECT text_hash FROM decisions WHERE id=?", (ECLI,)).fetchone()[0]
     import courts.sources as sources
     real = sources.get_adapter

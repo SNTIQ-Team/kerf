@@ -75,148 +75,15 @@ def source_lock(source_id: str, home=None):
 
 def sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *, since: str | None = None,
                 limit: int | None = None, courts: list[str] | None = None, retry_failed: bool = False,
-                home=None, maintenance=None) -> dict:
-    """One source.  The caller holds the writer lock (courts.writer); ``maintenance`` (shared by the source
-    threads of the writer process) checkpoints the WAL and runs the space guard every few items."""
-    from .writer import Maintenance
+                home=None, maintenance=None, relist_after: float = 0.0) -> dict:
+    """One source through the concurrent pipeline (courts.pipeline); the calling thread is the writer.
+    ``relist_after=0``: always list (the backfill command reuses listings younger than 24 h)."""
+    from .pipeline import SourceSpec, run_pipeline
     with source_lock(adapter.source_id, home):
-        return _sync_source(adapter, conn, http, since=since, limit=limit, courts=courts,
-                            retry_failed=retry_failed, home=home,
-                            maintenance=maintenance or Maintenance(conn, home))
-
-
-def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *, since: str | None,
-                 limit: int | None, courts: list[str] | None, retry_failed: bool, home, maintenance) -> dict:
-    register_source(conn, adapter.source_id, adapter.label, adapter.base_url, adapter.land, adapter.adapter_name,
-                    adapter.operator_policy())
-    run_id = start_run(conn, adapter.source_id, since, limit)
-    policy_note = (f"robots: {adapter.robots_policy} ({adapter.policy_decided_at}, operator decision)"
-                   if adapter.robots_policy != "respect" else None)
-    conn.execute("UPDATE sources SET status='partial', status_reason='first sync in progress' "
-                 "WHERE source_id=? AND status='never_synced'", (adapter.source_id,))
-    counts = {"listed": 0, "attempted": 0, "stored": 0, "unchanged": 0, "failed": 0, "requests": 0}
-    requests_before = http.requests_made
-    status, notes = "ok", None
-    try:
-        try:
-            listing = adapter.list_items(http, conn, since=since, limit=limit, courts=courts)
-        except UpstreamFailure as failure:
-            record_failure(conn, run_id, adapter.source_id, None, failure)
-            blocked = is_blocking(failure)
-            set_source_status(conn, adapter.source_id, "blocked" if blocked else "unavailable",
-                              f"listing failed: {failure.kind}: {failure.detail}"[:500])
-            status, notes = ("blocked" if blocked else "failed"), f"listing: {failure}"
-            log(f"{adapter.source_id}: listing failed: {failure}")
-            return _result(counts, status, run_id, http, requests_before)
-        if not listing.complete:
-            # Incremental adapters treat only runs with a complete listing as a baseline.
-            notes = "listing incomplete"
-        elif limit is None and since is None:
-            # The whole upstream archive was listed at least once: from now on "no pending
-            # items" really means the local corpus covers the source.
-            conn.execute("UPDATE sources SET listing_complete=1 WHERE source_id=?", (adapter.source_id,))
-        counts["listed"] = upsert_items(conn, adapter.source_id, listing.items)
-        # The source answers again: a stale 'blocked'/'unavailable' from an earlier run must not make
-        # searches report it as unavailable while this run fills it.
-        conn.execute("""UPDATE sources SET status='partial', status_reason=? WHERE source_id=?
-                        AND status IN ('blocked','unavailable','never_synced','partial')""",
-                     (f"sync in progress (run {run_id})", adapter.source_id))
-        if listing.upstream_total is not None:
-            conn.execute("UPDATE sources SET upstream_listed=? WHERE source_id=?",
-                         (listing.upstream_total, adapter.source_id))
-        frontier = select_frontier(conn, adapter.source_id, since=since, limit=limit, courts=courts,
-                                   retry_failed=retry_failed)
-        log(f"{adapter.source_id}: listed {counts['listed']} (upstream {listing.upstream_total}), "
-            f"fetching {len(frontier)}")
-        consecutive_blocking = 0
-        for position, item in enumerate(frontier, 1):
-            if STOP_AFTER_ITEM.is_set():
-                status, notes = "interrupted", "stopped after the current item (SIGTERM)"
-                log(f"{adapter.source_id}: {notes}")
-                break
-            counts["attempted"] += 1
-            content_hash = None
-            try:
-                capture = adapter.fetch(http, item)
-                content_hash, relpath = write_capture(capture.body, adapter.source_id, capture.extension, home,
-                                                      conn=conn)
-                parsed = adapter.parse(capture, item)
-                decision_id, changed = store_decision(conn, parsed, content_hash=content_hash,
-                                                      capture_path=relpath, media_type=capture.media_type,
-                                                      observed_at=utcnow())
-                if changed:
-                    after_store(conn, decision_id)
-                counts["stored" if changed else "unchanged"] += 1
-                consecutive_blocking = 0
-            except UpstreamFailure as failure:
-                if failure.kind == "duplicate_identity":
-                    # The same decision (same ECLI) is already stored from another official source,
-                    # e.g. RII and the court's own site: not a failure; the capture stays in the pack.
-                    counts["duplicates"] = counts.get("duplicates", 0) + 1
-                    conn.execute("""UPDATE source_items SET state='skipped', attempts=attempts+1, last_attempt=?,
-                                    failure_kind='duplicate_identity', failure_detail=?, content_hash=?
-                                    WHERE source_id=? AND source_doc_id=?""",
-                                 (utcnow(), failure.detail[:500], content_hash, adapter.source_id,
-                                  item["source_doc_id"]))  # the capture stays usable for verification
-                    consecutive_blocking = 0
-                    continue
-                counts["failed"] += 1
-                if failure.url is None:
-                    failure.url = item["url"]
-                record_failure(conn, run_id, adapter.source_id, item["source_doc_id"], failure)
-                if content_hash:  # the capture is packed: the item can be re-examined offline
-                    conn.execute("UPDATE source_items SET content_hash=? WHERE source_id=? AND source_doc_id=?",
-                                 (content_hash, adapter.source_id, item["source_doc_id"]))
-                log(f"{adapter.source_id}: {item['source_doc_id']}: {failure.kind}: {failure.detail[:160]}")
-                consecutive_blocking = consecutive_blocking + 1 if is_blocking(failure) else 0
-                if consecutive_blocking >= MAX_CONSECUTIVE_BLOCKING:
-                    status, notes = "blocked", f"stopped after {consecutive_blocking} consecutive {failure.kind}"
-                    set_source_status(conn, adapter.source_id, "blocked", notes)
-                    log(f"{adapter.source_id}: {notes}")
-                    break
-            except OSError as exc:
-                # A local I/O error (e.g. ENOSPC) is not an upstream failure: stop the run and leave
-                # the item pending instead of recording a misleading parse_error for it.
-                status, notes = "failed", f"local I/O error, run stopped: {type(exc).__name__}: {exc}"[:500]
-                log(f"{adapter.source_id}: {notes}")
-                break
-            except Exception as exc:  # parser defect: typed, recorded, never stored as a decision
-                counts["failed"] += 1
-                detail = f"{type(exc).__name__}: {exc} | " + traceback.format_exc(limit=3).replace("\n", " ")[-600:]
-                record_failure(conn, run_id, adapter.source_id, item["source_doc_id"],
-                               UpstreamFailure("parse_error", detail, url=item["url"]))
-                if content_hash:
-                    conn.execute("UPDATE source_items SET content_hash=? WHERE source_id=? AND source_doc_id=?",
-                                 (content_hash, adapter.source_id, item["source_doc_id"]))
-                log(f"{adapter.source_id}: {item['source_doc_id']}: parse_error: {exc}")
-            problems = maintenance.tick()
-            if problems:
-                status, notes = "failed", ("space/WAL guard stopped the run: " + "; ".join(problems))[:500]
-                log(f"{adapter.source_id}: {notes}")
-                break
-            if position % 50 == 0:
-                conn.execute("UPDATE sync_runs SET attempted=?, stored=?, unchanged=?, failed=?, requests=? WHERE id=?",
-                             (counts["attempted"], counts["stored"], counts["unchanged"], counts["failed"],
-                              http.requests_made - requests_before, run_id))
-                log(f"{adapter.source_id}: {position}/{len(frontier)} stored={counts['stored']} "
-                    f"unchanged={counts['unchanged']} failed={counts['failed']}")
-        relink(conn)
-        if status == "ok" and counts["failed"]:
-            status = "partial"
-        if status in ("failed", "interrupted"):
-            return _result(counts, status, run_id, http, requests_before)
-        if status != "blocked":
-            set_source_status(conn, adapter.source_id, "ok" if status == "ok" else "partial",
-                              None if status == "ok" else f"{counts['failed']} item failures in run {run_id}")
-        return _result(counts, status, run_id, http, requests_before)
-    except KeyboardInterrupt:
-        status, notes = "interrupted", "interrupted by user"
-        raise
-    finally:
-        counts["requests"] = http.requests_made - requests_before
-        # The policy note goes last: incremental adapters look for notes starting "listing incomplete".
-        finish_run(conn, run_id, adapter.source_id, status, counts,
-                   "; ".join(n for n in (notes, policy_note) if n) or None)
+        results = run_pipeline(conn, [SourceSpec(adapter, http, courts)], since=since, limit=limit,
+                               retry_failed=retry_failed, maintenance=maintenance, home=home,
+                               relist_after=relist_after)
+    return results[adapter.source_id]
 
 
 def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None,

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from ..errors import UpstreamFailure
+from ..hostgov import Concurrency
 from ..http import PoliteHttp
 from ..model import ParsedDecision
 
@@ -51,8 +52,12 @@ class Adapter:
     robots_policy: str = "respect"
     policy_decided_at: str | None = None
     policy_basis: str | None = None
-    # Minimum seconds between requests to one host (never below 1.0; 2-5 s for small court sites).
+    # Minimum seconds between requests to one host per concurrency slot (never below 1.0; 2-5 s for small
+    # court sites).  With the pipeline the host's rate is slots / min_interval (courts.hostgov).
     min_interval: float = 1.1
+    # Documents in flight for the host: start, maximum (AIMD in between; operator decision 2026-09-28).
+    # Court sites: at most 2.
+    concurrency: Concurrency = Concurrency(1, 2)
 
     def operator_policy(self) -> dict:
         return {"robots_policy": self.robots_policy, "policy_decided_at": self.policy_decided_at,

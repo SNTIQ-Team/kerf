@@ -44,66 +44,47 @@ def http_for(adapter) -> PoliteHttp:
                       respect_robots=adapter.robots_policy == "respect")
 
 
-MAX_PARALLEL_SOURCES = 6
+MAX_PARALLEL_SOURCES = 24
 
 
 def cmd_sync(args) -> int:
-    """One writer process: each source is a thread (its own polite HTTP session, network in parallel);
-    all share one connection whose transaction lock serialises the short write transactions, and one
-    Maintenance checkpoints the WAL and runs the space guard (courts.writer)."""
-    import threading
-    from .sync import STOP_AFTER_ITEM
-    from .writer import Maintenance, SharedConnection
+    """One writer process (courts.pipeline): per source a runner and N fetcher threads (adaptive per-host
+    concurrency, one token bucket per host), a bounded queue to the single writer (this thread), which owns
+    the connection, stores, checkpoints the WAL and runs the space guard."""
+    from .pipeline import SourceSpec, run_pipeline
     # A source may carry its own court restriction: "sn:ovg" (several: "sn:ovg+vg").
-    specs = {}
+    restrictions = {}
     for spec in (args.source + "," + (args.then or "")).split(","):
         if spec.strip():
             source_id, _, restriction = spec.strip().partition(":")
-            specs[source_id] = [c for c in restriction.split("+") if c] or None
+            restrictions[source_id] = [c for c in restriction.split("+") if c] or None
     sources = [s.strip().partition(":")[0] for s in args.source.split(",") if s.strip()]
     queued = [s.strip().partition(":")[0] for s in (args.then or "").split(",") if s.strip()]
-    if len(sources) > MAX_PARALLEL_SOURCES:
+    max_sources = args.max_sources or len(sources)
+    if len(sources) > MAX_PARALLEL_SOURCES or max_sources > MAX_PARALLEL_SOURCES:
         print(json.dumps({"status": "invalid_argument",
-                          "detail": f"at most {MAX_PARALLEL_SOURCES} sources per writer process"}), file=sys.stderr)
+                          "detail": f"at most {MAX_PARALLEL_SOURCES} sources at a time"}), file=sys.stderr)
         return 2
-    adapters = [get_adapter(s) for s in sources]
-    waiting = [get_adapter(s) for s in queued]
     if not space_ok(f"sync {args.source}"):
         return 4
-    conn = SharedConnection(connect(threads=True))
-    init_db(conn)
-    maintenance = Maintenance(conn)
     courts = [c.strip() for c in args.court.split(",")] if args.court else None
-    results: dict[str, dict] = {}
-
-    def run(adapter):
+    def spec_of(source_id: str) -> SourceSpec:
+        adapter = get_adapter(source_id)
+        return SourceSpec(adapter, http_for(adapter), restrictions.get(source_id) or courts)
+    specs, waiting = [spec_of(s) for s in sources], [spec_of(s) for s in queued]
+    conn = connect()
+    init_db(conn)
+    with contextlib.ExitStack() as stack:
         try:
-            results[adapter.source_id] = sync_source(adapter, conn, http_for(adapter), since=args.since,
-                                                     limit=args.limit, courts=specs.get(adapter.source_id) or courts,
-                                                     retry_failed=args.retry_failed, maintenance=maintenance)
+            for spec in [*specs, *waiting]:
+                stack.enter_context(source_lock(spec.adapter.source_id))
         except SourceBusy as exc:
-            results[adapter.source_id] = {"status": "busy", "detail": str(exc)}
-        except Exception as exc:  # one source's defect must not take the others down
-            results[adapter.source_id] = {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"[:500]}
-    def start(adapter):
-        thread = threading.Thread(target=run, args=(adapter,), name=f"sync-{adapter.source_id}", daemon=True)
-        thread.start()
-        return thread
-    # At most len(--source) threads at a time; a --then source starts when a slot frees up (batch order).
-    threads = [start(a) for a in adapters]
-    while threads:
-        time.sleep(1.0)  # the main thread keeps receiving SIGTERM
-        alive = [t for t in threads if t.is_alive()]
-        while waiting and len(alive) < len(adapters) and not STOP_AFTER_ITEM.is_set() and not maintenance.stopped:
-            alive.append(start(waiting.pop(0)))
-        threads = alive
-    for adapter in waiting:
-        results[adapter.source_id] = {"status": "not_started",
-                                      "detail": "stopped before its turn (SIGTERM or space/WAL guard)"}
-    from .writer import checkpoint
-    checkpoint(conn)
-    print(json.dumps(results if len(results) > 1 else results[sources[0]], ensure_ascii=False))
-    return 0 if all(r.get("status") in ("ok", "partial") for r in results.values()) else 1
+            print(json.dumps({"status": "busy", "detail": str(exc)}), file=sys.stderr)
+            return 3
+        results = run_pipeline(conn, specs, since=args.since, limit=args.limit, retry_failed=args.retry_failed,
+                               relist_after=args.relist_after, max_sources=max_sources, queued=waiting)
+    print(json.dumps(results, ensure_ascii=False))
+    return 0 if all(r.get("status") in ("ok", "partial") for k, r in results.items() if k != "_writer") else 1
 
 
 def cmd_reparse(args) -> int:
@@ -454,8 +435,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=_positive, help="fetch at most N decisions (priority order)")
     p.add_argument("--court", help="comma list of court ids/prefixes to restrict (e.g. bsg,bverwg)")
     p.add_argument("--retry-failed", action="store_true", help="also retry previously failed items")
-    p.add_argument("--then", help="comma list of sources to sync next, each starting when a --source thread "
-                                  "finishes (at most len(--source) at a time)")
+    p.add_argument("--then", help="comma list of sources to sync next, each starting when a running source "
+                                  "finishes (at most --max-sources at a time)")
+    p.add_argument("--max-sources", type=_positive, help="sources at a time (default: the number in --source)")
+    p.add_argument("--relist-after", type=float, default=24.0,
+                   help="reuse a complete listing younger than this many hours (default 24; 0 = always list)")
     p.set_defaults(func=cmd_sync)
     p = sub.add_parser("reparse", help="re-parse stored raw captures with the current parser (offline)")
     p.add_argument("--source", help="one source (default: all)")

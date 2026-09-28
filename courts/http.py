@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from urllib.robotparser import RobotFileParser
 
 import requests
+import requests.adapters
 
 from .config import MIN_INTERVAL_SECONDS, USER_AGENT
 from .detect import classify_page, ensure_not_blocked, looks_like_html
@@ -71,7 +72,7 @@ class PoliteHttp:
     def __init__(self, *, min_interval: float = MIN_INTERVAL_SECONDS,
                  timeout: float = 60.0, retries: int = 2,
                  respect_robots: bool = True, session: requests.Session | None = None,
-                 ignore_robots_hosts: set[str] | frozenset[str] = frozenset()):
+                 ignore_robots_hosts: set[str] | frozenset[str] = frozenset(), governors=None):
         if min_interval < 1.0:
             raise ValueError("politeness floor is 1 request per second per host")
         self.min_interval = min_interval
@@ -88,6 +89,17 @@ class PoliteHttp:
         self._hosts: dict[str, _Host] = {}
         self._guard = threading.Lock()
         self.requests_made = 0
+        # courts.hostgov.Governors: shared per-host token bucket + adaptive concurrency across threads.
+        # Without it, requests to one host are serialised and paced to min_interval (the v1 behaviour).
+        self.governors = governors
+        if governors is not None:
+            adapter = requests.adapters.HTTPAdapter(pool_connections=16, pool_maxsize=16)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
+
+    def _count(self) -> None:
+        with self._guard:
+            self.requests_made += 1
 
     def _host(self, url: str) -> _Host:
         netloc = urlsplit(url).netloc.lower()
@@ -108,7 +120,7 @@ class PoliteHttp:
         self._pace(host)
         try:
             response = self.session.get(robots_url, timeout=30, allow_redirects=True)
-            self.requests_made += 1
+            self._count()
         except requests.RequestException:
             host.robots, host.robots_state = None, "unreachable"
             return
@@ -162,19 +174,35 @@ class PoliteHttp:
             if last_modified:
                 send["If-Modified-Since"] = last_modified
         last_error: UpstreamFailure | None = None
+        governor = self.governors.get(urlsplit(url).netloc.lower()) if self.governors is not None else None
+        timeout = kwargs.pop("timeout", self.timeout)
         for attempt in range((self.retries if retries is None else retries) + 1):
-            with host.lock:
-                self._pace(host)
+            if governor is not None:
+                governor.take_token()     # the host's shared rate; waits out Retry-After of any thread
                 started = time.monotonic()
                 try:
-                    raw = self.session.request(method, url, headers=send,
-                                               timeout=kwargs.pop("timeout", self.timeout),
-                                               **kwargs)
-                    self.requests_made += 1
+                    raw = self.session.request(method, url, headers=send, timeout=timeout, **kwargs)
+                    self._count()
                 except requests.RequestException as exc:
+                    if isinstance(exc, requests.ConnectionError) and not isinstance(exc, requests.Timeout):
+                        governor.throttled(f"connection error {type(exc).__name__}")
+                    else:
+                        governor.failed()
                     last_error = UpstreamFailure("network", type(exc).__name__ + ": " + str(exc)[:200], url=url)
                     time.sleep(5 * (attempt + 1))
                     continue
+            else:
+                with host.lock:
+                    self._pace(host)
+                    started = time.monotonic()
+                    try:
+                        raw = self.session.request(method, url, headers=send, timeout=timeout, **kwargs)
+                        self._count()
+                    except requests.RequestException as exc:
+                        last_error = UpstreamFailure("network", type(exc).__name__ + ": " + str(exc)[:200],
+                                                     url=url)
+                        time.sleep(5 * (attempt + 1))
+                        continue
             response = Response(url=raw.url, status=raw.status_code, body=raw.content or b"",
                                 headers={k.lower(): v for k, v in raw.headers.items()},
                                 elapsed=time.monotonic() - started,
@@ -183,6 +211,8 @@ class PoliteHttp:
                 return response
             if detect and response.headers.get("x-amzn-waf-action"):
                 # AWS WAF challenge (any status, often 202 with an empty body): never retried.
+                if governor is not None:
+                    governor.throttled("AWS WAF challenge")
                 raise UpstreamFailure("challenge", f"AWS WAF action {response.headers['x-amzn-waf-action']!r}",
                                       url=url, status=raw.status_code)
             if raw.status_code in (429, 500, 502, 503, 504):
@@ -190,6 +220,8 @@ class PoliteHttp:
                     # A challenge or login wall served with 429/503 is never retried.
                     verdict = classify_page(response.body, status=raw.status_code)
                     if verdict and verdict[0] in ("challenge", "login"):
+                        if governor is not None:
+                            governor.throttled(f"{verdict[0]} page (HTTP {raw.status_code})")
                         raise UpstreamFailure(verdict[0], verdict[1], url=url, status=raw.status_code)
                 retry_after = raw.headers.get("Retry-After", "")
                 delay = retry_after_seconds(retry_after)
@@ -199,16 +231,30 @@ class PoliteHttp:
                 if raw.status_code in (429, 503):
                     # Slow down every later request to this host as well.
                     host.interval = min(max(host.interval * 2, self.min_interval), MAX_HOST_INTERVAL)
+                    if governor is not None:
+                        governor.throttled(f"HTTP {raw.status_code}", retry_after=delay)
+                elif governor is not None:
+                    governor.failed()
                 kind = "rate_limited" if raw.status_code == 429 else "http_error"
                 last_error = UpstreamFailure(kind, f"HTTP {raw.status_code} (retry-after {retry_after or '-'}, "
                                              f"waited {delay:.0f}s)", url=url, status=raw.status_code)
                 if attempt < (self.retries if retries is None else retries):
-                    time.sleep(delay)
+                    if governor is None or raw.status_code not in (429, 503):
+                        time.sleep(delay)   # 429/503 with a governor: every thread waits in take_token()
                 continue
             if detect:
                 # A challenge served with 403 is a challenge, not an ordinary HTTP error.
-                ensure_not_blocked(response.body, url=url, status=raw.status_code,
-                                   content_type=response.content_type, headers=response.headers)
+                try:
+                    ensure_not_blocked(response.body, url=url, status=raw.status_code,
+                                       content_type=response.content_type, headers=response.headers)
+                except UpstreamFailure as failure:
+                    if governor is not None and failure.kind in ("challenge", "login"):
+                        governor.throttled(f"{failure.kind} page (HTTP {raw.status_code})")
+                    raise
+            if governor is not None:
+                governor.answered(response.elapsed)
+                if raw.status_code >= 400:
+                    governor.failed()
             if raw.status_code >= 400:
                 raise UpstreamFailure("http_error", f"HTTP {raw.status_code}", url=url,
                                       status=raw.status_code)
