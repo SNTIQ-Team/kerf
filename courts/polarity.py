@@ -23,18 +23,18 @@ import sqlite3
 from dataclasses import dataclass
 
 from .citations import procedural_clause
+from .detail import expand_detail
 
 CLASSIFIER_VERSION = "courts-polarity-rules/1.3.3"
 ASSESSMENTS = {
     "applies": "positive", "interprets": "neutral", "holds_inapplicable": "negative",
     "rejects_application_of": "negative", "follows": "positive", "departs_from": "negative",
     "overrules": "negative", "distinguishes": "negative",
-    # A cue was found, but the rule did not reach 0.9 precision on the gold sample: no polarity claim.
-    # assess() reports it (evaluation, conformance); the corpus does not store it while the schema is v3
-    # (the assessment CHECK list is part of the v3 contract): the rule is disabled there.
+    # A cue was found, but the rule did not reach 0.9 precision on the gold samples: no polarity claim.
+    # Stored (schema v4) with the cue, the clause and cue_suggests = what the demoted rule would have said.
     "mentions_with_cue": "neutral",
 }
-STORED_ASSESSMENTS = {a for a in ASSESSMENTS if a != "mentions_with_cue"}
+STORED_ASSESSMENTS = set(ASSESSMENTS)
 # Procedural codes are "applied" only by courts of their own branch.  Elsewhere a
 # citation is at most a mention (conformance: § 84 SGG in a Wehrdienst decision).
 PROCEDURAL_CODES = {"de/bund/sgg": "sozial", "de/bund/vwgo": "verwaltung", "de/bund/fgo": "finanz",
@@ -53,7 +53,7 @@ class Rule:
     where: str                # clause | after | before  (relative to the citation)
     confidence: float
     own_court: bool | None = None   # decisions: only for own (True) / other (False) courts; None = any
-    demoted: bool = False           # below 0.9 precision on the gold sample: mentions_with_cue, not stored
+    demoted: bool = False           # below 0.9 precision on the gold samples: stored as mentions_with_cue
 
 
 def _r(p: str) -> re.Pattern:
@@ -448,13 +448,14 @@ CREATE TABLE IF NOT EXISTS relation_assessments(
   id INTEGER PRIMARY KEY,
   relation_id INTEGER,
   decision_id TEXT NOT NULL,
-  paragraph_id TEXT,
+  paragraph_ordinal INTEGER,
   target_kind TEXT NOT NULL CHECK(target_kind IN ('norm','decision')),
   target_id TEXT,
   span_start INTEGER,
   span_end INTEGER,
   assessment TEXT NOT NULL CHECK(assessment IN ('applies','interprets','holds_inapplicable',
-    'rejects_application_of','follows','departs_from','overrules','distinguishes')),
+    'rejects_application_of','follows','departs_from','overrules','distinguishes','mentions_with_cue')),
+  cue_suggests TEXT,
   polarity TEXT NOT NULL CHECK(polarity IN ('positive','negative','neutral')),
   cue TEXT NOT NULL,
   cue_start INTEGER,
@@ -480,9 +481,11 @@ def assess_decision(conn: sqlite3.Connection, decision_id: str) -> int:
                             (decision_id,)).fetchone()
     if decision is None:
         return 0
-    rows = conn.execute(f"""SELECT r.id, r.paragraph_id, r.target_kind, r.target_id, r.span_start, r.span_end,
+    rows = conn.execute(f"""SELECT r.id, r.paragraph_ordinal, r.target_kind, r.target_id, r.target_raw,
+                                  r.target_court_id, r.target_date, r.target_case_key, r.span_start, r.span_end,
                                   r.detail, p.text
-                           FROM relations r JOIN paragraphs p ON p.id = r.paragraph_id
+                           FROM relations r JOIN paragraphs p
+                             ON p.decision_id = r.decision_id AND p.ordinal = r.paragraph_ordinal
                            WHERE r.decision_id = ? AND r.origin = 'decision_text' AND r.span_start IS NOT NULL
                              AND r.derived_by = 'parser' AND p.authorship = 'court'
                              AND r.relation IN ('mentions','quotes')
@@ -492,23 +495,22 @@ def assess_decision(conn: sqlite3.Connection, decision_id: str) -> int:
     for row in rows:
         for proposal in assess(row["text"], (row["span_start"], row["span_end"]), target_kind=row["target_kind"],
                                target_id=row["target_id"], own_court_id=decision["court_id"],
-                               jurisdiction=decision["jurisdiction"], detail=json.loads(row["detail"] or "{}")):
-            if proposal.assessment not in STORED_ASSESSMENTS:
-                continue  # demoted rule: disabled in the corpus (see ASSESSMENTS)
+                               jurisdiction=decision["jurisdiction"], detail=expand_detail(row["detail"], row)):
             lo, hi = proposal.clause
-            out.append((row["id"], decision_id, row["paragraph_id"], row["target_kind"], row["target_id"],
+            out.append((row["id"], decision_id, row["paragraph_ordinal"], row["target_kind"], row["target_id"],
                         row["span_start"], row["span_end"], proposal.assessment, ASSESSMENTS[proposal.assessment],
                         row["text"][proposal.cue_start:proposal.cue_end], proposal.cue_start, proposal.cue_end,
                         " ".join(row["text"][lo:hi].split()), proposal.rule.rule_id, proposal.rule.confidence,
-                        CLASSIFIER_VERSION))
+                        CLASSIFIER_VERSION,
+                        proposal.rule.assessment if proposal.assessment == "mentions_with_cue" else None))
     conn.execute("BEGIN IMMEDIATE")
     try:
         conn.execute("DELETE FROM relation_assessments WHERE decision_id=? AND derived_by='rules'", (decision_id,))
-        conn.executemany("""INSERT INTO relation_assessments(relation_id, decision_id, paragraph_id, target_kind,
+        conn.executemany("""INSERT INTO relation_assessments(relation_id, decision_id, paragraph_ordinal, target_kind,
                               target_id, span_start, span_end, assessment, polarity, cue, cue_start, cue_end,
                               evidence_text, rule_id, derived_by, legal_effect_verified, confidence,
-                              classifier_version, created_at)
-                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'rules',0,?,?,
+                              classifier_version, cue_suggests, created_at)
+                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'rules',0,?,?,?,
                                    strftime('%Y-%m-%dT%H:%M:%S+00:00','now'))""", out)
         conn.execute("COMMIT")
     except BaseException:

@@ -18,6 +18,8 @@ from pathlib import Path
 from . import PARSER_VERSION, SCHEMA_VERSION
 from .casenumbers import case_key
 from .config import db_path
+from .detail import expand_detail
+from .paragraphs import decode_blocks, split_paragraph_id
 
 UNAVAILABLE = {"blocked", "unavailable", "never_synced"}
 EXCERPT = 600
@@ -98,8 +100,10 @@ def evidence_item(row, *, excerpt: bool = True, match_terms: list[str] = ()) -> 
     }
 
 
-PARAGRAPH_COLUMNS = """p.rowid AS rowid, p.id, p.decision_id, p.section, p.authorship, p.rn, p.numbering, p.text,
-  p.text_hash, p.block_count, d.ecli, d.court_id, d.court_slug, d.court_name, d.decision_type, d.decision_date,
+# Schema v4: the public paragraph id is derived (decision_id '#' anchor); text_hash is 32 raw bytes.
+PARAGRAPH_ID = "p.decision_id || '#' || p.anchor"
+PARAGRAPH_COLUMNS = f"""p.rowid AS rowid, {PARAGRAPH_ID} AS id, p.decision_id, p.ordinal, p.section, p.authorship, p.rn,
+  p.numbering, p.text, lower(hex(p.text_hash)) AS text_hash, p.block_count, d.ecli, d.court_id, d.court_slug, d.court_name, d.decision_type, d.decision_date,
   d.case_numbers, d.case_numbers_raw, d.numbering AS numbering_d, d.source_url, d.source_id,
   d.observed_at, d.content_hash, d.parser_version"""
 
@@ -159,7 +163,7 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
         where.append("d.id IN (SELECT decision_id FROM case_numbers WHERE case_key = ?)")
         params.append(case_key(case_number))
     if norm or relation:
-        sub = ["r.paragraph_id = p.id"]
+        sub = ["r.decision_id = p.decision_id", "r.paragraph_ordinal = p.ordinal"]
         if norm:
             sub.append("(r.target_id = ? OR (r.target_id >= ? AND r.target_id < ?))")
             params += [norm, norm + "/", norm + "0"]
@@ -249,10 +253,12 @@ def get_decision(conn: sqlite3.Connection, ref: str, *, with_paragraphs: bool = 
             {"id": p["id"], "section": p["section"], "authorship": p["authorship"], "rn": p["rn"],
              "numbering": p["numbering"], "block_count": p["block_count"], "text": p["text"],
              "text_hash": p["text_hash"]}
-            for p in conn.execute("SELECT * FROM paragraphs WHERE decision_id=? ORDER BY ordinal", (d["id"],))]
+            for p in conn.execute(f"SELECT {PARAGRAPH_ID} AS id, section, authorship, rn, numbering, block_count, "
+                                  "text, lower(hex(text_hash)) AS text_hash FROM paragraphs p WHERE decision_id=? "
+                                  "ORDER BY ordinal", (d["id"],))]
     if with_relations:
         result["relations"] = [relation_row(r, conn) for r in conn.execute(
-            "SELECT * FROM relations WHERE decision_id=? ORDER BY id", (d["id"],)).fetchall()]
+            f"SELECT {RELATION_COLUMNS} FROM relations r WHERE r.decision_id=? ORDER BY r.id", (d["id"],)).fetchall()]
     return {"status": "ok", "decision": result}
 
 
@@ -261,9 +267,10 @@ CONTEXT_WIDTH = 160
 
 def context_for(conn, r) -> str:
     """quoted_context as stored, or derived from paragraphs.text and the span (stored empty to save space)."""
-    if r["quoted_context"] or r["paragraph_id"] is None or r["span_start"] is None:
+    if r["quoted_context"] or r["paragraph_ordinal"] is None or r["span_start"] is None:
         return r["quoted_context"]
-    row = conn.execute("SELECT text FROM paragraphs WHERE id = ?", (r["paragraph_id"],)).fetchone()
+    row = conn.execute("SELECT text FROM paragraphs WHERE decision_id = ? AND ordinal = ?",
+                       (r["decision_id"], r["paragraph_ordinal"])).fetchone()
     if row is None:
         return ""
     text = row[0]
@@ -272,11 +279,14 @@ def context_for(conn, r) -> str:
 
 # Which relation_assessments rows belong to parser relation r (alias a / r).  Rule rows carry relation_id.
 # User rows (corrections ledger) carry none: they attach within their own decision only - a paragraph-level
-# row to the relations of that paragraph with the same target, a decision-level row (paragraph_id NULL) to
-# every relation of the decision with that target.  The single definition, used by every reader.
+# row to the relations of that paragraph with the same target, a decision-level row (paragraph_ordinal
+# NULL) to every relation of the decision with that target.  The single definition, used by every reader.
 ASSESSMENT_OF_RELATION = ("(a.relation_id = r.id OR (a.relation_id IS NULL AND a.decision_id = r.decision_id"
-                          " AND a.target_id IS r.target_id AND (a.paragraph_id IS NULL"
-                          " OR a.paragraph_id = r.paragraph_id)))")
+                          " AND a.target_id IS r.target_id AND (a.paragraph_ordinal IS NULL"
+                          " OR a.paragraph_ordinal = r.paragraph_ordinal)))")
+# A relation row with its public paragraph id (v4 stores the paragraph as (decision_id, paragraph_ordinal)).
+RELATION_COLUMNS = ("r.*, (SELECT r.decision_id || '#' || p.anchor FROM paragraphs p WHERE p.decision_id = "
+                    "r.decision_id AND p.ordinal = r.paragraph_ordinal) AS paragraph_id")
 
 
 def assessments_for(conn, r) -> list[dict]:
@@ -299,20 +309,23 @@ def relation_row(r, conn=None) -> dict:
                          "span": [r["span_start"], r["span_end"]] if r["span_start"] is not None else None,
                          "derived_by": r["derived_by"], "legal_effect_verified": bool(r["legal_effect_verified"]),
                          "confidence": r["confidence"]},
-            "detail": json.loads(r["detail"])}
+            "detail": expand_detail(r["detail"], r)}
 
 
 def get_paragraph(conn: sqlite3.Connection, paragraph_id: str) -> dict:
+    key = split_paragraph_id(paragraph_id)
     row = conn.execute(f"SELECT {PARAGRAPH_COLUMNS}, p.blocks FROM paragraphs p JOIN decisions d "
-                       "ON d.id = p.decision_id WHERE p.id = ?", (paragraph_id,)).fetchone()
+                       "ON d.id = p.decision_id WHERE p.decision_id = ? AND p.anchor = ?", key).fetchone() \
+        if key else None
     if row is None:
         return {"status": "not_in_corpus", "request": paragraph_id}
     if hashlib.sha256(row["text"].encode()).hexdigest() != row["text_hash"]:
         return {"status": "integrity_check_failed", "request": paragraph_id}
     item = evidence_item(row, excerpt=False)
-    item["blocks"] = [dict(b, text=row["text"][b["start"]:b["end"]]) for b in json.loads(row["blocks"])]
+    item["blocks"] = [dict(b, text=row["text"][b["start"]:b["end"]]) for b in decode_blocks(row["blocks"])]
     item["relations"] = [relation_row(r, conn) for r in conn.execute(
-        "SELECT * FROM relations WHERE paragraph_id=? ORDER BY span_start", (paragraph_id,)).fetchall()]
+        f"SELECT {RELATION_COLUMNS} FROM relations r WHERE r.decision_id = ? AND r.paragraph_ordinal = ? "
+        "ORDER BY r.span_start", (row["decision_id"], row["ordinal"])).fetchall()]
     return {"status": "ok", "evidence": [item]}
 
 
@@ -339,7 +352,7 @@ def citing_decisions(conn: sqlite3.Connection, target: str, *, relation: str | N
                  f" AND {ASSESSMENT_OF_RELATION})")
         params.append(assessment)
     total = conn.execute(f"SELECT count(*) FROM relations r WHERE {cond}", params).fetchone()[0]
-    rows = conn.execute(f"SELECT r.* FROM relations r JOIN decisions d ON d.id = r.decision_id WHERE {cond} "
+    rows = conn.execute(f"SELECT {RELATION_COLUMNS} FROM relations r JOIN decisions d ON d.id = r.decision_id WHERE {cond} "
                         "ORDER BY d.decision_date DESC, r.id LIMIT ? OFFSET ?", (*params, limit, offset)).fetchall()
     return {"status": "ok", "target": target,
             "relation_types_included": [relation] if relation else ["mentions", "quotes", "procedural_reference"],

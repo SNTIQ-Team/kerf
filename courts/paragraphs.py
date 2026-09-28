@@ -11,10 +11,13 @@ Rules (spec, "Identity: Paragraph"):
 """
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 
 from .model import HEADNOTE_SECTIONS, Block, Paragraph, Section
+
+BLOCK_SEPARATOR = "\n\n"  # paragraphs.text joins its blocks with a blank line
 
 RN_LABEL = re.compile(r"^\d{1,4}[a-z]?$")
 
@@ -122,3 +125,41 @@ def locate_quote(paragraphs: list[Paragraph], quote: str) -> list[str]:
     if not quote_fragments(quote):
         return []
     return [p.id for p in paragraphs if matches_quote(p.text, quote)]
+
+
+def anchor_of(paragraph_id: str) -> str:
+    """The part of a public paragraph id after '#': ``<decision_id>#rn-10`` -> ``rn-10``."""
+    decision_id, sep, anchor = paragraph_id.partition("#")
+    if not sep or not anchor or "#" in decision_id:
+        raise ValueError(f"not a paragraph id: {paragraph_id!r}")
+    return anchor
+
+
+def split_paragraph_id(paragraph_id: str) -> tuple[str, str] | None:
+    """(decision_id, anchor) of a public paragraph id; decision ids never contain '#'."""
+    decision_id, sep, anchor = paragraph_id.partition("#")
+    return (decision_id, anchor) if sep and decision_id and anchor else None
+
+
+def encode_blocks(paragraph) -> str:
+    """v4 ``paragraphs.blocks``: ``[[length, locator], …]`` with a third element ``kind`` unless it is
+    ``text``.  Block i starts at the sum of the earlier lengths plus 2 per earlier block (text = blocks
+    joined by a blank line); offsets are code points."""
+    out = []
+    for block in paragraph.blocks:
+        item = [len(block.text), block.locator]
+        if block.kind != "text":
+            item.append(block.kind)
+        out.append(item)
+    return json.dumps(out, ensure_ascii=False, separators=(",", ":"))
+
+
+def decode_blocks(blocks: str) -> list[dict]:
+    """``[{"start", "end", "locator", "kind"}]`` (the v3 form) from v4 ``paragraphs.blocks``."""
+    out, position = [], 0
+    for item in json.loads(blocks):
+        length, locator = item[0], item[1]
+        out.append({"start": position, "end": position + length, "locator": locator,
+                    "kind": item[2] if len(item) > 2 else "text"})
+        position += length + len(BLOCK_SEPARATOR)
+    return out
