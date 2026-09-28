@@ -1,0 +1,56 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.wayback-bverwg-4-bn-1-23",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "Wayback copy of bverwg.de (current layout) of BVerwG 4 BN 1.23: an archived secondary copy with the page's ECLI as id",
+  "origin": "coordinator request 2026-09-28 (alternative sources for BAYERN.RECHT, bverwg.de, Länder gaps); Wayback capture 20230605075242",
+  "status": "active",
+  "input": {
+    "adapter": "wayback",
+    "fixture": "tests/courts/fixtures/wayback/bverwg-010223B4BN1.23.0-20230605075242.html.gz",
+    "item": {
+      "source_doc_id": "bverwg:010223B4BN1.23.0",
+      "url": "https://web.archive.org/web/20230605075242id_/https://www.bverwg.de/de/010223B4BN1.23.0",
+      "listed_date": "2023-02-01",
+      "listed_court": "bverwg",
+      "listed_case_numbers": "4 BN 1.23",
+      "extra": {
+        "route": "bverwg",
+        "doc": "010223B4BN1.23.0",
+        "original": "https://www.bverwg.de/de/010223B4BN1.23.0",
+        "captures": [
+          [
+            "20230605075242",
+            "https://www.bverwg.de/de/010223B4BN1.23.0"
+          ]
+        ]
+      }
+    }
+  },
+  "expected": {
+    "id": "ECLI:DE:BVerwG:2023:010223B4BN1.23.0",
+    "court_id": "bverwg",
+    "decision_date": "2023-02-01",
+    "sections": [
+      {
+        "name": "tenor",
+        "authorship": "court",
+        "blocks": 3
+      },
+      {
+        "name": "gruende",
+        "authorship": "court",
+        "blocks": 10
+      }
+    ],
+    "metadata": {
+      "source_kind": "archive",
+      "archive": {
+        "service": "web.archive.org",
+        "timestamp": "20230605075242"
+      }
+    }
+  },
+  "match": "subset"
+}

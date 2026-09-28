@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.capture.bverwg-other-page-refused",
+  "module": "courts",
+  "kind": "capture_acceptance",
+  "description": "ingest-capture --source bverwg: press releases, search pages and other hosts are no decision URL; a page of another decision is url_mismatch",
+  "origin": "coordinator request 2026-09-28",
+  "status": "active",
+  "input": {
+    "source": "bverwg",
+    "url": "https://www.bverwg.de/de/010206B7B80.05.0",
+    "fixture": "tests/courts/fixtures/wayback/bverwg-010223B4BN1.23.0-20230605075242.html.gz"
+  },
+  "expected": {
+    "accepted": false,
+    "reason": "url_mismatch"
+  },
+  "match": "subset"
+}

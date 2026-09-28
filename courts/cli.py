@@ -372,6 +372,23 @@ def cmd_ingest_capture(args) -> int:  # dispatched before argparse (courts.captu
     return cli(sys.argv[2:])
 
 
+def cmd_prefetch(args) -> int:
+    """Fetch a source's captures into <data home>/staging/<source>/ without the writer lock (courts.prefetch)."""
+    from .hostgov import Governors
+    from .pipeline import concurrency_of, host_of
+    from .prefetch import prefetch
+    from .sync import log
+    adapter = get_adapter(args.source)
+    http = http_for(adapter)
+    governors = Governors(log=log)
+    governors.declare(host_of(adapter.base_url), concurrency_of(adapter), adapter.min_interval)
+    http.governors = governors
+    result = prefetch(adapter, http, since=args.since, limit=args.limit,
+                      courts=args.court.split(",") if args.court else None, log=log, workers=args.workers)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result.get("status") == "ok" else 4
+
+
 def cmd_space(args) -> int:
     report = check_space(data_home(), starting=True)
     print(json.dumps({"bulk_writes_allowed": not report.problems, **report.as_dict()}, indent=2))
@@ -532,6 +549,14 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("ecli-codes", help="Land-court ECLI court codes observed in the corpus -> court_map")
     p.add_argument("--dry-run", action="store_true", help="report only (read-only, no writer lock needed)")
     p.set_defaults(func=cmd_ecli_codes)
+    p = sub.add_parser("prefetch", help="fetch a source's captures into staging while another writer runs "
+                       "(no database writes; the next sync of the source stores them)")
+    p.add_argument("--source", required=True)
+    p.add_argument("--court", help="source-specific restriction (wayback: by,bverwg)")
+    p.add_argument("--since", type=_date)
+    p.add_argument("--limit", type=_positive)
+    p.add_argument("--workers", type=_positive, default=2)
+    p.set_defaults(func=cmd_prefetch)
     p = sub.add_parser("space", help="btrfs/disk guard for bulk writes")
     p.set_defaults(func=cmd_space)
     p = sub.add_parser("status", help="coverage per source")

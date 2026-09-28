@@ -1,0 +1,40 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.wayback-by-bayvgh-16b-d-22-2183",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "Wayback copy of a BAYERN.RECHT page: parsed like a user-browser capture, but stored as source 'wayback' with source_kind archive",
+  "origin": "coordinator request 2026-09-28 (alternative sources for BAYERN.RECHT, bverwg.de, Länder gaps); Wayback capture 20250817161656",
+  "status": "active",
+  "input": {
+    "adapter": "wayback",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10142.html.gz",
+    "item": {
+      "source_doc_id": "by:Y-300-Z-BECKRS-B-2023-N-10142",
+      "url": "https://web.archive.org/web/20250817161656id_/https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10142",
+      "listed_date": null,
+      "listed_court": null,
+      "listed_case_numbers": null,
+      "extra": {
+        "route": "by",
+        "doc": "Y-300-Z-BECKRS-B-2023-N-10142",
+        "original": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10142",
+        "captures": [
+          [
+            "20250817161656",
+            "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10142"
+          ]
+        ]
+      }
+    }
+  },
+  "expected": {
+    "id": "court:vgh-by/2023-01-18/16b_D_22.2183",
+    "rn_count": 36,
+    "metadata": {
+      "source_kind": "archive",
+      "numbering_source": "bayern_recht"
+    }
+  },
+  "match": "subset"
+}

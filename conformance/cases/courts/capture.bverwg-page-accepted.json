@@ -1,0 +1,21 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.capture.bverwg-page-accepted",
+  "module": "courts",
+  "kind": "capture_acceptance",
+  "description": "ingest-capture --source bverwg: a saved bverwg.de decision page under any of its URL forms is accepted and canonicalised to /de/<ECLI ordinal>",
+  "origin": "coordinator request 2026-09-28 (MCP: bverwg captures on demand)",
+  "status": "active",
+  "input": {
+    "source": "bverwg",
+    "url": "https://www.bverwg.de/entscheidungen/entscheidung.php?ent=010223B4BN1.23.0",
+    "fixture": "tests/courts/fixtures/wayback/bverwg-010223B4BN1.23.0-20230605075242.html.gz"
+  },
+  "expected": {
+    "accepted": true,
+    "doc_id": "010223B4BN1.23.0",
+    "url": "https://www.bverwg.de/de/010223B4BN1.23.0",
+    "court_id": "bverwg"
+  },
+  "match": "subset"
+}

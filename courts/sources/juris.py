@@ -334,33 +334,11 @@ def parse_verfahrensgang(text: str) -> list[dict]:
     return out
 
 
-def parse_document(data: dict, doc_id: str, portal: JurisPortal) -> ParsedDecision:
-    """Parse one recherche3 ``document`` response (already JSON-decoded)."""
-    if not isinstance(data, dict) or not isinstance(data.get("text"), str) or not isinstance(data.get("head"), str):
-        raise UpstreamFailure("unexpected_representation", f"{doc_id}: document JSON without head/text")
-    permalink = data.get("permalink") or ""
-    stated_ids = set(re.findall(r"data-juristest-docid=\"([^\"]+)\"", data["text"]))
-    m = re.search(r"[?&]d=([A-Za-z0-9_-]+)", permalink)
-    if m:
-        stated_ids.add(m.group(1))
-    if not stated_ids:
-        raise UpstreamFailure("identity_mismatch", f"{doc_id}: document states no docId")
-    if stated_ids != {doc_id}:
-        raise UpstreamFailure("identity_mismatch", f"{doc_id}: document states docId {sorted(stated_ids)}")
-
-    head = parse_head(data["head"])
-    court_raw = squash(text_content(head["Gericht"])) if "Gericht" in head else ""
-    date_raw = squash(text_content(head["Entscheidungsdatum"])) if "Entscheidungsdatum" in head else ""
-    if not court_raw or not date_raw or "Aktenzeichen" not in head:
-        raise UpstreamFailure("parse_error", f"{doc_id}: header lacks Gericht/Entscheidungsdatum/Aktenzeichen")
-    az_raw = text_content(head["Aktenzeichen"]).strip()
-    ecli_raw = squash(text_content(head["ECLI"])) if "ECLI" in head else ""
-    doktyp = squash(text_content(head["Dokumenttyp"])) if "Dokumenttyp" in head else ""
-    norms, norms_truncated = _norms(head.get("Normen"))
-    court_name, chamber = split_court(court_raw)
-    info = resolve(court_name, default_land=portal.land)
-
-    root = parse_fragment(data["text"])
+def parse_body(text: str, doc_id: str) -> dict:
+    """The document text of a juris decision (``div.docLayoutText`` with rubric headings and ``dl.RspDL``
+    Randnummer blocks) -> sections, Verfahrensgang text, apparatus and unmapped rubrics.  Shared by the juris
+    portals and by copies of juris documents in other collections (courts.sources.old)."""
+    root = parse_fragment(text)
     _strip_invisible_rn_labels(root)
     events: list[tuple] = []
     _events(root, "text:", events)
@@ -430,6 +408,39 @@ def parse_document(data: dict, doc_id: str, portal: JurisPortal) -> ParsedDecisi
         raise UpstreamFailure("parse_error", f"{doc_id}: {missing} of {total} visible characters not captured")
     if not any(s.name not in ("titel", "leitsatz", "orientierungssatz") for s in sections):
         raise UpstreamFailure("empty_document", f"{doc_id}: no decision text rubric")
+
+    return {"sections": sections, "procedural_text": procedural_text, "apparatus": apparatus, "unmapped": unmapped}
+
+
+def parse_document(data: dict, doc_id: str, portal: JurisPortal) -> ParsedDecision:
+    """Parse one recherche3 ``document`` response (already JSON-decoded)."""
+    if not isinstance(data, dict) or not isinstance(data.get("text"), str) or not isinstance(data.get("head"), str):
+        raise UpstreamFailure("unexpected_representation", f"{doc_id}: document JSON without head/text")
+    permalink = data.get("permalink") or ""
+    stated_ids = set(re.findall(r"data-juristest-docid=\"([^\"]+)\"", data["text"]))
+    m = re.search(r"[?&]d=([A-Za-z0-9_-]+)", permalink)
+    if m:
+        stated_ids.add(m.group(1))
+    if not stated_ids:
+        raise UpstreamFailure("identity_mismatch", f"{doc_id}: document states no docId")
+    if stated_ids != {doc_id}:
+        raise UpstreamFailure("identity_mismatch", f"{doc_id}: document states docId {sorted(stated_ids)}")
+
+    head = parse_head(data["head"])
+    court_raw = squash(text_content(head["Gericht"])) if "Gericht" in head else ""
+    date_raw = squash(text_content(head["Entscheidungsdatum"])) if "Entscheidungsdatum" in head else ""
+    if not court_raw or not date_raw or "Aktenzeichen" not in head:
+        raise UpstreamFailure("parse_error", f"{doc_id}: header lacks Gericht/Entscheidungsdatum/Aktenzeichen")
+    az_raw = text_content(head["Aktenzeichen"]).strip()
+    ecli_raw = squash(text_content(head["ECLI"])) if "ECLI" in head else ""
+    doktyp = squash(text_content(head["Dokumenttyp"])) if "Dokumenttyp" in head else ""
+    norms, norms_truncated = _norms(head.get("Normen"))
+    court_name, chamber = split_court(court_raw)
+    info = resolve(court_name, default_land=portal.land)
+
+    body = parse_body(data["text"], doc_id)
+    sections, procedural_text, apparatus, unmapped = (body["sections"], body["procedural_text"], body["apparatus"],
+                                                      body["unmapped"])
 
     ecli = ecli_raw if ECLI_RE.match(ecli_raw) else None
     title = next((b.text for s in sections if s.name == "titel" for b in s.blocks if b.text), None)

@@ -58,10 +58,16 @@ class Adapter:
     # Documents in flight for the host: start, maximum (AIMD in between; operator decision 2026-09-28).
     # Court sites: at most 2.
     concurrency: Concurrency = Concurrency(1, 2)
+    # "primary" (the court's or the state's own publication), "archive" (an archived copy of a primary page,
+    # e.g. the Wayback Machine) or "aggregator" (a third party's collection, e.g. Open Legal Data).  A primary
+    # copy of a decision always wins over a secondary one (store.SECONDARY_SOURCES, store.source_rank).
+    source_kind: str = "primary"
+    licence: str | None = None
 
     def operator_policy(self) -> dict:
         return {"robots_policy": self.robots_policy, "policy_decided_at": self.policy_decided_at,
-                "policy_basis": self.policy_basis, "min_interval": self.min_interval}
+                "policy_basis": self.policy_basis, "min_interval": self.min_interval,
+                "source_kind": self.source_kind, "licence": self.licence}
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since: str | None,
                    limit: int | None, courts: list[str] | None) -> Listing:
@@ -72,6 +78,12 @@ class Adapter:
 
     def parse(self, capture: Capture, item: sqlite3.Row | dict) -> ParsedDecision:
         raise NotImplementedError
+
+    # Sources whose fetch has no side effects may be prefetched (courts.prefetch) while another writer runs.
+    prefetch_ok: bool = False
+
+    def on_stored(self, item) -> None:
+        """Called by the writer once the item is stored or skipped as a duplicate (e.g. drop staged bytes)."""
 
 
 def iso_date(raw: str) -> str:

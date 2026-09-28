@@ -1,0 +1,33 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.old-bayoblg-bayern-recht-rd",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "Open Legal Data copy of a BAYERN.RECHT decision: Randnummern from <rd nr=\"N\"/>; court, date, Az from the row; source_kind aggregator",
+  "origin": "coordinator request 2026-09-28 (alternative sources for BAYERN.RECHT, bverwg.de, Länder gaps); OLD case 522086 (API, single document)",
+  "status": "active",
+  "input": {
+    "adapter": "old",
+    "fixture": "tests/courts/fixtures/old/row-522086-bayoblg-bayern-recht.json.gz",
+    "item": {
+      "source_doc_id": "522086",
+      "url": "https://de.openlegaldata.io/case/x",
+      "extra": {}
+    }
+  },
+  "expected": {
+    "court_id": "oblg-by",
+    "numbering": "rn",
+    "rn_count": 31,
+    "rn_last": "31",
+    "metadata": {
+      "source_kind": "aggregator",
+      "content_origin": "bayern_recht",
+      "numbering_source": "bayern_recht",
+      "aggregator": {
+        "old_id": 522086
+      }
+    }
+  },
+  "match": "subset"
+}

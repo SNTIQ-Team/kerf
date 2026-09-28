@@ -472,6 +472,10 @@ def parse_decision_html(body: bytes, doc: str, source_url: str, headers: dict | 
                 if blocks:
                     blocks[0].label = number or None
                     blocks[0].locator += f"#rn-{number}" if number else ""
+                if blocks and (current is None or current.name == "tenor"):
+                    # Older pages (e.g. 2006) print the reasons after the tenor under an empty heading.
+                    current = section("gruende", "court", "BVerwG HTML div.rdn after the tenor: the reasons "
+                                      "(no 'Gründe' heading on the page)")
                 add(blocks)
                 continue
             if child.name in BLOCK_TAGS and child.name not in ("div", "section") or not has_block_child(child):
@@ -488,6 +492,115 @@ def parse_decision_html(body: bytes, doc: str, source_url: str, headers: dict | 
         decision_date=decision_date, case_numbers_raw=raw_az, case_numbers=split_case_numbers(raw_az),
         decision_type=decision_type, sections=sections, ecli=ecli, court_id="bverwg", court_type="bverwg",
         jurisdiction=BRANCH, land="de", chamber=chamber, title=title, metadata=metadata, procedural=procedural)
+
+
+LEGACY_TYPES = {"BESCHLUSS": "Beschluss", "URTEIL": "Urteil", "GERICHTSBESCHEID": "Gerichtsbescheid"}
+
+
+def is_legacy_page(body: bytes, doc: str) -> bool:
+    """The bverwg.de layout before 2017 (``/entscheidungen/entscheidung.php?ent=``), e.g. in Wayback captures."""
+    text = body.decode("utf-8", "replace")
+    return 'class="artikel"' in text and f'data-ecli="ECLI:DE:BVerwG:' in text and doc in text \
+        and 'class="ent ' in text
+
+
+def parse_legacy_decision_html(body: bytes, doc: str, source_url: str, headers: dict | None = None) -> ParsedDecision:
+    """bverwg.de before 2017: ``div.artikel`` > ``h2`` (Az + ``a#ecli[data-ecli]``), ``div.ent_topbox1``
+    ("vom dd.mm.yyyy"), ``div.ent`` with ``h3.bverwg2`` (type), the Az and Vorinstanz lines, the rubrum, the
+    tenor as ``blockquote``, ``h4`` headings and ``div.ent_text`` paragraphs whose Randnummer is
+    ``<a name="N"><span class="num">N </span></a>``."""
+    soup = BeautifulSoup(decode_html(body, headers), "html.parser")
+    art = soup.find("div", class_="artikel")
+    link = art.find(id="ecli") if art is not None else None
+    ecli = squash(link.get("data-ecli") or link.get_text()) if link is not None else ""
+    if art is None or not ecli:
+        raise UpstreamFailure("unexpected_representation", f"{doc}: not a BVerwG decision page (legacy layout)",
+                              url=source_url)
+    if not re.fullmatch(r"ECLI:DE:BVerwG:\d{4}:" + re.escape(doc), ecli):
+        raise UpstreamFailure("identity_mismatch", f"{doc}: page ECLI {ecli!r}", url=source_url)
+    heading = art.find("h2")
+    raw_az = squash(re.sub(r"^BVerwG\s+", "", squash(heading.get_text(" ")).split("[")[0]))
+    when = art.find("div", class_="ent_topbox1")
+    m = re.search(r"(\d{1,2}\.\d{1,2}\.\d{4})", when.get_text(" ") if when is not None else "")
+    if not m or not raw_az:
+        raise UpstreamFailure("parse_error", f"{doc}: legacy page without date or Az", url=source_url)
+    decision_date = iso_date(m.group(1))
+    ent = art.find("div", class_="ent")
+    if ent is None:
+        raise UpstreamFailure("unexpected_representation", f"{doc}: legacy page without div.ent", url=source_url)
+    kind = ent.find("h3", class_="bverwg2")
+    decision_type = LEGACY_TYPES.get(squash(kind.get_text()).upper()) if kind is not None else None
+    decision_type = decision_type or TYPE_CODES.get(id_facts(doc)["type_code"] or "")
+    sections: list[Section] = []
+    metadata: dict = {"bverwg_id": doc, "az_published": "BVerwG " + raw_az, "layout": "bverwg.de before 2017"}
+    procedural: list[dict] = []
+    current: Section | None = None
+
+    def open_section(name: str, authorship: str, basis: str, heading_text: str | None = None) -> Section:
+        new = Section(name, authorship, basis, heading=heading_text)
+        sections.append(new)
+        return new
+
+    def paragraph_blocks(container: Tag) -> list[Block]:
+        out = []
+        for p in container.find_all("p"):
+            num = p.find("span", class_="num")
+            label = squash(num.get_text()) if num is not None else None
+            if num is not None:
+                (num.find_parent("a") or num).extract()
+            text = node_text(p)
+            if text.strip():
+                out.append(Block(text=text, label=label or None, locator=locator(p, art) + (f"#rn-{label}" if label else "")))
+        return out
+
+    for child in ent.children:
+        if not isinstance(child, Tag) or child.name in ("script", "style"):
+            continue
+        cls = classes(child)
+        if child.name == "h3":
+            continue
+        if child.name == "blockquote" and current is None:
+            current = open_section("tenor", "court", "BVerwG legacy HTML blockquote: operative part of the decision")
+            current.blocks.extend(paragraph_blocks(child))
+            continue
+        if child.name in ("h4", "h5"):
+            text = squash(child.get_text(" "))
+            key = heading_key(text)
+            if key in SECTION_HEADINGS:
+                current = open_section(*SECTION_HEADINGS[key], heading_text=text)
+            elif key in HEADNOTE_LABELS:
+                current = open_section(*HEADNOTE_LABELS[key], heading_text=text)
+            elif text and current is not None:
+                current.blocks.append(Block(text=text, kind="heading", locator=locator(child, art)))
+            continue
+        if child.name == "p" and current is None:
+            text = squash(child.get_text(" "))
+            if not text or text.replace("BVerwG ", "") == raw_az:
+                continue
+            refs = [parse_instanz(line) for line in node_text(child).split("\n") if line.strip()]
+            if refs and all(refs):
+                procedural.extend(dict(r, field="bverwg:legacy:instanzen") for r in refs)
+            elif re.search(r"\bSenat\b", text):
+                metadata["rubrum"] = text
+            else:
+                metadata.setdefault("preamble", []).append(text)
+            continue
+        if current is None:
+            current = open_section("sonstiger_langtext", "unknown", "BVerwG legacy HTML: text before the tenor")
+        if child.name == "div" and "ent_text" in cls or child.name in ("p", "blockquote", "div"):
+            if current.name == "tenor" and child.name == "div":
+                current = open_section("gruende", "court", "BVerwG legacy HTML div.ent_text after the tenor")
+            blocks = paragraph_blocks(child) if child.name != "p" else [
+                b for b in [Block(text=node_text(child), locator=locator(child, art))] if b.text.strip()]
+            current.blocks.extend(blocks)
+    sections = [s for s in sections if any(b.text.strip() for b in s.blocks)]
+    if not any(s.name not in ("titel", "leitsatz", "orientierungssatz") for s in sections):
+        raise UpstreamFailure("empty_document", f"{doc}: no decision text", url=source_url)
+    return ParsedDecision(
+        source_id=SOURCE_ID, source_doc_id=doc, source_url=source_url, court_name=COURT_NAME,
+        decision_date=decision_date, case_numbers_raw=raw_az, case_numbers=split_case_numbers(raw_az),
+        decision_type=decision_type, sections=sections, ecli=ecli, court_id="bverwg", court_type="bverwg",
+        jurisdiction=BRANCH, land="de", title=None, metadata=metadata, procedural=procedural)
 
 
 def check_identity(parsed: ParsedDecision, item) -> None:
@@ -579,7 +692,38 @@ class BverwgAdapter(Adapter):
                            content_type=capture.media_type)
         parsed = parse_decision_html(capture.body, item["source_doc_id"], capture.url, capture.headers)
         check_identity(parsed, item)
+        extra = item["extra"] if "extra" in (item.keys() if hasattr(item, "keys") else item) else None
+        extra = extra if isinstance(extra, dict) else __import__("json").loads(extra or "{}")
+        if extra.get("capture_origin"):
+            # A user-browser capture (courts.capture): re-parses keep its provenance.
+            parsed.metadata["capture_origin"] = extra["capture_origin"]
+            parsed.metadata["capture"] = {k: extra[k] for k in (
+                "captured_at", "captured_at_basis", "ingested_at", "capture_url", "canonical_url", "media_type",
+                "sha256", "ticket") if k in extra}
         return parsed
+
+
+CAPTURE_URL_RE = re.compile(r"^https?://(?:www\.)?bverwg\.de(?::443)?/(?:de/|entscheidungen/entscheidung\.php\?(?:.*&)?ent=)?"
+                            r"(?P<doc>\d{6}[A-Z]\d{1,2}[A-Z][A-Za-z]*\d{1,4}\.\d{2}\.\d+)(?:$|[&#?/])")
+
+
+def capture_canonical_url(url: str) -> tuple[str, str]:
+    """(document id, canonical URL) of a bverwg.de decision page URL (user-browser capture); ValueError else.
+    Accepted: /de/<id>, /<id>, /entscheidungen/entscheidung.php?ent=<id> (id = the ECLI ordinal)."""
+    m = CAPTURE_URL_RE.match((url or "").strip())
+    if not m or not DOC_ID_RE.match(m.group("doc")):
+        raise ValueError(f"not a single bverwg.de decision URL (https://www.bverwg.de/de/<ECLI ordinal>): {url!r}")
+    return m.group("doc"), DOC_URL.format(doc=m.group("doc"))
+
+
+def capture_parse(body: bytes, item: dict, url: str) -> ParsedDecision:
+    return BverwgAdapter().parse(Capture(body, url, "text/html", "html", {"content-type": "text/html"}), item)
+
+
+def capture_page_doc_ids(body: bytes) -> set[str]:
+    text = body.decode("utf-8", "replace")
+    return set(re.findall(r"ECLI:DE:BVerwG:\d{4}:(\d{6}[A-Z]\d{1,2}[A-Z][A-Za-z]*\d{1,4}\.\d{2}\.\d+)", text)) or \
+        set(re.findall(r'data-ecli="(\d{6}[A-Z][0-9A-Za-z.]+)"', text))
 
 
 def adapters() -> dict[str, Adapter]:

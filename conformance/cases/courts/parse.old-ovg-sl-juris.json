@@ -1,0 +1,32 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.old-ovg-sl-juris",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "Open Legal Data copy of a juris document (dl.RspDL): the juris portals' body reader, Verfahrensgang as procedural reference",
+  "origin": "coordinator request 2026-09-28 (alternative sources for BAYERN.RECHT, bverwg.de, Länder gaps); OLD case 520936",
+  "status": "active",
+  "input": {
+    "adapter": "old",
+    "fixture": "tests/courts/fixtures/old/row-520936-ovg-sl-juris.json.gz",
+    "item": {
+      "source_doc_id": "520936",
+      "url": "https://de.openlegaldata.io/case/x",
+      "extra": {}
+    }
+  },
+  "expected": {
+    "court_id": "ovg-sl",
+    "numbering": "rn",
+    "rn_count": 24,
+    "procedural": [
+      {
+        "direction": "previous",
+        "court": "Verwaltungsgericht des Saarlandes",
+        "date": "2025-11-10",
+        "case_number": "2 L 1472/25"
+      }
+    ]
+  },
+  "match": "subset"
+}
