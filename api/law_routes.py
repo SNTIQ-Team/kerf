@@ -310,26 +310,42 @@ def create_router(data_dir: Callable[[], Path],
                 "/" + resolved["sub"] if resolved["sub"] else "")
             result = materials_for_norm(data_dir(), ident)
             relation = request.query_params.get("relation")
-            if relation and relation not in {"explains", "mentions"}:
+            if relation and relation not in {"explains", "mentions", "drafts"}:
                 raise EnvelopeError("invalid_argument",
-                                    "relation must be explains or mentions")
-            explains = result.get("explains") or []
-            mentions = result.get("mentions") or []
-            evidence = ([] if relation == "mentions" else explains) + \
-                ([] if relation == "explains" else mentions)
+                                    "relation must be explains, mentions or "
+                                    "drafts")
+            status = str(result.get("status") or "unavailable")
+            if status not in {"ok", "partial"}:
+                # A missing or broken materials store is never "no material".
+                raise EnvelopeError(
+                    status if status in {"unavailable", "invalid_argument",
+                                         "integrity_check_failed",
+                                         "not_in_corpus"} else "unavailable",
+                    "; ".join(result.get("warnings") or [])
+                    or "legislative materials unavailable",
+                    searched=result.get("searched") or [],
+                    failed_components=[{"component": "materials",
+                                        "reason": status}])
+            groups = {kind: result.get(kind) or []
+                      for kind in ("explains", "mentions", "drafts")}
+            evidence = [item for kind, rows in groups.items()
+                        if relation in (None, kind) for item in rows]
             return envelope(
-                operation="law_materials", total=len(evidence),
+                status=status, operation="law_materials",
+                total=len(evidence),
                 searched=result.get("searched") or [],
+                warnings=result.get("warnings") or [],
                 applied_constraints={"canonical_id": ident,
                                      "relation": relation or "all",
                                      "relation_semantics": {
-                                         "explains": "material whose heading "
-                                         "targets this norm (draft numbering, "
-                                         "correspondence unverified)",
+                                         "explains": "fragment whose heading "
+                                         "targets this norm (draft numbering; "
+                                         "correspondence to the enacted norm "
+                                         "unverified)",
                                          "mentions": "any other reference; "
-                                         "not an official justification"}},
-                evidence=evidence,
-                explains=explains, mentions=mentions)
+                                         "never an official justification",
+                                         "drafts": "the draft wording itself"}},
+                evidence=evidence, **groups)
         return run("materials", request, norm_id, handler)
 
     return router
