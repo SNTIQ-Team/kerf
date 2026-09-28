@@ -513,6 +513,12 @@ def legacy_article_sections(text: str) -> list[dict]:
             if re.match(r"^\([\d-]+\)", clean) or re.match(
                     r"^(?:Das|Die|Der|Dem|Den|Im|In|Nach|Vor|Bei)\s|^§|^\d+\.", clean):
                 break
+            # letter-spaced glyph runs of the first command ("I n § 1 A b s …")
+            if re.match(r"^(?:I\s?n|I\s?m|D\s?e\s?m|N\s?a\s?c\s?h)\s?§", clean) or \
+                    re.match(r"^\(\s?\d+\s?\)", clean) or re.match(
+                        r"^Artikel\s+\d+[a-z]?\s+(?:Abs|Satz|wird|werden|des|der)",
+                        clean):
+                break
             heading.append(clean)
         if heading:
             joined = "\n".join(heading)
@@ -572,8 +578,165 @@ def _verified_document(document: dict, archive: LegacyArchive) -> tuple[dict, st
     return {**pinned, "articles": sections}, text
 
 
-def build_legacy_inventory(documents: list[dict], archive: LegacyArchive) -> list[dict]:
+_LEGACY_PREFIX = re.compile(
+    r"(?:(?:weitere|sonstige))?(?:änderung|aufhebung|neufassung)(?:des|der|von)")
+
+
+SPACED_FORMS: dict[str, str] = {}
+
+
+def heading_act_index(acts: list[dict]) -> dict[str, list[dict]]:
+    """Compact exact legal-name forms → corpus acts (legacy_exact_target)."""
+    index: dict[str, list[dict]] = {}
+    for act in acts:
+        forms = {}
+        for alias in act.get("aliases") or act_aliases(act):
+            for form in legal_name_forms(alias):
+                forms[re.sub(r"\s+", "", form)] = form
+        for compact, spaced in forms.items():
+            if compact:
+                index.setdefault(compact, []).append(act)
+                SPACED_FORMS.setdefault(compact, spaced)
+    return index
+
+
+_COMMAND_START = re.compile(
+    r"(?:(?:in|im|dem|nach|vor)?§|(?:in(?:der|den)?|die|der|das)"
+    r"(?:inhaltsübersicht|überschrift|inhaltsverzeichnis))")
+# "… Sozialgesetzbuch zum Jahr 2017", "… (Übergangsrecht)"
+_HEADING_QUALIFIER = re.compile(r"(?:zum(?:jahr)?\d{4}|mitwirkungvom\S*|\(.{1,40}\))")
+_COLLECTIVE = re.compile(
+    r"^(?:(?:weitere|sonstige)\s+)?(?:folgeänderungen|änderungen?\s+"
+    r"(?:weiterer|anderer|sonstiger|von)\s+(?:gesetze|vorschriften|"
+    r"rechtsvorschriften|bundesrecht|verordnungen|gesetzen)|änderungen"
+    r"(?!\s+(?:des|der|von)\s)|änderung\s+(?:kostenrechtlicher|"
+    r"sozial|steuerlicher|verfahrensrechtlicher)\S*\s+(?:gesetze|"
+    r"vorschriften))")
+
+
+def heading_named_acts(section: dict, index: dict[str, list[dict]]
+                       ) -> list[dict]:
+    """Corpus acts an article heading names exactly ("Änderung des …").
+
+    Legacy PDF text sometimes runs a single-command article's first command
+    ("I n § 1 A b s a t z …") into the heading; the exact name must then be
+    followed by a command start or by the act named again ("Das …gesetz").
+    """
+    heading = normalize_legal_name(section.get("heading"))
+    compact = re.sub(r"\s+", "", heading).rstrip("*")
+    match = _LEGACY_PREFIX.match(compact)
+    if not match:
+        return []
+    rest = compact[match.end():]
+    if rest in index:
+        return index[rest]
+    found = []
+    for form, acts in index.items():
+        if not rest.startswith(form) or len(form) < 8:
+            continue
+        tail = rest[len(form):]
+        if _COMMAND_START.match(tail) or _HEADING_QUALIFIER.fullmatch(tail):
+            found.extend(acts)
+            continue
+        for act in acts:
+            forms = {re.sub(r"\s+", "", f)
+                     for alias in act.get("aliases") or act_aliases(act)
+                     for f in legal_name_forms(alias)}
+            if any(tail.startswith(article + other) for article in
+                   ("das", "die", "der") for other in forms if other):
+                found.append(act)
+    return found
+
+
+def collective_subsections(section: dict, index: dict[str, list[dict]]
+                           ) -> list[tuple[dict, dict]]:
+    """(act, pseudo-section) for every subsection of a collective article
+    ("Änderung weiterer Gesetze", "Folgeänderungen", "Weitere Änderungen …")
+    whose opening clause names a corpus act exactly.  The pseudo-section
+    carries the act's own heading and only that subsection's commands."""
+    heading = normalize_legal_name(section.get("heading"))
+    if not _COLLECTIVE.match(heading):
+        return []
+    raw = str(section.get("text") or "")
+    marks = list(re.finditer(r"(?m)^\s*\(\s?(\d+[a-z]?)\s?\)", raw))
+    out = []
+    for position, mark in enumerate(marks):
+        end = marks[position + 1].start() if position + 1 < len(marks) else \
+            len(raw)
+        body = raw[mark.start():end]
+        clause = normalize_legal_name(body)
+        verb = re.search(r"\s(?:wird|werden)\s", clause)
+        compact = re.sub(r"\s+", "", clause[:verb.start()] if verb
+                         else clause[:400])
+        best = None
+        for form, acts in index.items():
+            if len(form) < 8:
+                continue
+            at = compact.find(form)
+            if at < 0 or not (at <= 6 or compact[max(0, at - 3):at].endswith(
+                    ("das", "die", "der", "des"))):
+                continue
+            if best is None or len(form) > len(best[0]):
+                best = (form, acts)
+        if best is None:
+            continue
+        form, acts = best
+        pseudo = {**section,
+                  "heading": f"Änderung des {SPACED_FORMS.get(form, form)}",
+                  "text": (f"Artikel {section.get('article')}\n"
+                           f"Änderung des {SPACED_FORMS.get(form, form)}\n"
+                           + re.sub(r"^\s*\(\s?\d+[a-z]?\s?\)\s*", "", body)),
+                  "legacy_collective_subsection": mark.group(1)}
+        for act in acts:
+            out.append((act, pseudo))
+    return out
+
+
+def collective_named_acts(section: dict, index: dict[str, list[dict]]
+                          ) -> list[dict]:
+    """Acts amended in a collective article ("Änderung weiterer Gesetze",
+    "Folgeänderungen"): a subsection opening "(n) Das <exact name> …"."""
+    heading = normalize_legal_name(section.get("heading"))
+    if not _COLLECTIVE.match(heading):
+        return []
+    text = normalize_legal_name(section.get("text"))
+    found = []
+    # every subsection: its opening clause up to the operative verb names
+    # the amended act ("(1) Das X …" or "(2) In § 5 des X vom … wird …")
+    marks = list(re.finditer(r"\(\s?\d+\s?[a-z]?\s?\)", text))
+    for position, mark in enumerate(marks):
+        end = marks[position + 1].start() if position + 1 < len(marks) else \
+            len(text)
+        clause = text[mark.end():end]
+        verb = re.search(r"\s(?:wird|werden)\s", clause)
+        clause = clause[:verb.start()] if verb else clause[:400]
+        compact = re.sub(r"\s+", "", clause)
+        for form, acts in index.items():
+            if len(form) < 8:
+                continue
+            at = compact.find(form)
+            if at < 0:
+                continue
+            before = compact[max(0, at - 3):at]
+            if at == 0 or before.endswith(("das", "die", "der", "des")):
+                found.extend(acts)
+    unique = {}
+    for act in found:
+        unique[str(act["slug"])] = act
+    return list(unique.values())
+
+
+def build_legacy_inventory(documents: list[dict], archive: LegacyArchive,
+                           corpus_acts: list[dict] | None = None) -> list[dict]:
+    """Candidates per article; an article whose heading names a corpus act
+    exactly is matched to it even when DIP's descriptors did not list it."""
     inventory = []
+    if corpus_acts is None:
+        try:
+            corpus_acts = load_curated_acts()
+        except FileNotFoundError:
+            corpus_acts = []
+    index = heading_act_index(corpus_acts)
     for document in documents:
         verified, _ = _verified_document(document, archive)
         scoped_documents = []
@@ -581,8 +744,37 @@ def build_legacy_inventory(documents: list[dict], archive: LegacyArchive) -> lis
             procedures = [{**proc, "matched_acts": [
                 act for act in proc["matched_acts"] if legacy_exact_target(section, act)]}
                 for proc in verified["retrospective_procedures"]]
+            known = {str(act["slug"]) for proc in procedures
+                     for act in proc["matched_acts"]}
+            def matched(act: dict, how: str) -> dict:
+                return {"slug": act["slug"], "jurabk": act["jurabk"],
+                        "long_title": act["long_title"],
+                        "descriptor_aliases": [],
+                        "aliases": sorted(act.get("aliases") or
+                                          act_aliases(act)),
+                        "discovery": how}
+            extra = [matched(act, "article_heading")
+                     for act in heading_named_acts(section, index)
+                     if str(act["slug"]) not in known]
+            extra = list({row["slug"]: row for row in extra}.values())
+            if extra and procedures:
+                procedures[0] = {**procedures[0], "matched_acts":
+                                 [*procedures[0]["matched_acts"], *extra]}
             scoped_documents.append({**verified, "articles": [section],
                                      "retrospective_procedures": procedures})
+            if not procedures:
+                continue
+            for act, pseudo in collective_subsections(section, index):
+                if str(act["slug"]) in known or any(
+                        row["slug"] == act["slug"] for row in extra):
+                    continue
+                known.add(str(act["slug"]))
+                scoped_documents.append({
+                    **verified, "articles": [pseudo],
+                    "retrospective_procedures": [{
+                        **procedures[0],
+                        "matched_acts": [matched(act, "collective_subsection")]
+                    }]})
         for row in build_inventory(scoped_documents):
             row.update({"source": SOURCE, "integrity_basis": INTEGRITY_BASIS,
                         "publisher_checksum_available": False,
@@ -619,7 +811,7 @@ def attestation_notice(root: Path | None = None) -> str | None:
     current = parser_identity(ROOT)["sha256"]
     attested = (summary.get("parser") or {}).get("sha256")
     if attested == current:
-        return (f"legacy candidates {latest.name}: archive worker attestation, "
+        return (f"legacy candidates {latest.name}: archive attestation, "
                 f"parser {current[:12]}")
     return (f"legacy candidates {latest.name}: attested by parser "
             f"{str(attested)[:12]}, deployed parser {current[:12]}; run "
@@ -639,7 +831,7 @@ def validate_legacy_candidate(candidate: dict, *, archive: LegacyArchive | None 
         if row_digest(candidate) in rows:
             return
         raise SourceIntegrityError(
-            "legacy candidate is not in the archive worker attestation")
+            "legacy candidate is not in the archive attestation")
     archive = archive or LegacyArchive()
     try:
         evidence = archive.read(candidate["legacy_document_object"],
@@ -792,9 +984,9 @@ def main() -> int:
     parser.add_argument("--capture-only", action="store_true",
                         help="VPS mode: discover and capture new sources, keep the "
                              "checkpoint, but do not publish candidates (the "
-                             "archive worker rebuilds and attests them)")
+                             "archive rebuilds and attests them)")
     parser.add_argument("--archive-root", type=Path, default=ARCHIVE_ROOT,
-                        help="legacy source store (archive worker: the pulled archive)")
+                        help="legacy source store (archive: the pulled archive)")
     parser.add_argument("--snapshot-root", type=Path, default=SNAPSHOT_ROOT,
                         help="where the rebuilt candidate snapshot is written")
     args = parser.parse_args()
@@ -855,7 +1047,7 @@ def main() -> int:
                           "stopped": stopped,
                           "captured_documents": len(state["documents"]),
                           "archive_bytes": archive.size_bytes(),
-                          "publication": "archive worker rebuild + attestation"},
+                          "publication": "archive rebuild + attestation"},
                          ensure_ascii=False, sort_keys=True))
         return 0
     summary = _publish(archive, state, start=args.start, end=args.end,
