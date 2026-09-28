@@ -95,8 +95,21 @@ def _table() -> dict:
         return {"federal": {}}
 
 
-@lru_cache(maxsize=4096)
-def resolve_act(abbreviation: str) -> ActRef:
+# Abbreviations that name a Land act only in that Land's own decisions
+# ("BV" is the Bavarian constitution in a Bavarian court, not elsewhere).
+LAND_CONTEXT_ACTS = {
+    "by": {"bv", "vfghg", "pag", "lstvg", "go", "gemo", "lkro", "bezo", "kag", "bayhsch", "bayeug", "dschg",
+           "bayvsg", "bayvwvfg", "baybo", "agvwgo", "bayabfg", "bayhg", "bayjg", "baypvg"},
+    "nw": {"vwvfgnrw", "bauonrw", "gonrw", "polgnrw", "kagnrw", "schulgnrw", "lbgnrw", "lvgnrw", "dsgnrw"},
+    "he": {"hgo", "hsog", "hbo", "hvwvfg", "hkag", "hschg", "hdsig", "hbg"},
+    "ni": {"npog", "nbauo", "nkomvg", "ndsg", "nkag", "nschg", "nbg", "nvwvfg"},
+    "hb": {"bremvwvfg", "brempolg", "bremlbo"},
+    "bb": {"bbgbo", "bbgkverf", "bbgpolg", "bbgvwvfg"},
+}
+
+
+@lru_cache(maxsize=8192)
+def resolve_act(abbreviation: str, land: str | None = None) -> ActRef:
     key = act_key(abbreviation)
     federal: dict[str, str] = _table()["federal"]
     if key in EU_ACTS:
@@ -106,12 +119,14 @@ def resolve_act(abbreviation: str) -> ActRef:
     folded = fold(abbreviation)
     parts = folded.replace("-", " ").split()
     if len(parts) >= 2 and parts[-1].strip(".") in LAND_SUFFIXES:
-        land = LAND_SUFFIXES[parts[-1].strip(".")]
-        return ActRef(f"de/{land}/{act_key(' '.join(parts[:-1]))}", key, "land_affix")
-    for prefix, land in LAND_PREFIXES.items():
+        suffix_land = LAND_SUFFIXES[parts[-1].strip(".")]
+        return ActRef(f"de/{suffix_land}/{act_key(' '.join(parts[:-1]))}", key, "land_affix")
+    for prefix, prefix_land in LAND_PREFIXES.items():
         if key.startswith(prefix) and len(key) > len(prefix) + 1 and abbreviation[:1].isupper() \
                 and abbreviation[len(prefix):len(prefix) + 1].isupper():
-            return ActRef(f"de/{land}/{key}", key, "land_affix")
+            return ActRef(f"de/{prefix_land}/{key}", key, "land_affix")
+    if land and key in LAND_CONTEXT_ACTS.get(land, ()):
+        return ActRef(f"de/{land}/{key}", key, "land_context")
     canonical = FEDERAL_ALIASES.get(key, key)
     if canonical in federal:
         resolution = "gii_catalog" if canonical == key else "alias"

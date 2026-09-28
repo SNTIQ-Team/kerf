@@ -549,6 +549,14 @@ def relink(conn: sqlite3.Connection) -> int:
       WHERE target_kind = 'decision' AND target_decision_id IS NULL AND target_case_key IS NOT NULL""")
     changed = cur.rowcount
     cur = conn.execute("""
+      UPDATE relations SET target_decision_id = (
+        SELECT min(d.id) FROM decisions d JOIN case_numbers c ON c.decision_id = d.id
+        WHERE d.court_id = relations.target_court_id AND c.case_key = relations.target_case_key
+        HAVING count(DISTINCT d.id) = 1)
+      WHERE target_kind = 'decision' AND target_decision_id IS NULL AND target_date IS NULL
+        AND target_case_key IS NOT NULL AND target_case_key <> ''""")
+    changed += cur.rowcount
+    cur = conn.execute("""
       UPDATE relations SET target_decision_id = (SELECT d.id FROM decisions d WHERE d.ecli = relations.target_id)
       WHERE target_kind = 'decision' AND target_decision_id IS NULL AND target_id LIKE 'ECLI:%'""")
     conn.commit()

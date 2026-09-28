@@ -101,3 +101,36 @@ def sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *,
     finally:
         counts["requests"] = http.requests_made - requests_before
         finish_run(conn, run_id, adapter.source_id, status, counts, notes)
+
+
+def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None) -> dict:
+    """Re-parse stored raw captures with the current parser (no network).
+
+    Decisions whose text and parser version are unchanged are left alone; a
+    capture that no longer parses is recorded as a typed failure and the old
+    record is kept.
+    """
+    from .sources.base import Capture
+    from .store import read_capture
+    counts = {"reparsed": 0, "unchanged": 0, "failed": 0}
+    rows = conn.execute("""SELECT d.id, d.content_hash, d.capture_path, d.media_type, d.source_url, i.*
+                           FROM decisions d JOIN source_items i
+                             ON i.source_id = d.source_id AND i.source_doc_id = d.source_doc_id
+                           WHERE d.source_id = ?""", (adapter.source_id,)).fetchall()
+    for row in rows:
+        try:
+            body = read_capture(row["capture_path"], row["content_hash"], home)
+            extension = row["capture_path"].rsplit(".", 2)[-2]
+            capture = Capture(body, row["source_url"], row["media_type"] or "", extension)
+            parsed = adapter.parse(capture, row)
+            _, changed = store_decision(conn, parsed, content_hash=row["content_hash"],
+                                        capture_path=row["capture_path"], media_type=row["media_type"] or "")
+            counts["reparsed" if changed else "unchanged"] += 1
+        except UpstreamFailure as failure:
+            counts["failed"] += 1
+            log(f"{adapter.source_id}: reparse {row['id']}: {failure.kind}: {failure.detail[:160]}")
+        except Exception as exc:  # keep the old record; report the parser defect
+            counts["failed"] += 1
+            log(f"{adapter.source_id}: reparse {row['id']}: {type(exc).__name__}: {exc}")
+    relink(conn)
+    return counts
