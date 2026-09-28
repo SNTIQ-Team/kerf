@@ -23,6 +23,7 @@ from ..courtids import priority, resolve as resolve_court
 from ..errors import UpstreamFailure
 from ..http import PoliteHttp
 from ..model import Block, ParsedDecision, Section
+from ..hostgov import Concurrency
 from .base import Adapter, Capture, Listing, decode_html, iso_date, squash
 
 SEARCH_URL = "https://nrwesuche.justiz.nrw.de/index.php"
@@ -258,6 +259,7 @@ class NrwAdapter(Adapter):
     base_url = "https://nrwe.justiz.nrw.de"
     land = "nw"
     adapter_name = "nrwe-html"
+    concurrency = Concurrency(4, 8)   # operator decision 2026-09-28
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         today = date.today().strftime("%d.%m.%Y")

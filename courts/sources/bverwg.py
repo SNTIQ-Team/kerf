@@ -37,7 +37,7 @@ from ..detect import ensure_not_blocked
 from ..errors import UpstreamFailure
 from ..http import PoliteHttp
 from ..model import Block, ParsedDecision, Section
-from .base import Adapter, Capture, Listing, decode_html, iso_date, squash
+from .base import OPERATOR_DECISION_DATE, Adapter, Capture, Listing, decode_html, iso_date, squash
 
 SOURCE_ID = "bverwg"
 BASE = "https://www.bverwg.de"
@@ -516,7 +516,13 @@ class BverwgAdapter(Adapter):
     base_url = BASE
     land = "de"
     adapter_name = "bverwg-html"
-    min_interval = 3.0  # small court site (robots.txt Crawl-delay, if any, still applies)
+    min_interval = 3.0  # small court site: per slot; at most 2 slots (base.Adapter.concurrency)
+    robots_policy = "ignore_by_operator_decision"
+    policy_decided_at = OPERATOR_DECISION_DATE
+    policy_basis = ("operator decision (user), 2026-09-28: the Crawl-delay of www.bverwg.de/robots.txt is not "
+                    "applied; at most 2 documents in flight (adaptive, 1 request per 3 s per slot); only items RII "
+                    "does not already list are fetched (in practice 2002-2009 and gaps); bot challenges, CAPTCHAs "
+                    "and logins are never bypassed; 429/503 and Retry-After are honoured")
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         if not wants_court(courts):

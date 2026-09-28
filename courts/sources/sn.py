@@ -1050,6 +1050,13 @@ class SachsenAdapter(Adapter):
                        media_type="application/zip", extension="zip", headers=pdf.headers)
 
     def _fetch_esamos(self, http: PoliteHttp, item) -> Capture:
+        # The ESAMOSplus search form is shared state: one fetch at a time (the OVG route is stateless).
+        import threading
+        lock = self.__dict__.setdefault("_esamos_lock", threading.Lock())
+        with lock:
+            return self._fetch_esamos_locked(http, item)
+
+    def _fetch_esamos_locked(self, http: PoliteHttp, item) -> Capture:
         key = item_extra(item).get("doc_key") or str(item["source_doc_id"]).split(":", 1)[1]
         if not item["listed_date"]:
             raise UpstreamFailure("parse_error", f"ESAMOSplus document {key!r} without listed date cannot be "

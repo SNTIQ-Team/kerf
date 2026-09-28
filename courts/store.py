@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -71,7 +72,7 @@ CREATE TABLE IF NOT EXISTS source_items(
   listed_case_numbers TEXT,
   listed_modified TEXT,
   priority INTEGER NOT NULL DEFAULT 1,
-  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','stored','failed','skipped')),
+  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','claimed','stored','failed','skipped')),
   fetched_modified TEXT,
   content_hash TEXT,
   decision_id TEXT,
@@ -80,9 +81,12 @@ CREATE TABLE IF NOT EXISTS source_items(
   failure_kind TEXT,
   failure_detail TEXT,
   extra TEXT NOT NULL DEFAULT '{}',
+  claimed_by TEXT,
+  lease_until TEXT,
   PRIMARY KEY(source_id, source_doc_id)
 );
-CREATE INDEX IF NOT EXISTS source_items_frontier ON source_items(source_id, state, priority, listed_date);
+CREATE INDEX IF NOT EXISTS source_items_claim ON source_items(source_id, state, priority, listed_date DESC,
+                                                               source_doc_id);
 CREATE TABLE IF NOT EXISTS decisions(
   id TEXT PRIMARY KEY,
   ecli TEXT,
@@ -230,7 +234,8 @@ SELECT s.source_id, s.label, s.land, s.status, s.status_reason, s.upstream_liste
        (SELECT min(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_from,
        (SELECT max(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_to,
        (SELECT count(*) FROM source_items i WHERE i.source_id = s.source_id AND i.state = 'failed') AS failed_items,
-       (SELECT count(*) FROM source_items i WHERE i.source_id = s.source_id AND i.state = 'pending') AS pending_items,
+       (SELECT count(*) FROM source_items i WHERE i.source_id = s.source_id AND i.state IN ('pending','claimed'))
+         AS pending_items,
        (SELECT count(*) FROM source_items i WHERE i.source_id = s.source_id AND i.state = 'skipped') AS duplicate_items,
        s.last_sync_started, s.last_sync_finished, s.last_sync_status
 FROM sources s;
@@ -245,6 +250,23 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _wal(conn: sqlite3.Connection) -> None:
+    """Switch to WAL.  On a new file several connections may try at once; SQLite answers SQLITE_BUSY at once
+    for the journal-mode change (the busy handler is not consulted), so it is retried (the flaky
+    test_parallel_init_db_does_not_race: 'database is locked' in ~4 % of runs)."""
+    for attempt in range(200):
+        try:
+            if conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal":
+                return
+            conn.execute("PRAGMA journal_mode=WAL")
+            return
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc) and "busy" not in str(exc):
+                raise
+            time.sleep(0.01 + 0.005 * attempt)
+    conn.execute("PRAGMA journal_mode=WAL")
+
+
 def connect(path: Path | None = None, *, readonly: bool = False, threads: bool = False) -> sqlite3.Connection:
     """``threads``: the connection is shared by the source threads of the one writer process
     (wrap it in courts.writer.SharedConnection)."""
@@ -254,7 +276,7 @@ def connect(path: Path | None = None, *, readonly: bool = False, threads: bool =
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(path, timeout=120, check_same_thread=not threads)
-        conn.execute("PRAGMA journal_mode=WAL")
+        _wal(conn)
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA journal_size_limit=268435456")  # the WAL left after a checkpoint (courts.writer)
     conn.isolation_level = None  # explicit BEGIN/COMMIT only
@@ -318,6 +340,80 @@ def create_schema(conn: sqlite3.Connection, *, triggers: bool = True, indexes: b
             conn.execute(statement + "END;")
 
 
+def _upgrade_source_items(conn: sqlite3.Connection) -> None:
+    """v4 addition (2026-09-28): claims.  ``state`` admits ``claimed``; ``claimed_by``/``lease_until`` name the
+    fetcher and the lease.  The CHECK list changes, so the table is rebuilt (rows and order kept)."""
+    columns = [r[1] for r in conn.execute("PRAGMA table_info(source_items)")]
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute("DROP VIEW IF EXISTS source_coverage")
+        conn.execute("DROP INDEX IF EXISTS source_items_frontier")
+        conn.execute("ALTER TABLE source_items RENAME TO source_items_old")
+        statement = next(s for s in schema_statements() if s.startswith("CREATE TABLE IF NOT EXISTS source_items("))
+        conn.execute(statement)
+        cols = ", ".join(columns)
+        conn.execute(f"INSERT INTO source_items({cols}) SELECT {cols} FROM source_items_old ORDER BY rowid")
+        conn.execute("DROP TABLE source_items_old")
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def claim_items(conn: sqlite3.Connection, source_id: str, worker: str, n: int, *, lease_seconds: int = 1800,
+                courts: list[str] | None = None, since: str | None = None,
+                retry_failed: bool = False) -> list[sqlite3.Row]:
+    """Atomically claim the next ``n`` items of a source in frontier order (priority, newest first):
+    ``state='claimed'``, ``claimed_by=worker``, ``lease_until`` = now + lease.  One UPDATE … RETURNING in the
+    writer, so no item is ever handed to two fetchers."""
+    states = ("pending", "failed") if retry_failed else ("pending",)
+    where = [f"source_id = ? AND state IN ({','.join('?' * len(states))})"]
+    params: list = [source_id, *states]
+    if since:
+        where.append("(listed_date IS NULL OR listed_date >= ?)")
+        params.append(since)
+    if courts:
+        where.append("(" + " OR ".join("lower(listed_court) LIKE ?" for _ in courts) + ")")
+        params += [c.lower() + "%" for c in courts]
+    lease = datetime.now(timezone.utc).timestamp() + lease_seconds
+    lease_iso = datetime.fromtimestamp(lease, timezone.utc).replace(microsecond=0).isoformat()
+    rows = conn.execute(f"""UPDATE source_items SET state='claimed', claimed_by=?, lease_until=?
+                            WHERE rowid IN (SELECT rowid FROM source_items WHERE {' AND '.join(where)}
+                                            ORDER BY priority ASC, listed_date DESC, source_doc_id ASC LIMIT ?)
+                            RETURNING *""", (worker, lease_iso, *params, n)).fetchall()
+    conn.commit()
+    return sorted(rows, key=lambda r: (r["priority"], _neg(r["listed_date"]), r["source_doc_id"]))
+
+
+def _neg(value: str | None) -> tuple:
+    return (1, "") if value is None else (0, "".join(chr(0x10FFFF - ord(c)) for c in value))
+
+
+def release_claims(conn: sqlite3.Connection, *, worker: str | None = None, keys: list[tuple[str, str]] | None = None,
+                   expired_only: bool = False) -> int:
+    """Claimed items back to ``pending``: all (at start-up the writer lock proves no claim is alive), those of
+    one worker, the given (source_id, source_doc_id) keys, or only those whose lease has expired."""
+    if keys:
+        count = 0
+        for source_id, doc in keys:
+            count += conn.execute("UPDATE source_items SET state='pending', claimed_by=NULL, lease_until=NULL "
+                                  "WHERE source_id=? AND source_doc_id=? AND state='claimed'",
+                                  (source_id, doc)).rowcount
+        conn.commit()
+        return count
+    sql = "UPDATE source_items SET state='pending', claimed_by=NULL, lease_until=NULL WHERE state='claimed'"
+    params: list = []
+    if worker:
+        sql += " AND claimed_by=?"
+        params.append(worker)
+    if expired_only:
+        sql += " AND lease_until < ?"
+        params.append(utcnow())
+    count = conn.execute(sql, params).rowcount
+    conn.commit()
+    return count
+
+
 def _init_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version not in (0, 1, 2, 3, SCHEMA_VERSION):
@@ -336,6 +432,9 @@ def _init_db(conn: sqlite3.Connection) -> None:
         for column, definition in SOURCE_COLUMNS_V2.items():
             if column not in columns:
                 conn.execute(f"ALTER TABLE sources ADD COLUMN {column} {definition}")
+    item_columns = {r[1] for r in conn.execute("PRAGMA table_info(source_items)")}
+    if item_columns and "claimed_by" not in item_columns:
+        _upgrade_source_items(conn)
     paragraph_columns = {r[1] for r in conn.execute("PRAGMA table_info(paragraphs)")}
     if version in (1, 2, 3) and "id" in paragraph_columns:
         # v3 -> v4 (courts.schema_v4): the live corpus is migrated with `python -m courts migrate-schema`
@@ -427,7 +526,8 @@ def record_failure(conn: sqlite3.Connection, run_id: int | None, source_id: str,
                   failure.status, now))
     if source_doc_id:
         conn.execute("""UPDATE source_items SET state='failed', attempts=attempts+1, last_attempt=?,
-                        failure_kind=?, failure_detail=? WHERE source_id=? AND source_doc_id=?""",
+                        failure_kind=?, failure_detail=?, claimed_by=NULL, lease_until=NULL
+                        WHERE source_id=? AND source_doc_id=?""",
                      (now, failure.kind, failure.detail[:500], source_id, source_doc_id))
     conn.commit()
 
@@ -458,6 +558,7 @@ def _upsert_rows(conn: sqlite3.Connection, rows: list[tuple]) -> None:
                           state=CASE WHEN excluded.listed_modified IS NOT NULL
                                       AND source_items.fetched_modified IS NOT NULL
                                       AND excluded.listed_modified <> source_items.fetched_modified
+                                      AND source_items.state <> 'claimed'
                                      THEN 'pending' ELSE source_items.state END,
                           listed_modified=excluded.listed_modified""", rows)
 
@@ -839,8 +940,8 @@ def _delete_decision(conn: sqlite3.Connection, decision_id: str) -> None:
 
 def _mark_item(conn: sqlite3.Connection, parsed: ParsedDecision, decision_id: str, content_hash: str) -> None:
     conn.execute("""UPDATE source_items SET state='stored', decision_id=?, content_hash=?, attempts=attempts+1,
-                    last_attempt=?, fetched_modified=listed_modified, failure_kind=NULL, failure_detail=NULL
-                    WHERE source_id=? AND source_doc_id=?""",
+                    last_attempt=?, fetched_modified=listed_modified, failure_kind=NULL, failure_detail=NULL,
+                    claimed_by=NULL, lease_until=NULL WHERE source_id=? AND source_doc_id=?""",
                  (decision_id, content_hash, utcnow(), parsed.source_id, parsed.source_doc_id))
 
 

@@ -19,6 +19,7 @@ from ..courtids import FEDERAL, priority
 from ..errors import UpstreamFailure
 from ..http import PoliteHttp
 from ..model import Block, ParsedDecision, Section
+from ..hostgov import Concurrency
 from .base import OPERATOR_DECISION_BASIS, OPERATOR_DECISION_DATE, Adapter, Capture, Listing, iso_date, squash
 
 BASE = "https://www.rechtsprechung-im-internet.de"
@@ -221,6 +222,7 @@ class RiiAdapter(Adapter):
     policy_decided_at = OPERATOR_DECISION_DATE
     policy_basis = OPERATOR_DECISION_BASIS
     min_interval = 1.1
+    concurrency = Concurrency(3, 6)   # operator decision 2026-09-28
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         response = http.get(TOC_URL, timeout=600)
