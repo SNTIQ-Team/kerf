@@ -4,6 +4,7 @@ import hashlib
 import json
 import sqlite3
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -242,6 +243,41 @@ def test_materializes_json_manifest_and_two_independent_date_axes(
                for row in current)
     assert len(act["norm_intervals"]) == len(act["intervals"])
     assert all("text" not in row for row in act["norm_intervals"])
+
+
+def test_public_export_can_skip_unused_norm_expansion_without_changing_output(
+        evidence: dict, monkeypatch) -> None:
+    import retrospective_history as history_module
+    full = materialize_history(evidence['observations'], evidence['states'], evidence['reviews'])
+    explicit_full = materialize_history(evidence['observations'], evidence['states'], evidence['reviews'], include_norm_intervals=True)
+    assert canonical_json_bytes(full) == canonical_json_bytes(explicit_full)
+    before_states = canonical_json_bytes(evidence['states'])
+    def forbidden(*args):
+        pytest.fail('public export must never allocate the unused per-norm expansion')
+    monkeypatch.setattr(history_module, '_norm_intervals', forbidden)
+    compact = materialize_history(evidence['observations'], evidence['states'], evidence['reviews'], include_norm_intervals=False)
+    assert compact['norm_intervals_materialized'] is False
+    assert all(act['norm_intervals'] == [] for act in compact['acts'].values())
+    objects = _objects(evidence['states'])
+    previous = build_public_manifest(full, evidence['states'], objects, [_candidate()], built_at='2026-07-16T12:00:00Z')
+    for prior in (None, previous):
+        expected = build_public_manifest(full, evidence['states'], objects, [_candidate()], built_at='2026-07-17T12:00:00Z', previous=prior)
+        actual = build_public_manifest(compact, evidence['states'], objects, [_candidate()], built_at='2026-07-17T12:00:00Z', previous=prior)
+        assert canonical_json_bytes(actual) == canonical_json_bytes(expected)
+        assert _digest(actual) == _digest(expected)
+    assert canonical_json_bytes(evidence['states']) == before_states
+
+
+def test_repeated_observations_validate_each_immutable_state_only_once(evidence: dict, monkeypatch) -> None:
+    import retrospective_history as history_module
+    original = history_module._validate_state
+    calls = Counter()
+    def counted(digest, value):
+        calls[digest] += 1
+        return original(digest, value)
+    monkeypatch.setattr(history_module, '_validate_state', counted)
+    materialize_history(evidence['observations'], evidence['states'], evidence['reviews'])
+    assert calls == Counter({digest: 1 for digest in evidence['states']})
 
 
 def test_bitemporal_checkout_does_not_leak_later_review(evidence: dict) -> None:

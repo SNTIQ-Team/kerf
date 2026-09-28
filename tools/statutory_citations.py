@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sqlite3
+from bisect import bisect_left
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -26,29 +27,57 @@ SCHEMA_VERSION = 1
 MAX_ALIAS_WINDOW = 180
 MAX_EXCERPT = 360
 MAX_RANGE_EXPANSION = 200
+BLOCK_BOUNDARY = "\x00"
+READER_BLOCK_TAGS = frozenset({
+    "p", "div", "ul", "ol", "li", "dl", "dt", "dd", "table", "thead",
+    "tbody", "tr", "td", "th", "blockquote", "h1", "h2", "h3", "h4",
+    "h5", "h6", "img", "source-file", "pre", "caption",
+})
 
 DESIGNATOR_RE = re.compile(
     r"^(?P<marker>§|Art(?:ikel)?\.?)\s*(?P<number>\d+[a-zA-Z]*)$",
     re.IGNORECASE,
 )
 CITATION_START_RE = re.compile(
-    r"(?<![\w§])(?P<marker>§§|§|Art(?:ikel)?\.?)\s*(?=\d)",
+    r"(?<![\w§])(?P<marker>§§|§|Art(?:ikel[sn]?)?\.?)\s*(?=\d)",
     re.IGNORECASE,
 )
 BASE_RE = re.compile(r"\d+[a-zA-Z]*")
 PINPOINT_LABEL_RE = re.compile(
-    r"\s+(?:Abs(?:atz|ätze)?\.?|Satz|Sätze|Nr\.?|Nummer(?:n)?|"
-    r"Buchst(?:abe)?\.?|Halbsatz|Alternative)\s*",
+    r"\s+(?:Abs(?:atz|ätze)?\.?|Unterabs(?:atz|ätze)?\.?|Satz|Sätze|S\.|"
+    r"Nrn?\.?|Nummer(?:n)?|(?:Doppel|Dreifach)?Buchst(?:aben?)?\.?|"
+    r"Halbsatz|Alternative)\s*",
     re.IGNORECASE,
 )
 PINPOINT_VALUE_RE = re.compile(
-    r"(?:\d+[a-zA-Z]*|[a-zA-Z])"
-    r"(?:\s*(?:,|bis|und|oder)\s*(?:\d+[a-zA-Z]*|[a-zA-Z]))*",
+    r"\d+[a-zA-Z]*(?!\w)"
+    r"(?:\s*(?:,|bis|und|oder)\s*\d+[a-zA-Z]*(?!\w))*",
     re.IGNORECASE,
 )
-NORM_SEPARATOR_RE = re.compile(
-    r"\s*(?P<separator>,|bis(?:\s+einschließlich)?|und|oder)\s*",
+PINPOINT_SINGLE_VALUE_RE = re.compile(r"\d+[a-zA-Z]*(?!\w)")
+PINPOINT_LETTER_STOPWORDS = (
+    r"(?:der|die|das|den|dem|des|ein|und|oder|wie|mit|von|vom|zur|zum|für|"
+    r"auf|aus|bei|bis|ist|als|im|in|am|an|zu|je|ob|es|er|sie)"
+)
+PINPOINT_LETTER_VALUES_RE = re.compile(
+    rf"(?!{PINPOINT_LETTER_STOPWORDS}\b)[a-zA-Z]{{1,3}}(?!\w)"
+    rf"(?:\s*(?:,|bis|und|oder)\s*(?!{PINPOINT_LETTER_STOPWORDS}\b)"
+    r"[a-zA-Z]{1,3}(?!\w))*",
     re.IGNORECASE,
+)
+PINPOINT_LABEL_SEPARATOR_RE = re.compile(r"\s*(?:,|und|oder)(?=\s)", re.I)
+CONNECTED_CITATION_RE = re.compile(
+    r"\s*(?:in\s+Verbindung\s+mit|i\.\s*V\.\s*m\.|"
+    r"(?:,|und|oder|sowie)(?:\s+die)?)\s*", re.I,
+)
+NORM_SEPARATOR_RE = re.compile(
+    r"\s*(?P<separator>,|bis(?:\s+einschließlich)?|[-–—]|und|oder|sowie)\s*",
+    re.IGNORECASE,
+)
+FULL_DATE_RE = re.compile(
+    r"\d{1,2}\.\s*(?:Januar|Februar|März|April|Mai|Juni|Juli|August|"
+    r"September|Oktober|November|Dezember|(?:0?[1-9]|1[0-2])\.)"
+    r"\s*\d{4}(?!\d)", re.IGNORECASE,
 )
 ALIAS_PREFIX_RE = re.compile(
     r"^(?:(?:des|der|dem|den|die|das|nach|gemäß|in|im|von|vom|"
@@ -72,6 +101,21 @@ UNKNOWN_SHORT_ALIAS_RE = re.compile(
     r"(?:[A-ZÄÖÜ]{2,12}|"
     r"[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9/.-]*[A-ZÄÖÜ]"
     r"[A-Za-zÄÖÜäöüß0-9/.-]*)(?:\s+[IVXLCDM]+)?)"
+)
+EU_INSTRUMENT_ALIAS_RE = re.compile(
+    r"(?:Verordnung|Richtlinie)\s*"
+    r"(?:(?:\((?:EU|EG|EWG)\)\s*(?:Nr\.?\s*)?"
+    r"\d{1,4}/\d{1,4})|(?:\d{4}/\d{1,4}/(?:EU|EG|EWG)))"
+    r"(?![\w/])",
+    re.IGNORECASE,
+)
+EU_INSTRUMENT_PREFIX_RE = re.compile(
+    r"(?:Verordnung|Richtlinie)\s*\((?:EU|EG|EWG)\)", re.IGNORECASE,
+)
+ORDINAL_BOOK_RE = re.compile(
+    r"(?:Ersten|Zweiten|Dritten|Vierten|Fünften|Sechsten|Siebten|Achten|"
+    r"Neunten|Zehnten|Elften|Zwölften|Dreizehnten|Vierzehnten)\s+Buches\b",
+    re.IGNORECASE,
 )
 
 
@@ -193,16 +237,64 @@ class AliasMatch:
     known: bool
 
 
-def _parse_pinpoints(text: str, position: int) -> tuple[int, str | None]:
+def _pinpoint_level(label: str) -> int:
+    value = label.strip().casefold().rstrip(".")
+    if value.startswith(("abs", "unterabs")):
+        return 1
+    if value in {"satz", "sätze", "s"}:
+        return 2
+    if value == "halbsatz":
+        return 3
+    if value.startswith(("nr", "nummer")):
+        return 4
+    if value.startswith("buchst"):
+        return 5
+    return 6
+
+
+def _parse_pinpoints(text: str, position: int, *,
+                     plural_heads: bool = False,
+                     require_another_head: bool = False,
+                     ) -> tuple[int, str | None]:
     start = position
     while True:
         label = PINPOINT_LABEL_RE.match(text, position)
+        if not label and position > start:
+            separator = PINPOINT_LABEL_SEPARATOR_RE.match(text, position)
+            if separator:
+                label = PINPOINT_LABEL_RE.match(text, separator.end())
         if not label:
             break
-        value = PINPOINT_VALUE_RE.match(text, label.end())
+        # A plural section designator introduces a list of section heads.
+        # Bare numeric continuations therefore belong to that list; repeated
+        # pinpoint labels remain attached to the current head.  Singular
+        # sections retain ordinary Absatz/Satz lists.  Letter lists cannot
+        # be numeric section heads and remain together in either case.
+        if re.match(r"\s*(?:Doppel|Dreifach)?Buchst", label.group(), re.I):
+            value_pattern = PINPOINT_LETTER_VALUES_RE
+        elif require_another_head and not re.match(
+                r"\s*(?:Absätze|Unterabsätze|Sätze|Nummern|Nrn)\b",
+                label.group(), re.I):
+            value_pattern = PINPOINT_SINGLE_VALUE_RE
+        else:
+            value_pattern = PINPOINT_VALUE_RE
+        value = value_pattern.match(text, label.end())
         if not value:
             break
-        position = value.end()
+        value_end = value.end()
+        following_label = PINPOINT_LABEL_RE.match(text, value_end)
+        if plural_heads and value_pattern is PINPOINT_VALUE_RE \
+                and following_label and _pinpoint_level(
+                    following_label.group()) <= _pinpoint_level(label.group()):
+            # A following list item carrying its own pinpoint starts a new
+            # section head.  A plain trailing Absatz list stays attached to
+            # the established head ("§§ 23 und 24 Abs. 1 und 2").
+            items = list(re.finditer(
+                r"\s*(?:,|und|oder|sowie)\s*\d+[a-zA-Z]*$",
+                value.group(), re.I))
+            if items:
+                value_end = value.start() + items[-1].start()
+        position = value_end
     if position == start:
         return position, None
     return position, _clean(text[start:position])
@@ -222,39 +314,47 @@ def parse_citation_groups(text: str) -> list[CitationGroup]:
             search_from = match.end()
             continue
         first_norm = f"{marker} {first.group().casefold()}"
-        position, pinpoint_tail = _parse_pinpoints(text, first.end())
-        if pinpoint_tail:
-            specs = [TargetSpec(
-                first_norm,
-                pinpoint=f"{first_norm} {pinpoint_tail}",
-            )]
-        else:
-            specs = [TargetSpec(first_norm)]
-            while True:
-                separator = NORM_SEPARATOR_RE.match(text, position)
-                if not separator:
+        plural_heads = match.group("marker") == "§§"
+        position, pinpoint_tail = _parse_pinpoints(
+            text, first.end(), plural_heads=plural_heads,
+            require_another_head=plural_heads)
+        specs = [TargetSpec(first_norm, pinpoint=(
+            f"{first_norm} {pinpoint_tail}" if pinpoint_tail else None))]
+        while True:
+            separator = NORM_SEPARATOR_RE.match(text, position)
+            if not separator:
+                break
+            following_at = separator.end()
+            repeated_marker = CITATION_START_RE.match(text, following_at)
+            if repeated_marker:
+                repeated_kind = "§" if repeated_marker.group(
+                    "marker").startswith("§") else "Art."
+                if repeated_kind != marker:
                     break
-                following_at = separator.end()
-                repeated_marker = CITATION_START_RE.match(text, following_at)
-                if repeated_marker:
-                    repeated_kind = "§" if repeated_marker.group(
-                        "marker").startswith("§") else "Art."
-                    if repeated_kind != marker:
-                        break
-                    following_at = repeated_marker.end()
-                following = BASE_RE.match(text, following_at)
-                if not following:
+                following_at = repeated_marker.end()
+            elif FULL_DATE_RE.match(text, following_at):
+                # A temporal qualifier such as "§ 176 bis einschließlich
+                # 31. Dezember 2012" does not introduce another norm head.
+                break
+            following = BASE_RE.match(text, following_at)
+            if not following:
+                break
+            following_norm = f"{marker} {following.group().casefold()}"
+            following_end, following_pinpoint = _parse_pinpoints(
+                text, following.end(), plural_heads=plural_heads)
+            word = separator.group("separator").casefold()
+            if word.startswith("bis") or word in {"-", "–", "—"}:
+                previous = specs[-1]
+                if previous.end is not None or previous.pinpoint:
                     break
-                following_norm = f"{marker} {following.group().casefold()}"
-                word = separator.group("separator").casefold()
-                if word.startswith("bis"):
-                    previous = specs[-1]
-                    if previous.end is not None:
-                        break
-                    specs[-1] = TargetSpec(previous.start, following_norm)
-                else:
-                    specs.append(TargetSpec(following_norm))
-                position = following.end()
+                specs[-1] = TargetSpec(previous.start, following_norm, (
+                    f"{following_norm} {following_pinpoint}"
+                    if following_pinpoint else None))
+            else:
+                specs.append(TargetSpec(following_norm, pinpoint=(
+                    f"{following_norm} {following_pinpoint}"
+                    if following_pinpoint else None)))
+            position = following_end
         groups.append(CitationGroup(
             start=match.start(), end=position, marker=marker,
             raw=_clean(text[match.start():position]), specs=tuple(specs),
@@ -307,7 +407,7 @@ def _alias_segment(text: str, group: CitationGroup) -> tuple[str, int]:
     next_marker = CITATION_START_RE.search(text, group.end)
     if next_marker:
         end = min(end, next_marker.start())
-    for separator in (";", ".", ":", "\n"):
+    for separator in (";", ".", ":", "\n", BLOCK_BOUNDARY):
         found = text.find(separator, group.end, end)
         if found >= 0:
             end = min(end, found)
@@ -316,7 +416,19 @@ def _alias_segment(text: str, group: CitationGroup) -> tuple[str, int]:
 
 def _match_alias(text: str, group: CitationGroup,
                  targets: dict[str, set[str]],
-                 patterns: list[tuple[str, re.Pattern]]) -> AliasMatch | None:
+                 patterns: list[tuple[str, re.Pattern]],
+                 source_jurabk: str = "") -> AliasMatch | None:
+    # Inspect explicit foreign instruments before sentence segmentation: the
+    # period in "Nr." is part of an EU identifier, not a sentence boundary.
+    raw_segment = text[group.end:group.end + MAX_ALIAS_WINDOW]
+    prefix = UNKNOWN_ALIAS_PREFIX_RE.match(raw_segment)
+    prefix_end = prefix.end() if prefix else 0
+    eu = (EU_INSTRUMENT_ALIAS_RE.match(raw_segment, prefix_end)
+          or EU_INSTRUMENT_PREFIX_RE.match(raw_segment, prefix_end))
+    if eu:
+        alias = _clean(eu.group())
+        return AliasMatch(alias, (alias,), group.end + eu.end(), False)
+
     segment, absolute_start = _alias_segment(text, group)
     candidates: list[tuple[int, int, str, re.Match]] = []
     for alias_key, pattern in patterns:
@@ -332,10 +444,16 @@ def _match_alias(text: str, group: CitationGroup,
                                alias_key, found))
     if candidates:
         _, _, alias_key, found = min(candidates)
+        alias_end = found.end()
+        # Include the closing delimiter of a matched parenthesized alias,
+        # but leave an enclosing prose parenthesis outside the citation.
+        if found.start() > 0 and segment[found.start() - 1] == "(" \
+                and segment[alias_end:alias_end + 1] == ")":
+            alias_end += 1
         return AliasMatch(
             text=_clean(found.group()),
             target_jurabks=tuple(sorted(targets[alias_key], key=str.casefold)),
-            end=absolute_start + found.end(),
+            end=absolute_start + alias_end,
             known=True,
         )
 
@@ -345,6 +463,18 @@ def _match_alias(text: str, group: CitationGroup,
     prefix = UNKNOWN_ALIAS_PREFIX_RE.match(segment)
     position = prefix.end() if prefix else 0
     remainder = segment[position:]
+    book = ORDINAL_BOOK_RE.match(remainder)
+    if book:
+        alias = _clean(book.group())
+        target = alias
+        if re.match(r"^SGB\s", source_jurabk, re.IGNORECASE):
+            target = next((target for _, _, genitive, target in _SGB_ALIASES
+                           if alias.casefold() ==
+                           f"{genitive} Buches".casefold()), alias)
+        return AliasMatch(
+            alias, (target,), absolute_start + position + book.end(),
+            target != alias,
+        )
     if re.match(r"(?:dies(?:es|er|em)|vorliegend(?:es|er|em))\s+"
                 r"(?:Gesetz(?:es)?|Verordnung)", remainder, re.IGNORECASE):
         return None
@@ -381,7 +511,93 @@ def _citation_id(key: tuple) -> str:
     return "cite:" + hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
-def _act_inventory(acts: Iterable[dict]) -> tuple[list[dict], dict[str, list[dict]]]:
+def _structured_parse_body(text: str, nodes: list[dict]
+                           ) -> tuple[str, list[int], list[dict]]:
+    """Insert parser-only boundaries at verified source block edges.
+
+    Inline runs stay contiguous. The positions let every exported quote and
+    excerpt refer to the original canonical text, never the temporary copy.
+    """
+    chunks: list[str] = []
+    boundaries: set[int] = set()
+    raw_scopes: list[tuple[int, int, str]] = []
+    position = 0
+
+    def leading_inline(children: list[dict]) -> str:
+        result: list[str] = []
+        for child in children:
+            if child["type"] == "text":
+                result.append(child["text"])
+            elif child["tag"] in READER_BLOCK_TAGS:
+                break
+            else:
+                result.append(leading_inline(child["children"]))
+        return "".join(result)
+
+    def visit(children: list[dict]) -> None:
+        nonlocal position
+        for node in children:
+            if node["type"] == "text":
+                chunks.append(node["text"])
+                position += len(node["text"])
+            else:
+                block = (node["tag"] in READER_BLOCK_TAGS
+                         or node.get("attrs", {}).get("role") in {"sentence", "footnote"})
+                start = position
+                if block:
+                    boundaries.add(position)
+                visit(node["children"])
+                if block:
+                    boundaries.add(position)
+                if node["tag"] in {"dd", "li"}:
+                    heading = re.match(
+                        r"\s*(?:aus|nach)\s+(?:dem|der)\s+"
+                        r"(?P<law>[^:\n]{1,180}):",
+                        leading_inline(node["children"]), re.I)
+                    if heading:
+                        raw_scopes.append((start, position, heading.group("law")))
+
+    visit(nodes)
+    raw = "".join(chunks)
+    # Sidecar loading already checked the canonical hash and complete text.
+    # XML indentation can differ from canonical whitespace normalization.
+    if re.sub(r"\s+", "", raw) != re.sub(r"\s+", "", text):
+        return text, [], []
+    mapped: set[int] = set()
+    offsets: dict[int, int] = {}
+    raw_at = text_at = 0
+    for boundary in sorted(boundaries):
+        while raw_at < boundary:
+            if raw[raw_at].isspace():
+                while raw_at < len(raw) and raw[raw_at].isspace():
+                    raw_at += 1
+                while text_at < len(text) and text[text_at].isspace():
+                    text_at += 1
+            else:
+                while text_at < len(text) and text[text_at].isspace():
+                    text_at += 1
+                if text_at >= len(text) or raw[raw_at] != text[text_at]:
+                    return text, [], []
+                raw_at += 1
+                text_at += 1
+        if 0 < text_at < len(text):
+            mapped.add(text_at)
+        offsets[boundary] = text_at
+    output: list[str] = []
+    inserted: list[int] = []
+    previous = 0
+    for offset in sorted(mapped):
+        output.extend((text[previous:offset], BLOCK_BOUNDARY))
+        inserted.append(offset + len(inserted))
+        previous = offset
+    output.append(text[previous:])
+    scopes = [{"start": offsets[start], "end": offsets[end], "law": law}
+              for start, end, law in raw_scopes]
+    return "".join(output), inserted, scopes
+
+
+def _act_inventory(acts: Iterable[dict], reader_directory: Path | None = None,
+                   ) -> tuple[list[dict], dict[str, list[dict]]]:
     inventory: list[dict] = []
     by_jurabk: dict[str, list[dict]] = {}
     for source in acts:
@@ -389,17 +605,39 @@ def _act_inventory(acts: Iterable[dict]) -> tuple[list[dict], dict[str, list[dic
         jurabk = _clean(source.get("jurabk"))
         if not act_id or not jurabk:
             continue
+        structured: dict = {}
+        indexed_structure: dict = {}
+        if reader_directory is not None:
+            from tools.reader_blocks import ReaderBlocksError, load_sidecar
+            try:
+                sidecar = load_sidecar(reader_directory, source)
+                structured = sidecar["norms"]
+                indexed_structure = sidecar.get("norms_by_index", {})
+            except ReaderBlocksError:
+                pass
         norm_order: list[str] = []
         norm_set: set[str] = set()
+        norm_variants: dict[str, set[tuple[str, str]]] = {}
         norms: list[dict] = []
-        for raw_norm in source.get("norms") or []:
+        for source_index, raw_norm in enumerate(source.get("norms") or []):
             source_designator = _clean(raw_norm.get("enbez"))
             source_norm = canonical_norm(source_designator) or source_designator
             if not source_norm:
                 continue
             text = str(raw_norm.get("text") or "")
-            norms.append({"norm": source_norm, "text": text})
+            row = {"norm": source_norm, "text": text}
+            structure = (indexed_structure.get(str(source_index))
+                         or structured.get(str(raw_norm.get("enbez") or "")))
+            if structure is not None:
+                parse_text, inserted, scopes = _structured_parse_body(
+                    text, structure["blocks"])
+                row.update(parse_text=parse_text, inserted=inserted,
+                           scopes=scopes, structured=True)
+            norms.append(row)
             target_designator = canonical_norm(source_designator)
+            if target_designator:
+                norm_variants.setdefault(target_designator, set()).add(
+                    (text, _clean(raw_norm.get("glied") or raw_norm.get("gliederung"))))
             if target_designator and target_designator not in norm_set:
                 norm_set.add(target_designator)
                 norm_order.append(target_designator)
@@ -411,6 +649,8 @@ def _act_inventory(acts: Iterable[dict]) -> tuple[list[dict], dict[str, list[dic
             "norms": norms,
             "norm_order": norm_order,
             "norm_set": norm_set,
+            "ambiguous_norms": {name for name, variants in norm_variants.items()
+                                if len(variants) > 1},
             "norm_position": {norm: index
                               for index, norm in enumerate(norm_order)},
             "norm_markers": {norm.split(" ", 1)[0] for norm in norm_order},
@@ -426,6 +666,8 @@ def _range_targets(spec: TargetSpec, target_act: dict
     if spec.end is None:
         if spec.start not in target_act["norm_set"]:
             return [], "target_norm_not_in_current_corpus"
+        if spec.start in target_act["ambiguous_norms"]:
+            return [], "ambiguous_target_norm"
         return [(spec.start, spec.pinpoint)], None
     positions = target_act["norm_position"]
     if spec.start not in positions or spec.end not in positions:
@@ -434,9 +676,12 @@ def _range_targets(spec: TargetSpec, target_act: dict
     if first > last:
         return [], "range_order_invalid"
     selected = target_act["norm_order"][first:last + 1]
+    if any(norm in target_act["ambiguous_norms"] for norm in selected):
+        return [], "range_contains_ambiguous_target_norm"
     if len(selected) > MAX_RANGE_EXPANSION:
         return [], "range_too_broad"
-    return [(norm, None) for norm in selected], None
+    return [(norm, spec.pinpoint if norm == spec.end else None)
+            for norm in selected], None
 
 
 def _unresolved_designator(spec: TargetSpec) -> str:
@@ -448,24 +693,70 @@ def _unresolved_designator(spec: TargetSpec) -> str:
 def build_citation_index(acts: Iterable[dict], *, built_at: str,
                          explicit_aliases: Mapping[str, str] | None = None,
                          source_snapshots: Mapping[str, str] | None = None,
+                         reader_directory: Path | None = None,
                          ) -> dict:
     """Build a stable outbound/inbound index from current official text."""
-    inventory, by_jurabk = _act_inventory(acts)
+    inventory, by_jurabk = _act_inventory(acts, reader_directory)
     alias_targets, _, alias_patterns = _alias_registry(
         inventory, explicit_aliases)
     deduped: dict[tuple, dict] = {}
     source_norms_scanned = 0
+    structured_source_norms = 0
+    structure_boundaries = 0
+    contextual_citation_groups = 0
 
     for source_act in inventory:
         for source_norm_row in source_act["norms"]:
             source_norms_scanned += 1
-            body = source_norm_row["text"]
-            for group in parse_citation_groups(body):
-                alias = _match_alias(
-                    body, group, alias_targets, alias_patterns)
+            original = source_norm_row["text"]
+            body = source_norm_row.get("parse_text", original)
+            inserted = source_norm_row.get("inserted", [])
+            structured_source_norms += bool(source_norm_row.get("structured"))
+            structure_boundaries += len(inserted)
+            groups = parse_citation_groups(body)
+            aliases = [_match_alias(
+                    body, group, alias_targets, alias_patterns,
+                    source_act["jurabk"]) for group in groups]
+            for index, group in enumerate(groups):
+                if aliases[index] is not None:
+                    continue
+                source_start = group.start - bisect_left(inserted, group.start)
+                scopes = [scope for scope in source_norm_row.get("scopes", [])
+                          if scope["start"] <= source_start < scope["end"]]
+                if not scopes:
+                    continue
+                scope = min(scopes, key=lambda item: item["end"] - item["start"])
+                heading_text = " des " + scope["law"]
+                named = _match_alias(
+                    heading_text, CitationGroup(0, 0, "§", "", ()),
+                    alias_targets, alias_patterns, source_act["jurabk"])
+                if named is None and not (UNKNOWN_LONG_ALIAS_RE.match(scope["law"])
+                                           or UNKNOWN_SHORT_ALIAS_RE.fullmatch(scope["law"])):
+                    continue
+                # An explicitly named list scope is foreign evidence even if
+                # it is outside the alias registry or names multiple laws.
+                if named is None or named.end != len(heading_text):
+                    named = AliasMatch(scope["law"], (scope["law"],), 0, False)
+                aliases[index] = AliasMatch(named.text, named.target_jurabks,
+                                            group.end, named.known)
+                contextual_citation_groups += 1
+            # In a syntactically connected citation chain, a trailing law
+            # names the preceding unqualified heads as well.  Never cross
+            # arbitrary prose, punctuation, or an independently named law.
+            for index in range(len(groups) - 2, -1, -1):
+                following_alias = aliases[index + 1]
+                bridge = body[groups[index].end:groups[index + 1].start]
+                if aliases[index] is None and following_alias is not None \
+                        and CONNECTED_CITATION_RE.fullmatch(bridge):
+                    aliases[index] = AliasMatch(
+                        following_alias.text, following_alias.target_jurabks,
+                        groups[index].end, following_alias.known)
+            for group, alias in zip(groups, aliases):
                 alias_end = alias.end if alias else group.end
-                citation_text = _clean(body[group.start:alias_end])
-                excerpt = _excerpt(body, group.start, alias_end)
+                source_start = group.start - bisect_left(inserted, group.start)
+                source_end = alias_end - bisect_left(inserted, alias_end)
+                citation_text = _clean(original[source_start:source_end])
+                excerpt = _excerpt(original, source_start, source_end)
 
                 if alias is None:
                     target_candidates = [source_act]
@@ -516,6 +807,10 @@ def build_citation_index(acts: Iterable[dict], *, built_at: str,
                             source_act["id"], source_norm_row["norm"],
                             target_act_id, target_act_jurabk, target_norm,
                             target_pinpoint, kind, status, reason,
+                            # Each exact source group needs all its target rows.
+                            # An earlier single-head mention must not consume
+                            # the evidence for that head in a later compound.
+                            citation_text,
                         )
                         existing = deduped.get(key)
                         if existing:
@@ -564,6 +859,9 @@ def build_citation_index(acts: Iterable[dict], *, built_at: str,
         "cross_act": sum(row["kind"] == "cross_act" for row in rows),
         "acts_scanned": len(inventory),
         "source_norms_scanned": source_norms_scanned,
+        "structured_source_norms": structured_source_norms,
+        "structure_boundaries": structure_boundaries,
+        "contextual_citation_groups": contextual_citation_groups,
     }
     return {
         "schema_version": SCHEMA_VERSION,
@@ -579,6 +877,7 @@ def build_citation_index(acts: Iterable[dict], *, built_at: str,
             "range_expansion": "existing_target_norm_order_only",
             "standalone_absatz_or_satz_references": "not_extracted",
             "unresolved_mentions_retained": True,
+            "source_block_boundaries": "hash_verified_reader_sidecar_when_available",
         },
         "source_snapshots": dict(sorted((source_snapshots or {}).items())),
         "counts": counts,

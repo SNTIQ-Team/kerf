@@ -146,7 +146,12 @@ def test_api_search_appends_only_non_deep_catalog_matches(
 
     assert result["act_total"] == 1
     assert result["catalog_total"] == 1
-    assert result["result_total"] == 2
+    # The fixture has no FTS index, retrospective archive or decisions, so
+    # those components were not consulted: the total is a lower bound only.
+    assert result["result_total"] is None
+    assert result["result_total_lower_bound"] == 2
+    assert result["components"]["norms"]["status"] == "unavailable"
+    assert result["components"]["catalog"]["status"] == "ok"
     assert [row["id"] for row in result["catalog_matches"]] == [
         "gii:sozsichabkg_ukr"]
     assert "act_id" not in result["catalog_matches"][0]

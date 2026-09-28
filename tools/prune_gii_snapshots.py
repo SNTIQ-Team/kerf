@@ -25,6 +25,7 @@ from official_states import (
     load_state_verified,
     project_snapshot_observations,
 )
+from snapshot_storage import is_snapshot_reference, load_manifest as load_byte_archive_manifest
 
 
 DEFAULT_KEEP = 2
@@ -36,6 +37,7 @@ def _complete_dated_snapshots(root: Path) -> list[Path]:
     root = Path(root)
     if not root.is_dir():
         return []
+    archived = load_byte_archive_manifest(root.parent)["files"]
     snapshots: list[Path] = []
     for path in root.iterdir():
         if path.is_symlink() or not path.is_dir():
@@ -48,6 +50,10 @@ def _complete_dated_snapshots(root: Path) -> list[Path]:
             continue
         if not (path / "acts.jsonl").is_file() or not \
                 (path / "norms.jsonl").is_file():
+            continue
+        if any((path / name).is_symlink() or is_snapshot_reference(path / name)
+               or (Path(root.name) / path.name / name).as_posix() in archived
+               for name in _ARCHIVED_RAW_FILES):
             continue
         snapshots.append(path)
     return sorted(snapshots, key=lambda path: path.name)

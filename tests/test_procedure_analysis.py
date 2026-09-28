@@ -296,3 +296,83 @@ def test_no_official_journal_means_no_extra_fact():
     facts, _ = _source_analysis(
         {"status": "Ongoing", "stage": "Ongoing"}, {})
     assert [f["kind"] for f in facts] == ["official_observation"]
+
+
+def test_entry_into_force_is_its_own_verified_fact():
+    """Publication and entry into force are different things. 32026D1912 was
+    in force from 2026-08-05 while the card showed only a pending editorial
+    review, so it read as though the act were not yet law."""
+    facts, _ = _source_analysis(
+        {
+            "status": "Completed", "stage": "Completed", "source_stale": True,
+            "official_journal": [{
+                "celex": "32026D1912", "citation": "OJ L, 2026-08-04",
+                "source": "CELLAR (Publications Office SPARQL)",
+                "in_force": True, "in_force_since": "2026-08-05",
+                "in_force_dates": ["2026-08-05", "2027-03-05"],
+            }],
+        },
+        {},
+    )
+    force = [f for f in facts if f["kind"] == "legal_effect"]
+    assert len(force) == 1
+    assert force[0]["status"] == "verified"
+    assert "2026-08-05" in force[0]["statement"]
+    assert "2027-03-05" in force[0]["statement"], "staggered dates named too"
+
+
+def test_no_in_force_fact_before_the_act_is_in_force():
+    facts, _ = _source_analysis(
+        {
+            "status": "Ongoing", "stage": "Ongoing",
+            "official_journal": [{
+                "celex": "32026D1912", "citation": "OJ L, 2026-08-04",
+                "in_force": False, "in_force_since": None,
+            }],
+        },
+        {},
+    )
+    assert [f for f in facts if f["kind"] == "legal_effect"] == []
+
+
+def test_facts_carry_every_ui_language_not_just_german():
+    """The analysis used to emit German prose that the frontend rendered
+    verbatim in every language, so Russian and Ukrainian readers got German
+    in the most authoritative part of the card."""
+    facts, checks = _source_analysis(
+        {
+            "status": "Completed", "stage": "Completed", "source_stale": True,
+            "official_journal": [{
+                "celex": "32026D1912", "citation": "OJ L, 2026-08-04",
+                "source": "CELLAR", "in_force": True,
+                "in_force_since": "2026-08-05",
+                "in_force_dates": ["2026-08-05", "2027-03-05"],
+            }],
+        },
+        {},
+    )
+    for fact in facts:
+        assert "statement_i18n" in fact, fact["id"]
+        for lang in ("de", "en", "ru", "ua"):
+            assert fact["statement_i18n"][lang].strip(), (fact["id"], lang)
+        # the flat German field keeps its previous shape for old consumers
+        assert fact["statement"] == fact["statement_i18n"]["de"]
+
+    in_force = next(f for f in facts if f["kind"] == "legal_effect")
+    assert "In force since 2026-08-05" in in_force["statement_i18n"]["en"]
+    assert "Действует с 2026-08-05" in in_force["statement_i18n"]["ru"]
+    assert "Чинний з 2026-08-05" in in_force["statement_i18n"]["ua"]
+    assert "2027-03-05" in in_force["statement_i18n"]["ru"]
+
+    for check in checks:
+        assert check["label_i18n"]["ru"].strip()
+        assert check["detail_i18n"]["ua"].strip()
+
+
+def test_untranslated_strings_still_render_as_before():
+    """Conversion is incremental: a plain string keeps working and simply has
+    no localized twin, so nothing regresses while the table grows."""
+    from procedure_analysis import _check as check_
+    row = check_("x", "kind", "Nur Deutsch", "passed", "Noch nicht übersetzt")
+    assert row["label"] == "Nur Deutsch"
+    assert "label_i18n" not in row

@@ -1467,11 +1467,57 @@ records, decision metadata and the dated-text resolver. `/search` rejects
 unknown or repeated arguments, including unsupported temporal constraints, with
 HTTP 422. Use the dated act endpoints for historical text.
 
-Search returns per-component availability in `components.changes` and
-`components.decisions`. Unavailable sources have `*_total: null`; a successfully
-searched empty component has `*_total: 0`. `status: partial` and
-`result_total_is_partial: true` qualify the aggregate count while preserving
-successful matches. Integrity failures retain `integrity_check_failed`.
+Search returns per-component availability in `components` (`acts`, `norms`,
+`procedures`, `changes`, `decisions`, `catalog`). Unavailable sources have
+`*_total: null`; a successfully searched empty component has `*_total: 0`.
+When any component was unavailable, `status` is `partial` and `result_total`
+is `null`; `result_total_lower_bound` counts the components that answered.
+Integrity failures retain `integrity_check_failed`. Every other route rejects
+undeclared or repeated arguments the same way (`invalid_argument`, or
+`unsupported_temporal_request` for date-like names); only the transport cache
+keys `t`, `_`, `cb` (and `d` on `/digest`) are accepted and echoed in
+`X-Lexgraph-Ignored-Arguments`. Each search result states its
+`temporal_scope` (current consolidation only).
+
+### Norm history: log, at, diff, blame
+
+Norm ids are `de/bund/<gii-slug>/<para|art|anlage|anhang|text>/<n>` (Bavaria:
+`de/by/<act>/…`), optionally with `/abs/<n>/satz/<n>/nr/<n>/buchst/<x>`.
+`GET /norms/resolve?q=§ 37 SGB XIV` (or `?act=fed_sgb_14&norm=§ 37`) resolves
+a citation. All responses are evidence envelopes: `status`, `searched`,
+`evidence`, `warnings`, `failed_components`, `total` (null unless complete).
+
+* `GET /norms/{id}/log` — versions (newest first) projected from the complete
+  GII states and the retrospective intervals; `valid_from` is set only when
+  verified against the final BGBl command and its commencement clause,
+  otherwise `valid_from_status: unresolved` and `observed_from` gives the
+  retrieval date. `events` lists BGBl amendment commands without claiming
+  historical text.
+* `GET /norms/{id}/at?date=YYYY-MM-DD` — `ok` only inside a verified interval;
+  `temporally_unresolved` (with the observed text as evidence) otherwise;
+  `not_in_corpus` before the text history. Sub-unit ids return `sub_unit_text`.
+* `GET /norms/{id}/diff?from=&to=` — dates, `head`, version ids or content-hash
+  prefixes; sentence-level operations with Absatz/Satz/Nummer locators and
+  word-level changes.
+* `GET /norms/{id}/blame[?date=]` — per sentence, the version and amendment
+  that introduced it; sentences older than the text history are marked
+  `predates_text_history` with parser-only candidates.
+* `GET /norms/{id}/materials` — legislative material fragments grouped as
+  `explains` (the fragment heading targets the norm; draft numbering,
+  correspondence unverified), `mentions` and `drafts`.
+
+Per-norm source URLs come only from the captured GII table of contents
+(`api/data/gii_toc.json`, `pipeline/fetch_gii_toc.py`), e.g. `gg/art_1.html`;
+a norm missing from the TOC has `norm_url: null`.
+
+`GET /acts/{id}/markdown.json` returns the unmodified Markdown (front matter
+included) plus the front matter as typed `provenance` and the limitations as
+`warnings`.
+
+`tools/law_git_export.py` exports these versions to a Git repository (default
+`~/.local/share/sntiq-legal/law-git`): one Markdown file per norm, one commit
+per consolidated version, author date = verified `valid_from` (or the first
+observation, disclosed by the `Lexgraph-Author-Date-Basis` trailer).
 
 ### Joined research
 

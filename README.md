@@ -71,6 +71,16 @@ Publication, effect and observation dates are never collapsed into one field.
 An amendment event is not presented as a reconstructed historical full text;
 the source-exact label is enabled only for a verified complete GII state pair.
 
+The modern archive's 2023 boundary is a **publication** cutoff, not an
+effective-date cutoff. A bounded supplement in `data/legacy_bgbl_reviews.json`
+restores the joint SGB XII §§ 11/12 recast from the Bürgergeld-Gesetz:
+BGBl I 2022 p. 2341, Art. 5 no. 2, published 2022-12-20 and effective
+2023-01-01 under Art. 13. Its final official PDF, full extracted text and
+reviewed command/commencement excerpts have pinned SHA-256 identities.
+`python3 pipeline/legacy_bgbl_history.py --capture` checks a fresh official
+capture without replacing the reviewed record. Every web rebuild retains
+this supplement; it does not imply complete pre-2023 history or an old body.
+
 Lexgraph also admits a narrower, explicitly derived class: a **verified
 reconstruction** for one bounded interval. Its complete body is recovered by
 reversing reviewed final BGBl commands from a later official GII anchor and

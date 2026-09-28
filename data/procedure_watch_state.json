@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-07-19T18:11:22+00:00",
+  "checked_at": "2026-09-28T04:56:30+00:00",
   "procedures": {
     "329468": {
       "id": "329468",
@@ -116,7 +116,7 @@
         {
           "id": "684696",
           "date": "2026-01-15",
-          "updated": "2026-02-25T10:55:59+01:00",
+          "updated": "2026-07-27T16:56:04+02:00",
           "stage": "1. Beratung",
           "chamber": "BT",
           "document_type": "Plenarprotokoll",
@@ -293,12 +293,12 @@
       "active": true,
       "tracking_state": "active",
       "first_seen": "2026-07-15T02:59:08+00:00",
-      "last_checked": "2026-07-19T18:11:22+00:00",
+      "last_checked": "2026-09-28T04:56:30+00:00",
       "last_observed_status": "Überwiesen",
       "last_observed_stage": "Überwiesen",
       "last_observed_updated": "2026-02-12T10:57:00+01:00",
-      "last_observed_at": "2026-07-19T18:11:22+00:00",
-      "last_changed": "2026-07-15T09:47:02+00:00"
+      "last_observed_at": "2026-09-28T04:56:30+00:00",
+      "last_changed": "2026-07-27T20:21:30+00:00"
     },
     "eu-2026-0186-nle": {
       "id": "eu-2026-0186-nle",
@@ -308,15 +308,34 @@
       "procedure": "2026/0186/NLE",
       "gesta": null,
       "title": "COM (2026) 345: Proposal for a COUNCIL IMPLEMENTING DECISION extending temporary protection, as introduced by Implementing Decision (EU) 2022/382, until 4 March 2028",
-      "status": "Ongoing",
-      "stage": "Political agreement — formal Council adoption pending",
-      "date": "2026-07-15",
+      "status": "Completed (Adopted act: 32026D1912 )",
+      "stage": "Completed (Adopted act: 32026D1912 )",
+      "date": "2026-07-30",
       "updated": null,
       "url": "https://eur-lex.europa.eu/procedure/EN/2026_186",
       "promulgation": [],
       "entry_into_force": [],
-      "adopted_celexes": [],
-      "official_journal": [],
+      "adopted_celexes": [
+        "32026D1912"
+      ],
+      "official_journal": [
+        {
+          "celex": "32026D1912",
+          "citation": "OJ L, 2026-08-04",
+          "published_at": "2026-08-04",
+          "in_force": true,
+          "in_force_since": "2026-08-05",
+          "in_force_dates": [
+            "2026-08-05",
+            "2027-03-05"
+          ],
+          "title": "Council Implementing Decision (EU) 2026/1912 of 30 July 2026 extending the temporary protection introduced by Implementing Decision (EU) 2022/382",
+          "eli": null,
+          "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32026D1912",
+          "source": "CELLAR (Publications Office SPARQL)",
+          "retrieval": "cellar_sparql"
+        }
+      ],
       "events": [
         {
           "date": "2026-06-26",
@@ -349,7 +368,7 @@
           "addressee": "Permanent Representatives Committee (Part 2)",
           "meeting_date": "2026-07-10",
           "content_accessible": false,
-          "retrieval_status": "fetch_unavailable",
+          "retrieval_status": "verified_seed",
           "terminal": false,
           "celexes": [],
           "documents": [
@@ -367,6 +386,12 @@
           "terminal": false,
           "celexes": [],
           "documents": []
+        },
+        {
+          "date": "2026-07-30",
+          "title": "",
+          "celexes": [],
+          "documents": []
         }
       ],
       "council_development": {
@@ -380,8 +405,8 @@
         "addressee": "Permanent Representatives Committee (Part 2)",
         "meeting_date": "2026-07-10",
         "content_accessible": false,
-        "fetched_at": "2026-07-19T17:47:33+00:00",
-        "retrieval_status": "fetch_unavailable",
+        "fetched_at": "2026-09-28T04:56:29+00:00",
+        "retrieval_status": "verified_seed",
         "terminal": false
       },
       "council_communication": {
@@ -392,26 +417,26 @@
         "title": "EU countries agree to extend temporary protection for those fleeing Ukraine until March 2028",
         "stage": "Political agreement — formal Council adoption pending",
         "body": "Permanent Representatives Committee (member states' ambassadors); formal Council adoption announced for the coming weeks",
-        "fetched_at": "2026-07-19T17:47:33+00:00",
+        "fetched_at": "2026-09-28T04:56:29+00:00",
         "retrieval_status": "verified_seed",
         "terminal": false
       },
-      "publication_detected": false,
-      "awaiting_final_review": false,
+      "publication_detected": true,
+      "awaiting_final_review": true,
       "final_text_review": null,
-      "retrieval_status": "fresh",
-      "source_stale": false,
-      "retrieval_warning": null,
+      "retrieval_status": "stale_fallback",
+      "source_stale": true,
+      "retrieval_warning": "EUR-Lex procedure page unreachable (ValueError); Official Journal publication recovered from CELLAR.",
       "terminal": false,
       "active": true,
-      "tracking_state": "active",
+      "tracking_state": "pending_final_review",
       "first_seen": "2026-07-15T02:59:08+00:00",
-      "last_checked": "2026-07-19T18:11:22+00:00",
-      "last_observed_status": "Ongoing",
-      "last_observed_stage": "Political agreement — formal Council adoption pending",
+      "last_checked": "2026-09-28T04:56:30+00:00",
+      "last_observed_status": "Completed (Adopted act: 32026D1912 )",
+      "last_observed_stage": "Completed (Adopted act: 32026D1912 )",
       "last_observed_updated": null,
-      "last_observed_at": "2026-07-19T18:11:22+00:00",
-      "last_changed": "2026-07-19T18:11:22+00:00"
+      "last_observed_at": "2026-09-26T04:36:51+00:00",
+      "last_changed": "2026-09-27T04:37:16+00:00"
     },
     "322125": {
       "id": "322125",

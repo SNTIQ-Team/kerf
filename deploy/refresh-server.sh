@@ -20,6 +20,8 @@ if ! flock -n 9; then
     echo "full refresh: another Lexgraph refresh holds $LOCK_FILE; skipping"
     exit 0
 fi
+export LEXGRAPH_REFRESH_LOCK="$LOCK_FILE"
+export LEXGRAPH_REFRESH_LOCK_FD=9
 
 ./refresh.sh
 
