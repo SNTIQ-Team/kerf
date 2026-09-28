@@ -210,9 +210,11 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
 
 def resolve_decision(conn: sqlite3.Connection, ref: str) -> tuple[str, list[str]]:
     """Return (status, candidate ids) for an id, ECLI, source doc id or Aktenzeichen."""
-    row = conn.execute("SELECT id FROM decisions WHERE id = ? OR ecli = ?", (ref, ref)).fetchone()
-    if row:
-        return "ok", [row["id"]]
+    ids = [r["id"] for r in conn.execute("SELECT id FROM decisions WHERE id = ? OR ecli = ? ORDER BY id", (ref, ref))]
+    if len(ids) == 1:
+        return "ok", ids
+    if ids:  # one portal gave two documents the same ECLI: both are candidates
+        return "ambiguous_identity", ids
     if ":" in ref and not ref.startswith(("court:", "ECLI:")):
         source_id, _, doc = ref.partition(":")
         row = conn.execute("SELECT id FROM decisions WHERE source_id=? AND source_doc_id=?", (source_id, doc)).fetchone()
