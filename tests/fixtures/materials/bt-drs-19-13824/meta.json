@@ -1,0 +1,61 @@
+{
+ "drucksache": "19/13824",
+ "url": "https://dserver.bundestag.de/btd/19/138/1913824.pdf",
+ "pdf_sha256": "e2cc6975814c38cddcf6528086b32a386da79c86c6c3b1e5ce1a1c4b4a7d6ee6",
+ "page_count": 322,
+ "pdftotext_version": "pdftotext version 26.08.0",
+ "command": "pdftotext -layout -enc UTF-8 -f N -l N 1913824.pdf -",
+ "note": "Exact extraction output (including the trailing form feed) of the listed PDF pages only; all other pages are deliberately not captured.",
+ "pages": {
+  "1": {
+   "file": "page-1.txt",
+   "text_sha256": "f2821c87cd8ac9306f72543f82e70c7572ea4d6d3967c2d4a5a75a073364773e",
+   "characters": 2844
+  },
+  "144": {
+   "file": "page-144.txt",
+   "text_sha256": "8264c3d68be379d40ab047069a1e279285ab7fdd2b6e77d3a9c1a66edc225760",
+   "characters": 4118
+  },
+  "169": {
+   "file": "page-169.txt",
+   "text_sha256": "36029ce82bff656298cd30b1239dd18708af7ed89353595b967f035362621c46",
+   "characters": 3672
+  },
+  "186": {
+   "file": "page-186.txt",
+   "text_sha256": "088588f57f04240f1c59d33c842f3c9b7410d1d03251aade4cb24d28f48811a5",
+   "characters": 4685
+  },
+  "187": {
+   "file": "page-187.txt",
+   "text_sha256": "f445de488d25884e2f8225463e98bdbce60bfea89c9021bd7235948181ab5ae4",
+   "characters": 4556
+  },
+  "285": {
+   "file": "page-285.txt",
+   "text_sha256": "cc7395f6b342b9afe2a550a0b0374cb371f82169170aaa319763bac39ef59b64",
+   "characters": 3288
+  },
+  "286": {
+   "file": "page-286.txt",
+   "text_sha256": "f74edc37f0cf30253c01f4cf82d8cfda832bb9e9620da46e99f5c427a6d26853",
+   "characters": 4023
+  },
+  "312": {
+   "file": "page-312.txt",
+   "text_sha256": "992b68d4240663b63ba19a2353c1adb8c4d36e6db21af672f253b1c371693232",
+   "characters": 3851
+  },
+  "313": {
+   "file": "page-313.txt",
+   "text_sha256": "3a047fbb7c96e01883cbbdf7b1af83257400973d7a911c2ddeda475def7a096f",
+   "characters": 4497
+  },
+  "314": {
+   "file": "page-314.txt",
+   "text_sha256": "2a8ea5d1c489cb087b73dc02aef894dc1a3c22901576c1b69f73cef64c5fa5a9",
+   "characters": 3463
+  }
+ }
+}
