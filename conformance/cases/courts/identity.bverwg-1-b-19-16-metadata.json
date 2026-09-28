@@ -1,0 +1,30 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.identity.bverwg-1-b-19-16-metadata",
+  "module": "courts",
+  "kind": "decision_metadata",
+  "description": "ECLI identity; the published docket is kept verbatim and split into distinct items",
+  "origin": "spec Identity/Decision",
+  "status": "active",
+  "input": {
+    "adapter": "rii",
+    "fixture": "tests/courts/fixtures/rii/jb-WBRE201600193.zip",
+    "item": {
+      "source_doc_id": "jb-WBRE201600193",
+      "url": "https://www.rechtsprechung-im-internet.de/jportal/docs/bsjrs/jb-WBRE201600193.zip",
+      "listed_date": "2016-03-16",
+      "listed_court": "bverwg"
+    }
+  },
+  "expected": {
+    "id": "ECLI:DE:BVerwG:2016:160316B1B19.16.0",
+    "case_numbers_raw": "1 B 19/16, 1 B 19/16, 1 PKH 55/16",
+    "case_numbers": [
+      "1 B 19/16",
+      "1 PKH 55/16"
+    ],
+    "decision_date": "2016-03-16",
+    "court_id": "bverwg"
+  },
+  "match": "subset"
+}

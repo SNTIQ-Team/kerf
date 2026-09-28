@@ -157,6 +157,66 @@ def cmd_running(args) -> int:
     return 0
 
 
+def cmd_classify(args) -> int:
+    from .polarity import assess_decision
+    if not space_ok("classify"):
+        return 4
+    conn = connect()
+    init_db(conn)
+    sql, params = "SELECT id FROM decisions", []
+    if args.source:
+        sql, params = sql + " WHERE source_id = ?", [args.source]
+    total = proposals = 0
+    for (decision_id,) in conn.execute(sql, params).fetchall():
+        proposals += assess_decision(conn, decision_id)
+        total += 1
+    print(json.dumps({"decisions": total, "proposals": proposals}))
+    return 0
+
+
+def cmd_correct(args) -> int:
+    from .ledger import CorrectionError, record
+    conn = connect()
+    init_db(conn)
+    try:
+        new = json.loads(args.new)
+    except json.JSONDecodeError:
+        new = args.new
+    try:
+        result = record(conn, target=args.target, kind=args.kind, field=args.field, target_id=args.target_id,
+                        quote=args.quote, new=new, evidence=args.evidence, author=args.author)
+    except CorrectionError as exc:
+        print(json.dumps({"status": "invalid_argument", "detail": str(exc)}), file=sys.stderr)
+        return 2
+    print(json.dumps({"status": "ok", **result}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_corrections(args) -> int:
+    conn = open_db()
+    sql, params = "SELECT * FROM corrections", []
+    if args.target:
+        sql, params = sql + " WHERE target = ? OR target LIKE ?", [args.target, args.target + "%"]
+    rows = [dict(r) for r in conn.execute(sql + " ORDER BY id", params)]
+    print(json.dumps(rows, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_verify(args) -> int:
+    from urllib.parse import urlsplit
+    from .verify import verify_sample
+    conn = connect()
+    init_db(conn)
+    http = None
+    if not args.offline:
+        ignored = {urlsplit(a.base_url).netloc for a in registry().values()
+                   if a.robots_policy == "ignore_by_operator_decision"}
+        http = PoliteHttp(min_interval=2.0, ignore_robots_hosts=ignored)
+    print(json.dumps(verify_sample(conn, sample=args.sample, http=http, source=args.source, seed=args.seed),
+                     indent=2))
+    return 0
+
+
 def cmd_space(args) -> int:
     report = check_space(data_home(), starting=True)
     print(json.dumps({"bulk_writes_allowed": not report.problems, **report.as_dict()}, indent=2))
@@ -224,7 +284,8 @@ def cmd_search(args) -> int:
 
 
 def cmd_cites(args) -> int:
-    result = citing_decisions(open_db(), args.target, relation=args.relation, limit=args.limit)
+    result = citing_decisions(open_db(), args.target, relation=args.relation, assessment=args.assessment,
+                              limit=args.limit)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
@@ -250,6 +311,30 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_compact)
     p = sub.add_parser("running", help="which sources are being synced right now (PIDs)")
     p.set_defaults(func=cmd_running)
+    p = sub.add_parser("classify", help="(re)run the rule-based relation assessment stage")
+    p.add_argument("--source")
+    p.set_defaults(func=cmd_classify)
+    p = sub.add_parser("correct", help="append a correction to the ledger, apply it, write a conformance case")
+    p.add_argument("--target", required=True, help="decision id, or paragraph id (<decision>#rn-10)")
+    p.add_argument("--kind", required=True,
+                   choices=["decision_field", "case_numbers", "relation_assessment", "paragraph_boundary", "relation",
+                            "other"])
+    p.add_argument("--field", help="decision field (decision_field)")
+    p.add_argument("--target-id", help="norm or decision id of the relation (relation_assessment, relation)")
+    p.add_argument("--quote", help="quote that must resolve to the corrected paragraph (paragraph_boundary)")
+    p.add_argument("--new", required=True, help="new value (JSON or plain string)")
+    p.add_argument("--evidence", required=True)
+    p.add_argument("--author", required=True)
+    p.set_defaults(func=cmd_correct)
+    p = sub.add_parser("corrections", help="list the corrections ledger")
+    p.add_argument("--target")
+    p.set_defaults(func=cmd_corrections)
+    p = sub.add_parser("verify", help="compare a sample of decisions with an independent representation")
+    p.add_argument("--sample", type=_positive, default=20)
+    p.add_argument("--source")
+    p.add_argument("--seed", type=int)
+    p.add_argument("--offline", action="store_true", help="only pairs whose second capture is already packed")
+    p.set_defaults(func=cmd_verify)
     p = sub.add_parser("space", help="btrfs/disk guard for bulk writes")
     p.set_defaults(func=cmd_space)
     p = sub.add_parser("status", help="coverage per source")
@@ -274,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("cites", help="decisions relating to a norm identity or decision")
     p.add_argument("target")
     p.add_argument("--relation")
+    p.add_argument("--assessment", help="only relations with this (non-rejected) assessment, e.g. applies")
     p.add_argument("--limit", type=_positive, default=20)
     p.set_defaults(func=cmd_cites)
     args = parser.parse_args(argv)

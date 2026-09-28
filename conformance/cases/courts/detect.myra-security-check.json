@@ -1,0 +1,17 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.detect.myra-security-check",
+  "module": "courts",
+  "kind": "page_classification",
+  "description": "gesetze-bayern.de Myra 'Security Check' (HTTP 503) is a challenge, never a decision",
+  "origin": "paper §6.5 (challenge pages returned as legal text)",
+  "status": "active",
+  "input": {
+    "fixture": "tests/courts/fixtures/by/gesetze_bayern_security_check_503.html",
+    "status": 503
+  },
+  "expected": {
+    "kind": "challenge"
+  },
+  "match": "subset"
+}

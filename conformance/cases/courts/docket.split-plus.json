@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.docket.split-plus",
+  "module": "courts",
+  "kind": "case_numbers",
+  "description": "combined docket '2 W 233/01 + 2 W 236/01'",
+  "origin": "spec Identity/Decision; NRWE/BAG captures",
+  "status": "active",
+  "input": {
+    "raw": "2 W 233/01 + 2 W 236/01"
+  },
+  "expected": {
+    "case_numbers": [
+      "2 W 233/01",
+      "2 W 236/01"
+    ]
+  },
+  "match": "subset"
+}

@@ -23,7 +23,11 @@ CHALLENGE_MARKERS = (
     "captcha-delivery", "_incapsula_resource", "px-captcha", "ddos-guard",
     "checking your browser", "verify you are human", "bot protection",
     "sicherheitsüberprüfung", "security check",
+    # AWS WAF JavaScript challenge / CAPTCHA pages (EUR-Lex/CELLAR, paper §6.5)
+    "awswaf", "aws-waf-token", "gokuprops", "awswafintegration",
 )
+# AWS WAF marks challenged responses with this header (seen live: HTTP 202, empty body, value "challenge").
+WAF_ACTION_HEADER = "x-amzn-waf-action"
 CHALLENGE_TITLES = re.compile(
     r"^(security check|just a moment\.*|attention required!?.*|access denied|"
     r"captcha|checking your browser.*|ddos-guard|bot verification|"
@@ -103,9 +107,28 @@ def classify_page(body: bytes, *, status: int | None = None) -> tuple[str, str] 
     return None
 
 
+def classify_response(body: bytes, *, status: int | None = None, headers: dict | None = None
+                      ) -> tuple[str, str] | None:
+    """Like classify_page, but also uses response headers and the WAF challenge shape."""
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
+    action = headers.get(WAF_ACTION_HEADER)
+    if action:
+        return "challenge", f"AWS WAF action {action!r} (header {WAF_ACTION_HEADER})"
+    content_type = headers.get("content-type", "")
+    if status == 202 and not body.strip() and "html" in content_type.lower():
+        return "challenge", "HTTP 202 with an empty HTML body (JavaScript challenge shape)"
+    if body and ("html" in content_type.lower() or looks_like_html(body)):
+        return classify_page(body, status=status)
+    return None
+
+
 def ensure_not_blocked(body: bytes, *, url: str, status: int | None = None,
-                       content_type: str = "") -> None:
-    """Raise UpstreamFailure when an HTML body is a challenge/login/error page."""
+                       content_type: str = "", headers: dict | None = None) -> None:
+    """Raise UpstreamFailure when a response is a challenge/login/error page (or a WAF challenge)."""
+    verdict = classify_response(body, status=status, headers=dict(headers or {}, **(
+        {"content-type": content_type} if content_type else {})))
+    if verdict and verdict[0] == "challenge" and (not body or verdict[1].startswith(("AWS WAF", "HTTP 202"))):
+        raise UpstreamFailure("challenge", verdict[1], url=url, status=status)
     if not body:
         raise UpstreamFailure("empty_document", "empty response body", url=url,
                               status=status)

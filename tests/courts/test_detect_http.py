@@ -134,3 +134,17 @@ def test_challenge_served_with_503_is_not_retried_as_server_error(no_sleep, fixt
         http.get(url)
     assert err.value.kind == "challenge"
     assert len([c for c in session.calls if c[1] == url]) == 1
+
+
+def test_real_aws_waf_challenge_202_is_a_challenge_not_an_empty_document(no_sleep):
+    import json as _json
+    from tests.courts.conftest import FIXTURES
+    captured = _json.loads((FIXTURES / "eurlex_aws_waf_challenge_202.json").read_text())
+    url = captured["url"]
+    headers = {k.title(): v for k, v in captured["headers"].items()}
+    session = FakeSession(pages={url: (202, b"", headers)})
+    http = PoliteHttp(session=session, respect_robots=False)
+    with pytest.raises(UpstreamFailure) as err:
+        http.get(url)
+    assert err.value.kind == "challenge" and "AWS WAF" in err.value.detail
+    assert len([c for c in session.calls if c[1] == url]) == 1          # never retried

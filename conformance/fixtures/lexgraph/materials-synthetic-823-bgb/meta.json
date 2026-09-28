@@ -1,0 +1,17 @@
+{
+ "drucksache": "99/823",
+ "synthetic": true,
+ "note": "SYNTHETIC fixture, not a real Drucksache (Wahlperiode 99 does not exist). No captured legislative material that cites § 823 BGB exists in the Lexgraph test fixtures, so this page reproduces the exact pdftotext -layout shape of the captured Gegenäußerung pages of BT-Drs. 19/13824 (tests/fixtures/materials/bt-drs-19-13824/page-312.txt and page-314.txt: running header, 'Anlage 4', title, 'Zu Ziffer N (Zu Artikel …, § … ACT)' headings, hyphenated line ends, form feed) with three answers: Ziffer 1 targets § 16 Abs. 2 SGB XIV and only mentions § 823 Abs. 1 BGB in its body; Ziffer 2 targets § 823 Abs. 2 BGB and repeats it in its body; Ziffer 3 targets § 826 BGB and only mentions § 823 BGB.",
+ "document_meta": {
+  "type": "Gesetzentwurf",
+  "initiator": "Bundesregierung"
+ },
+ "page_count": 1,
+ "pages": {
+  "1": {
+   "file": "page-1.txt",
+   "text_sha256": "afaec5b087f35d2ddfb68a2c9cccdf4ba591e834850befa96936bb12f29a15e9",
+   "characters": 988
+  }
+ }
+}

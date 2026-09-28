@@ -1,0 +1,28 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.rn.bverwg-1-b-19-16-rn10-blocks",
+  "module": "courts",
+  "kind": "paragraphs_from_capture",
+  "description": "BVerwG 1 B 19.16: Rn 10 has three blocks (two empty <dt/> continue it), Rn 11 one; 'I' before Rn 1 is gruende-u1",
+  "origin": "spec Identity/Paragraph; PRIMA audit Rn continuation",
+  "status": "active",
+  "input": {
+    "adapter": "rii",
+    "fixture": "tests/courts/fixtures/rii/jb-WBRE201600193.zip",
+    "item": {
+      "source_doc_id": "jb-WBRE201600193",
+      "url": "https://www.rechtsprechung-im-internet.de/jportal/docs/bsjrs/jb-WBRE201600193.zip",
+      "listed_date": "2016-03-16",
+      "listed_court": "bverwg"
+    }
+  },
+  "expected": {
+    "numbering": "rn",
+    "rn_blocks": {
+      "6": 4,
+      "10": 3,
+      "11": 1
+    }
+  },
+  "match": "subset"
+}

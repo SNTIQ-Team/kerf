@@ -1,0 +1,14 @@
+{
+  "url": "https://eur-lex.europa.eu/legal-content/DE/TXT/HTML/?uri=CELEX:32016R0679",
+  "status": 202,
+  "headers": {
+    "server": "CloudFront",
+    "date": "Mon, 28 Sep 2026 10:25:34 GMT",
+    "content-length": "0",
+    "x-amzn-waf-action": "challenge",
+    "content-type": "text/html; charset=UTF-8"
+  },
+  "body_bytes": 0,
+  "captured_with": "courts.http.PoliteHttp (SNTIQ-Legal-Courts/0.1 UA)",
+  "note": "real AWS WAF challenge: HTTP 202, empty body, x-amzn-waf-action header (paper \u00a76.5)"
+}

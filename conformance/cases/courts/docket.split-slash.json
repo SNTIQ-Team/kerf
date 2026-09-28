@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.docket.split-slash",
+  "module": "courts",
+  "kind": "case_numbers",
+  "description": "combined docket 'L 7 AS 1065/25 B ER / L 7 AS 1066/25 B'",
+  "origin": "spec Identity/Decision; NRWE/BAG captures",
+  "status": "active",
+  "input": {
+    "raw": "L 7 AS 1065/25 B ER / L 7 AS 1066/25 B"
+  },
+  "expected": {
+    "case_numbers": [
+      "L 7 AS 1065/25 B ER",
+      "L 7 AS 1066/25 B"
+    ]
+  },
+  "match": "subset"
+}

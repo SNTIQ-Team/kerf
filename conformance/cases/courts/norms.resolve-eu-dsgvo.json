@@ -1,0 +1,18 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.norms.resolve-eu-dsgvo",
+  "module": "courts",
+  "kind": "act_resolution",
+  "description": "canonical act resolution: DS-GVO (no land)",
+  "origin": "operating principle 1 (Lexgraph resolver)",
+  "status": "active",
+  "input": {
+    "abbreviation": "DS-GVO",
+    "land": null
+  },
+  "expected": {
+    "prefix": "eu/32016R0679",
+    "basis": "eu"
+  },
+  "match": "subset"
+}

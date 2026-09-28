@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.anders-als-distinguishes",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: anders-als-distinguishes",
+  "origin": "cue list (anders als)",
+  "status": "active",
+  "input": {
+    "text": "Anders als in dem vom BVerwG, Urteil vom 3.3.2020 - 1 C 2.19 - entschiedenen Fall liegt hier keine Gefahr vor.",
+    "own_court_id": "vgh-bw",
+    "jurisdiction": "verwaltung",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "distinguishes|court:bverwg/2020-03-03/1_C_2.19"
+      ]
+    }
+  },
+  "match": "subset"
+}

@@ -1,0 +1,17 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.detect.js-banner-not-challenge",
+  "module": "courts",
+  "kind": "page_classification",
+  "description": "a normal page with a 'Bitte aktivieren Sie JavaScript' banner is not a challenge",
+  "origin": "paper §6.5 (challenge pages returned as legal text)",
+  "status": "active",
+  "input": {
+    "fixture": "tests/courts/fixtures/by/vgansbach_press_index_js_notice.html",
+    "status": 200
+  },
+  "expected": {
+    "kind": null
+  },
+  "match": "subset"
+}

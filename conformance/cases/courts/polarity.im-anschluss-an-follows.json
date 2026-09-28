@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.im-anschluss-an-follows",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: im-anschluss-an-follows",
+  "origin": "cue list (im Anschluss an)",
+  "status": "active",
+  "input": {
+    "text": "Im Anschluss an BVerwG, Urteil vom 1. April 2014 - 1 C 1.14 - ist davon auszugehen, dass die Mitteilung genügt.",
+    "own_court_id": "bverwg",
+    "jurisdiction": "verwaltung",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "follows|court:bverwg/2014-04-01/1_C_1.14"
+      ]
+    }
+  },
+  "match": "subset"
+}

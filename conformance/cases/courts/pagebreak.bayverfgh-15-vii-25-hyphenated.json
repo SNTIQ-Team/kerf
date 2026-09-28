@@ -1,0 +1,31 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.pagebreak.bayverfgh-15-vii-25-hyphenated",
+  "module": "courts",
+  "kind": "quote_to_paragraph",
+  "description": "BayVerfGH Vf. 15-VII-25: 'Land-/schaft' is hyphenated across a page break inside Rn 4",
+  "origin": "spec Identity/Paragraph",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "tests/courts/fixtures/by/verfgh_15-vii-25_entscheidung.pdf",
+    "url": "https://www.bayern.verfassungsgerichtshof.de/media/images/bayverfgh/15-vii-25_entscheidung.pdf",
+    "item": {
+      "source_doc_id": "verfgh:/media/images/bayverfgh/15-vii-25_entscheidung.pdf",
+      "listed_date": "2026-07-31",
+      "listed_case_numbers": null,
+      "extra": {
+        "route": "verfgh",
+        "court_name": "Bayerischer Verfassungsgerichtshof",
+        "title": "Popularklage"
+      }
+    },
+    "quote": "natürliche Eigenart der Landschaft und ihren Erholungswert"
+  },
+  "expected": {
+    "paragraph_ids": [
+      "rn-4"
+    ]
+  },
+  "match": "subset"
+}

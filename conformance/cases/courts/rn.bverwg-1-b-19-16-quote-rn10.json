@@ -1,0 +1,26 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.rn.bverwg-1-b-19-16-quote-rn10",
+  "module": "courts",
+  "kind": "quote_to_paragraph",
+  "description": "The quote 'Streitgegenstand … Mitteilung' is in Rn 10, not Rn 11",
+  "origin": "spec Identity/Paragraph regression fixture",
+  "status": "active",
+  "input": {
+    "adapter": "rii",
+    "fixture": "tests/courts/fixtures/rii/jb-WBRE201600193.zip",
+    "item": {
+      "source_doc_id": "jb-WBRE201600193",
+      "url": "https://www.rechtsprechung-im-internet.de/jportal/docs/bsjrs/jb-WBRE201600193.zip",
+      "listed_date": "2016-03-16",
+      "listed_court": "bverwg"
+    },
+    "quote": "Streitgegenstand … ist nicht eine Untätigkeitsklage gemäß § 75 VwGO, sondern lediglich eine Klage auf Erteilung einer Mitteilung"
+  },
+  "expected": {
+    "paragraph_ids": [
+      "rn-10"
+    ]
+  },
+  "match": "subset"
+}

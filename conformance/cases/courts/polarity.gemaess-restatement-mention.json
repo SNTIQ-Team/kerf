@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.gemaess-restatement-mention",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: gemaess-restatement-mention",
+  "origin": "BVerwG 1 B 19.16 Rn 10 (mentions only)",
+  "status": "active",
+  "input": {
+    "text": "Streitgegenstand der erhobenen Klage ist nicht eine Untätigkeitsklage gemäß § 75 VwGO, sondern lediglich eine Klage auf Erteilung einer Mitteilung nach § 24 Abs. 4 AsylG.",
+    "own_court_id": "bverwg",
+    "jurisdiction": "verwaltung",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": []
+  },
+  "match": "subset"
+}

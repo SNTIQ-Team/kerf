@@ -1,0 +1,93 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.materials.bgb-823-explains-vs-mentions",
+  "module": "lexgraph",
+  "kind": "material_fragments",
+  "description": "§ 823 BGB in legislative materials: only a fragment whose heading targets § 823 BGB 'explains' it; a fragment that merely names § 823 BGB in its body 'mentions' it, also when its heading explains another BGB norm (§ 826). A target repeated in the body stays 'explains' and is not duplicated as a mention. FIXTURE IS SYNTHETIC: no captured material citing § 823 BGB exists in Lexgraph's fixtures, so conformance/fixtures/lexgraph/materials-synthetic-823-bgb reproduces the exact layout of the captured Gegenäußerung pages of BT-Drs. 19/13824 (pages 312/314) under the fictitious Drucksache 99/823 (see its meta.json).",
+  "origin": "spec: Operating principles 2 (§ 823 BGB materials: explains vs mentions); PRIMA audit (relation strength)",
+  "status": "active",
+  "input": {
+    "fixture": "conformance/fixtures/lexgraph/materials-synthetic-823-bgb",
+    "drucksache": "99/823",
+    "sources": "data/materials_sources.json"
+  },
+  "expected": {
+    "document": {
+      "id": "bt-drs-99-823",
+      "extracted_pages": [
+        1
+      ],
+      "pages_missing_count": 0,
+      "warnings": []
+    },
+    "fragment_ids": [
+      "gegenaeusserung:preamble",
+      "gegenaeusserung:ziffer-1",
+      "gegenaeusserung:ziffer-2",
+      "gegenaeusserung:ziffer-3"
+    ],
+    "fragments": {
+      "gegenaeusserung:ziffer-1": {
+        "heading": "Zu Ziffer 1 (Zu Artikel 1, § 16 Absatz 2 SGB XIV)",
+        "target_norms": [
+          "de/bund/sgb_14/para/16/abs/2"
+        ],
+        "mentions": [
+          "de/bund/bgb/para/823/abs/1"
+        ],
+        "relations": [
+          {
+            "type": "explains",
+            "target": "de/bund/sgb_14/para/16/abs/2",
+            "derived_from": "heading"
+          },
+          {
+            "type": "mentions",
+            "target": "de/bund/bgb/para/823/abs/1",
+            "derived_from": "body",
+            "confidence": "medium"
+          }
+        ]
+      },
+      "gegenaeusserung:ziffer-2": {
+        "heading": "Zu Ziffer 2 (Zu Artikel 2 Nummer 1, § 823 Absatz 2 BGB)",
+        "body": "Die Bundesregierung stimmt dem Vorschlag des Bundesrates zu. Die Klarstellung in § 823 Absatz 2 BGB dient der Rechtssicherheit.",
+        "target_norms": [
+          "de/bund/bgb/para/823/abs/2"
+        ],
+        "mentions": [],
+        "relations": [
+          {
+            "type": "explains",
+            "target": "de/bund/bgb/para/823/abs/2",
+            "derived_from": "heading",
+            "confidence": "high",
+            "legal_effect_verified": false
+          }
+        ]
+      },
+      "gegenaeusserung:ziffer-3": {
+        "heading": "Zu Ziffer 3 (Zu Artikel 2 Nummer 2, § 826 BGB)",
+        "target_norms": [
+          "de/bund/bgb/para/826"
+        ],
+        "mentions": [
+          "de/bund/bgb/para/823"
+        ],
+        "relations": [
+          {
+            "type": "explains",
+            "target": "de/bund/bgb/para/826",
+            "derived_from": "heading"
+          },
+          {
+            "type": "mentions",
+            "target": "de/bund/bgb/para/823",
+            "derived_from": "body"
+          }
+        ]
+      }
+    }
+  },
+  "match": "subset"
+}

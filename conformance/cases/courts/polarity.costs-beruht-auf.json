@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.costs-beruht-auf",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: costs-beruht-auf",
+  "origin": "BAG 8 AZB 10/24 Rn 33 (costs basis)",
+  "status": "active",
+  "input": {
+    "text": "Die Kostenentscheidung beruht auf § 62 Abs. 2 Satz 1 ArbGG, § 891 Satz 3 iVm. § 97 Abs. 1 ZPO.",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "applies|de/bund/arbgg/para/62/abs/2/satz/1"
+      ]
+    }
+  },
+  "match": "subset"
+}

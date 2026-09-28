@@ -1,0 +1,18 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.norms.resolve-renamed-asylg",
+  "module": "courts",
+  "kind": "act_resolution",
+  "description": "canonical act resolution: AsylG (no land)",
+  "origin": "operating principle 1 (Lexgraph resolver)",
+  "status": "active",
+  "input": {
+    "abbreviation": "AsylG",
+    "land": null
+  },
+  "expected": {
+    "prefix": "de/bund/asylvfg_1992",
+    "basis": "alias"
+  },
+  "match": "subset"
+}

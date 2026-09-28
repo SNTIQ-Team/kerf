@@ -1,0 +1,99 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.materials.bt-drs-19-13824-p314",
+  "module": "lexgraph",
+  "kind": "material_fragments",
+  "description": "BT-Drs. 19/13824 p. 314 (exact pdftotext -layout pages; unlisted pages are unextracted): the Gegenäußerung answer to Ziffer 9 ends before the Ziffer 10 heading (a competitor excerpt swallowed it). Heading and body are separate fields, the heading slices back to the raw page text, no body contains the next heading, role is gegenaeusserung_bundesregierung and the heading targets are 'explains' relations. Ziffer 11 runs into unextracted page 315 and is therefore marked incomplete.",
+  "origin": "PRIMA audit (fragment boundaries, fragment roles, relation strength); spec: Operating principles 2 (BT-Drs. 19/13824 p. 314 boundaries); tests/test_legislative_materials.py",
+  "status": "active",
+  "input": {
+    "fixture": "tests/fixtures/materials/bt-drs-19-13824",
+    "drucksache": "19/13824",
+    "sources": "data/materials_sources.json"
+  },
+  "expected": {
+    "document": {
+      "id": "bt-drs-19-13824",
+      "extracted_pages": [
+        1,
+        144,
+        169,
+        186,
+        187,
+        285,
+        286,
+        312,
+        313,
+        314
+      ],
+      "pages_missing_count": 312,
+      "warnings": []
+    },
+    "sections": {
+      "vorblatt": 1,
+      "begruendung": 144,
+      "stellungnahme_bundesrat": 285,
+      "gegenaeusserung_bundesregierung": 312
+    },
+    "fragments": {
+      "gegenaeusserung:ziffer-9": {
+        "role": "gegenaeusserung_bundesregierung",
+        "heading": "Zu Ziffer 9 (Zu Artikel 1, § 34 Absatz 3 Satz 2 SGB XIV)",
+        "heading_source": "Zu Ziffer 9 (Zu Artikel 1, § 34 Absatz 3 Satz 2 SGB XIV)",
+        "body": "Die Bundesregierung stimmt dem Vorschlag des Bundesrates zu.",
+        "page_start": 314,
+        "page_end": 314,
+        "complete": true,
+        "target_norms": [
+          "de/bund/sgb_14/para/34/abs/3/satz/2"
+        ],
+        "mentions": [],
+        "relations": [
+          {
+            "type": "explains",
+            "target": "de/bund/sgb_14/para/34/abs/3/satz/2",
+            "derived_from": "heading",
+            "legal_effect_verified": false
+          }
+        ],
+        "government_position": "agrees"
+      },
+      "gegenaeusserung:ziffer-10": {
+        "role": "gegenaeusserung_bundesregierung",
+        "heading": "Zu Ziffer 10 (Zu Artikel 1, § 35 SGB XIV)",
+        "heading_source": "Zu Ziffer 10 (Zu Artikel 1, § 35 SGB XIV)",
+        "body": "Die Bundesregierung stimmt dem Vorschlag des Bundesrates nicht zu. Für die Betroffenen, die auch nach der Betreuung in der Traumaambulanz weiteren psychotherapeutischen Behandlungsbedarf haben, ist die Möglichkeit einer zeitnahen Weiterbehandlung von großer Bedeutung. Es muss also alles getan werden, um lange Wartezeiten zu vermeiden. Hierzu zählt zumindest der Verweis auf weitere Angebote, wie im Gesetz vorgesehen. Zu berücksichtigen ist, dass den Ländern noch bis Dezember 2023 Zeit bleibt, um die erforderlichen Verbindungen zu anderen psychotherapeutischen Angeboten herzustellen.",
+        "page_start": 314,
+        "page_end": 314,
+        "complete": true,
+        "target_norms": [
+          "de/bund/sgb_14/para/35"
+        ],
+        "mentions": [],
+        "relations": [
+          {
+            "type": "explains",
+            "target": "de/bund/sgb_14/para/35",
+            "derived_from": "heading"
+          }
+        ],
+        "government_position": "rejects"
+      },
+      "gegenaeusserung:ziffer-11": {
+        "heading": "Zu Ziffer 11 (Zu Artikel 1, § 37 Absatz 2 Satz 3 SGB XIV)",
+        "body": "Die Bundesregierung prüft den Vorschlag des Bundesrates. Bei ihrer Prüfung wird die Bundesregierung abwägen, ob bundeseinheitliche Mindest- und/oder Qualitätsstandards bei der flächendeckenden Einrichtung von Traumaambulanzen geboten sind.",
+        "page_start": 314,
+        "page_end": 314,
+        "complete": false,
+        "target_norms": [
+          "de/bund/sgb_14/para/37/abs/2/satz/3"
+        ],
+        "government_position": "examines",
+        "notes": [
+          "truncated_at_unextracted_page"
+        ]
+      }
+    }
+  },
+  "match": "subset"
+}

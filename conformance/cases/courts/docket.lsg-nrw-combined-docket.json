@@ -1,0 +1,29 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.docket.lsg-nrw-combined-docket",
+  "module": "courts",
+  "kind": "decision_metadata",
+  "description": "NRWE: combined docket 'L 9 SO 202/26 B ER und L 9 SO 203/26 B' split into two items, raw string kept",
+  "origin": "spec Identity/Decision (combined dockets)",
+  "status": "active",
+  "input": {
+    "adapter": "nrw",
+    "fixture": "tests/courts/fixtures/nrw/L_9_SO_202_26_B_ER_und_L_9_SO_203_26_B_Beschluss_20260813.html",
+    "url": "https://nrwe.justiz.nrw.de/sgs/lsg_nrw/j2026/L_9_SO_202_26_B_ER_und_L_9_SO_203_26_B_Beschluss_20260813.html",
+    "item": {
+      "source_doc_id": "sgs/lsg_nrw/j2026/L_9_SO_202_26_B_ER_und_L_9_SO_203_26_B_Beschluss_20260813",
+      "listed_date": "2026-08-13",
+      "listed_case_numbers": "L 9 SO 202/26 B ER und L 9 SO 203/26 B"
+    }
+  },
+  "expected": {
+    "case_numbers_raw": "L 9 SO 202/26 B ER und L 9 SO 203/26 B",
+    "case_numbers": [
+      "L 9 SO 202/26 B ER",
+      "L 9 SO 203/26 B"
+    ],
+    "ecli": "ECLI:DE:LSGNRW:2026:0813.L9SO202.26B.ER.UN.00",
+    "court_id": "lsg-nw"
+  },
+  "match": "subset"
+}

@@ -1,0 +1,28 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.furniture.bgbl-2023-406-mid-line-header",
+  "module": "lexgraph",
+  "kind": "page_furniture",
+  "description": "Electronic BGBl 2023 I Nr. 406: the running header 'Seite 3 von 4 Bundesgesetzblatt …' sits in the middle of the extracted command line. It is removed as bgbl_running_header with offsets into the original text and never becomes command wording.",
+  "origin": "PRIMA audit finding a (page furniture, BGBl side); tests/test_page_furniture.py",
+  "status": "active",
+  "input": {
+    "fixture": "tests/fixtures/page_furniture_bgbl_commands.json",
+    "where": {
+      "document_id": "bgbl-1-2023-406"
+    },
+    "field": "raw"
+  },
+  "expected": {
+    "spans": [
+      {
+        "kind": "bgbl_running_header",
+        "start": 104,
+        "end": 205,
+        "text": "Seite 3 von 4 Bundesgesetzblatt Jahrgang 2023 Teil I Nr. 406, ausgegeben zu Bonn am 28. Dezember 2023"
+      }
+    ],
+    "clean": "In § 154 Absatz 4 Satz 3 wird die Angabe „5. Januar 2024“ durch die Angabe „29. Dezember 2023“ ersetzt."
+  },
+  "match": "exact"
+}

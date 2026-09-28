@@ -1,0 +1,18 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.norms.resolve-land-affix-nrw",
+  "module": "courts",
+  "kind": "act_resolution",
+  "description": "canonical act resolution: VwVfG NRW (no land)",
+  "origin": "operating principle 1 (Lexgraph resolver)",
+  "status": "active",
+  "input": {
+    "abbreviation": "VwVfG NRW",
+    "land": null
+  },
+  "expected": {
+    "prefix": "de/nw/vwvfg",
+    "basis": "land_affix"
+  },
+  "match": "subset"
+}

@@ -1,0 +1,24 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.detect.aws-waf-eurlex-202-header",
+  "module": "courts",
+  "kind": "page_classification",
+  "description": "EUR-Lex behind AWS WAF: HTTP 202, empty body, x-amzn-waf-action: challenge (real capture 2026-09-28)",
+  "origin": "paper §6.5 (CELLAR/EUR-Lex WAF challenge returned as a document); MCP conformance aws-waf",
+  "status": "active",
+  "input": {
+    "fixture": "tests/courts/fixtures/eurlex_aws_waf_challenge_202.body",
+    "status": 202,
+    "headers": {
+      "server": "CloudFront",
+      "date": "Mon, 28 Sep 2026 10:25:34 GMT",
+      "content-length": "0",
+      "x-amzn-waf-action": "challenge",
+      "content-type": "text/html; charset=UTF-8"
+    }
+  },
+  "expected": {
+    "kind": "challenge"
+  },
+  "match": "subset"
+}

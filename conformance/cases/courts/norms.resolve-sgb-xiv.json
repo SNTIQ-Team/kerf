@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.norms.resolve-sgb-xiv",
+  "module": "courts",
+  "kind": "act_resolution",
+  "description": "canonical act resolution: SGB XIV (no land)",
+  "origin": "operating principle 1 (Lexgraph resolver)",
+  "status": "active",
+  "input": {
+    "abbreviation": "SGB XIV",
+    "land": null
+  },
+  "expected": {
+    "prefix": "de/bund/sgb_14",
+    "basis": "act_index",
+    "in_corpus": true
+  },
+  "match": "subset"
+}

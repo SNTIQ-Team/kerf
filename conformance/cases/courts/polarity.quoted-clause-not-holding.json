@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.quoted-clause-not-holding",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: quoted-clause-not-holding",
+  "origin": "BAG 10 AZR 242/23 Rn 9 (quoted collective agreement)",
+  "status": "active",
+  "input": {
+    "text": "Die Parteien vereinbarten: „(2) Bei Verzug nach Abs. 1 berechnen sich die Verzugszinsen aus dem gesamten Beitrag. § 389 BGB findet keine Anwendung.“",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$excludes": [
+        "holds_inapplicable|de/bund/bgb/para/389"
+      ]
+    }
+  },
+  "match": "subset"
+}

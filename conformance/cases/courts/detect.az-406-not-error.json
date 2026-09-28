@@ -1,0 +1,17 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.detect.az-406-not-error",
+  "module": "courts",
+  "kind": "page_classification",
+  "description": "a short decision whose Az contains '406' is not an HTTP 406 error page",
+  "origin": "paper §6.5 (challenge pages returned as legal text)",
+  "status": "active",
+  "input": {
+    "fixture": "tests/courts/fixtures/nrw/1_A_406_26_A_Beschluss_20260904.html",
+    "status": 200
+  },
+  "expected": {
+    "kind": null
+  },
+  "match": "subset"
+}

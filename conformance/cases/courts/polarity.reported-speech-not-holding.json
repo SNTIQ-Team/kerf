@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.reported-speech-not-holding",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: reported-speech-not-holding",
+  "origin": "pattern of BAG 6 AZR 108/24 Rn 9 (party submission in Konjunktiv)",
+  "status": "active",
+  "input": {
+    "text": "Zudem habe der Kläger Kenntnis gehabt. § 16 Abs. 2 Satz 4 BBiG sei ohnehin nicht einschlägig.",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$excludes": [
+        "holds_inapplicable|de/bund/bbig_2005/para/16/abs/2/satz/4"
+      ]
+    }
+  },
+  "match": "subset"
+}

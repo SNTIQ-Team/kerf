@@ -1,0 +1,86 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.structure.sgb14-para37",
+  "module": "lexgraph",
+  "kind": "norm_structure",
+  "description": "§ 37 SGB XIV (canonical GII body from Lexgraph's state store) has 2 Absätze; Abs. 2 Satz 3 carries a lead-in and a list of 6 Nummern. Absatz, Satz and Nummer are distinct node types. The official reader renders 3 visual blocks (p, p, dl) with 12 dt/dd elements and PRIMA counted 7 units; neither <p>/line nor list-element counts define locators, so there is no abs/3. '1. Januar 2021' is not a Nummer and not a sentence end.",
+  "origin": "PRIMA audit finding b (Absatz counting); spec: Operating principles 2 (§ 37 SGB XIV structure); tests/test_law_structure.py",
+  "status": "active",
+  "input": {
+    "fixture": "tests/fixtures/law_structure/norm_texts.json",
+    "key": "sgb14_para37"
+  },
+  "expected": {
+    "mode": "legal_units",
+    "numbered_absaetze": true,
+    "text_sha256": "92e08cad13aa3bb9f36266fcc086393fce10fcaadf80bed6d63cd6c2837da464",
+    "counts": {
+      "absatz": 2,
+      "satz": 5,
+      "nummer": 6,
+      "buchstabe": 0,
+      "doppelbuchstabe": 0,
+      "text_block": 1
+    },
+    "locators": {
+      "absatz": [
+        "abs/1",
+        "abs/2"
+      ],
+      "satz": [
+        "abs/1/satz/1",
+        "abs/1/satz/2",
+        "abs/2/satz/1",
+        "abs/2/satz/2",
+        "abs/2/satz/3"
+      ],
+      "text_block": [
+        "abs/2/satz/3/text/einleitung"
+      ],
+      "nummer": [
+        "abs/2/satz/3/nr/1",
+        "abs/2/satz/3/nr/2",
+        "abs/2/satz/3/nr/3",
+        "abs/2/satz/3/nr/4",
+        "abs/2/satz/3/nr/5",
+        "abs/2/satz/3/nr/6"
+      ]
+    },
+    "texts": {
+      "abs/1/satz/2": "Am 1. Januar 2021 bestehende Vereinbarungen bleiben hiervon für die Dauer ihrer Laufzeit unberührt.",
+      "abs/2/satz/3/text/einleitung": "Darüber hinaus enthält die Vereinbarung als Mindestinhalt Regelungen über",
+      "abs/2/satz/3/nr/3": "die Anforderungen an die personelle Ausstattung und an die Qualifikation des Personals,",
+      "abs/2/satz/3/nr/6": "die Vergütung der von der Traumaambulanz erbrachten Leistungen."
+    },
+    "sentences": [
+      {
+        "locator": "abs/1/satz/1",
+        "items": []
+      },
+      {
+        "locator": "abs/1/satz/2",
+        "items": []
+      },
+      {
+        "locator": "abs/2/satz/1",
+        "items": []
+      },
+      {
+        "locator": "abs/2/satz/2",
+        "items": []
+      },
+      {
+        "locator": "abs/2/satz/3",
+        "items": [
+          "abs/2/nr/1",
+          "abs/2/nr/2",
+          "abs/2/nr/3",
+          "abs/2/nr/4",
+          "abs/2/nr/5",
+          "abs/2/nr/6"
+        ]
+      }
+    ]
+  },
+  "match": "subset"
+}

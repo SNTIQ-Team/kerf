@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.keine-anwendung",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: keine-anwendung",
+  "origin": "BAG 5 AZR 276/23 Leitsatz",
+  "status": "active",
+  "input": {
+    "text": "§ 326 Abs. 2 Satz 1 Alt. 2 BGB findet keine Anwendung, wenn der Arbeitnehmer während des Annahmeverzugs erkrankt und ihm deshalb die Erbringung der Arbeitsleistung unmöglich wird.",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "holds_inapplicable|de/bund/bgb/para/326/abs/2/satz/1"
+      ]
+    }
+  },
+  "match": "subset"
+}

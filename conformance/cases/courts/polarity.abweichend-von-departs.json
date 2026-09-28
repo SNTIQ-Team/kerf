@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.abweichend-von-departs",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: abweichend-von-departs",
+  "origin": "cue list (abweichend von)",
+  "status": "active",
+  "input": {
+    "text": "Abweichend von BSG, Urteil vom 12.5.2017 - B 7 AY 1/16 R - hält der Senat eine Kürzung für unzulässig.",
+    "own_court_id": "lsg-nw",
+    "jurisdiction": "sozial",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "departs_from|court:bsg/2017-05-12/B_7_AY_1-16_R"
+      ]
+    }
+  },
+  "match": "subset"
+}

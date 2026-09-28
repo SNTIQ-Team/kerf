@@ -21,7 +21,10 @@ from .packs import CaptureIntegrityError, PackStore
 from .courtids import resolve as resolve_court
 from .errors import UpstreamFailure
 from .model import ParsedDecision
+from .ledger import SCHEMA as LEDGER_SCHEMA
 from .paragraphs import assemble
+from .polarity import SCHEMA as POLARITY_SCHEMA
+from .verify import SCHEMA as VERIFY_SCHEMA
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -276,6 +279,9 @@ def init_db(conn: sqlite3.Connection) -> None:
             if column not in columns:
                 conn.execute(f"ALTER TABLE sources ADD COLUMN {column} {definition}")
     conn.executescript(SCHEMA)
+    conn.executescript(POLARITY_SCHEMA)
+    conn.executescript(LEDGER_SCHEMA)
+    conn.executescript(VERIFY_SCHEMA)
     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     conn.execute("INSERT OR REPLACE INTO meta VALUES('schema_version', ?)", (str(SCHEMA_VERSION),))
     conn.execute("INSERT OR IGNORE INTO meta VALUES('created_at', ?)", (utcnow(),))
@@ -583,6 +589,9 @@ def _insert_relations(conn: sqlite3.Connection, decision_id: str, relations: lis
 
 
 def _delete_decision(conn: sqlite3.Connection, decision_id: str) -> None:
+    # Rule proposals are recomputed after every store; user/model assessments survive (they also
+    # live in the corrections ledger).
+    conn.execute("DELETE FROM relation_assessments WHERE decision_id=? AND derived_by='rules'", (decision_id,))
     for table, column in (("paragraphs", "decision_id"), ("sections", "decision_id"),
                           ("case_numbers", "decision_id"), ("relations", "decision_id"), ("decisions", "id")):
         conn.execute(f"DELETE FROM {table} WHERE {column}=?", (decision_id,))

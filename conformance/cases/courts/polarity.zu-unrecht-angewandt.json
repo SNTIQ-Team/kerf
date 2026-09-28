@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.zu-unrecht-angewandt",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: zu-unrecht-angewandt",
+  "origin": "cue list (zu Unrecht angewandt)",
+  "status": "active",
+  "input": {
+    "text": "Das Landesarbeitsgericht hat § 626 BGB zu Unrecht angewandt.",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "rejects_application_of|de/bund/bgb/para/626"
+      ]
+    }
+  },
+  "match": "subset"
+}
