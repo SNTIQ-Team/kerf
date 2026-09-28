@@ -256,6 +256,37 @@ def ecli_court_codes(inp: dict) -> dict:
             "lookup": {ref: list(resolve_decision(conn, ref)) for ref in inp.get("lookup", [])}}
 
 
-KINDS = {f.__name__: f for f in (paragraphs_from_capture, cross_representation, assessment_attachment, quote_to_paragraph, decision_metadata, case_numbers,
+def source_precedence(inp: dict) -> dict:
+    """The same decision stored from several sources in the given order: which source holds it, and what
+    became of the other items (courts.store: primary > archive > aggregator)."""
+    import sqlite3
+    from courts.errors import UpstreamFailure
+    from courts.model import Block, ParsedDecision, Section
+    from courts.store import init_db, store_decision
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    init_db(conn)
+    outcomes = []
+    for n, step in enumerate(inp["stores"]):
+        conn.execute("INSERT INTO source_items(source_id, source_doc_id, url) VALUES(?,?,?)",
+                     (step["source"], step["doc"], "u"))
+        conn.commit()
+        parsed = ParsedDecision(
+            source_id=step["source"], source_doc_id=step["doc"], source_url=f"https://example.invalid/{n}",
+            court_name=inp["court_name"], decision_date=inp["date"], case_numbers_raw=inp["case_number"],
+            case_numbers=[inp["case_number"]], decision_type="Urteil", ecli=step.get("ecli"),
+            sections=[Section("gruende", "court", "fixture", [Block(step.get("text", "Text."), "1")])])
+        try:
+            store_decision(conn, parsed, content_hash=f"h{n}", capture_path="-", media_type="text/html")
+            outcomes.append("stored")
+        except UpstreamFailure as failure:
+            outcomes.append(failure.kind)
+    holder = [r["source_id"] for r in conn.execute("SELECT source_id FROM decisions")]
+    items = {f"{r['source_id']}:{r['source_doc_id']}": r["state"] for r in conn.execute(
+        "SELECT source_id, source_doc_id, state FROM source_items ORDER BY rowid")}
+    return {"outcomes": outcomes, "holder": holder, "items": items}
+
+
+KINDS = {f.__name__: f for f in (source_precedence, paragraphs_from_capture, cross_representation, assessment_attachment, quote_to_paragraph, decision_metadata, case_numbers,
                                  page_classification, norm_citations, decision_citations, relation_assessments,
                                  act_resolution, decision_parse, capture_acceptance, ecli_court_codes)}

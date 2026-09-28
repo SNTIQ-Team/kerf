@@ -9,7 +9,7 @@ import importlib
 
 from .base import Adapter
 
-MODULES = ("rii", "nrw", "by", "juris", "bverwg", "bsg", "bag", "bverfg", "bb", "ni", "hb", "sn", "openjur")
+MODULES = ("rii", "nrw", "by", "juris", "bverwg", "bsg", "bag", "bverfg", "bb", "ni", "hb", "sn", "openjur", "wayback", "old")
 
 
 def registry() -> dict[str, Adapter]:

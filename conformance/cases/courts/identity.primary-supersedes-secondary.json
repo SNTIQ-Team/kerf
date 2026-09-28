@@ -1,0 +1,51 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.identity.primary-supersedes-secondary",
+  "module": "courts",
+  "kind": "source_precedence",
+  "description": "One decision from an aggregator (OLD), an archive (Wayback) and the primary source, in that order: each better-ranked copy replaces the previous one; a secondary copy arriving after the primary is a duplicate",
+  "origin": "coordinator request 2026-09-28 (alternative sources for BAYERN.RECHT, bverwg.de, Länder gaps) (primary sources win on conflict)",
+  "status": "active",
+  "input": {
+    "court_name": "Bayerischer Verwaltungsgerichtshof",
+    "date": "2023-01-18",
+    "case_number": "16b D 22.2183",
+    "stores": [
+      {
+        "source": "old",
+        "doc": "1"
+      },
+      {
+        "source": "wayback",
+        "doc": "by:Y-1"
+      },
+      {
+        "source": "by",
+        "doc": "Y-1"
+      },
+      {
+        "source": "old",
+        "doc": "2",
+        "text": "Andere Fassung."
+      }
+    ]
+  },
+  "expected": {
+    "outcomes": [
+      "stored",
+      "stored",
+      "stored",
+      "duplicate_identity"
+    ],
+    "holder": [
+      "by"
+    ],
+    "items": {
+      "old:1": "skipped",
+      "wayback:by:Y-1": "skipped",
+      "by:Y-1": "stored",
+      "old:2": "pending"
+    }
+  },
+  "match": "subset"
+}

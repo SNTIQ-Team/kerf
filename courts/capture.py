@@ -95,9 +95,11 @@ class CaptureSource:
 
 
 def capture_sources() -> dict[str, CaptureSource]:
-    from .sources import by_portal
+    from .sources import bverwg, by_portal
     return {"by": CaptureSource("by", "BAYERN.RECHT (gesetze-bayern.de) decision page", by_portal.canonical_url,
-                                by_portal.parse_capture, by_portal.page_doc_ids, by_portal.ROUTE)}
+                                by_portal.parse_capture, by_portal.page_doc_ids, by_portal.ROUTE),
+            "bverwg": CaptureSource("bverwg", "bverwg.de decision page", bverwg.capture_canonical_url,
+                                    bverwg.capture_parse, bverwg.capture_page_doc_ids, "user_capture")}
 
 
 # --- preparation (no database) --------------------------------------------------------------------------

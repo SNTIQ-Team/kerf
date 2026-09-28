@@ -1,0 +1,67 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.wayback-bverwg-legacy-1-b-30-16",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "Wayback copy of the bverwg.de layout before 2017 (entscheidung.php): full text, Rn 1-13 from span.num, tenor from the blockquote, Vorinstanzen from the lines after the Az",
+  "origin": "coordinator request 2026-09-28 (alternative sources for BAYERN.RECHT, bverwg.de, Länder gaps); Wayback capture 20160810121139",
+  "status": "active",
+  "input": {
+    "adapter": "wayback",
+    "fixture": "tests/courts/fixtures/wayback/bverwg-010316B1B30.16.0-20160810121139-old-layout.html.gz",
+    "item": {
+      "source_doc_id": "bverwg:010316B1B30.16.0",
+      "url": "https://web.archive.org/web/20160810121139id_/https://www.bverwg.de/de/010316B1B30.16.0",
+      "listed_date": "2016-03-01",
+      "listed_court": "bverwg",
+      "listed_case_numbers": "1 B 30.16",
+      "extra": {
+        "route": "bverwg",
+        "doc": "010316B1B30.16.0",
+        "original": "https://www.bverwg.de/de/010316B1B30.16.0",
+        "captures": [
+          [
+            "20160810121139",
+            "https://www.bverwg.de/de/010316B1B30.16.0"
+          ]
+        ]
+      }
+    },
+    "show": [
+      "rn-13"
+    ]
+  },
+  "expected": {
+    "id": "ECLI:DE:BVerwG:2016:010316B1B30.16.0",
+    "decision_type": "Beschluss",
+    "numbering": "rn",
+    "rn_count": 13,
+    "sections": [
+      {
+        "name": "tenor",
+        "authorship": "court",
+        "blocks": 3
+      },
+      {
+        "name": "gruende",
+        "authorship": "court",
+        "blocks": 15
+      }
+    ],
+    "procedural": [
+      {
+        "direction": "previous",
+        "court": "VG Bremen",
+        "date": "2011-06-06",
+        "case_number": "4 K 1191/09"
+      },
+      {
+        "direction": "previous",
+        "court": "OVG Bremen",
+        "date": "2015-11-10",
+        "case_number": "1 LB 10/15"
+      }
+    ]
+  },
+  "match": "subset"
+}

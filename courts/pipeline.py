@@ -204,6 +204,7 @@ class Writer:
             if changed:
                 after_store(conn, decision_id)
             run.counts["stored" if changed else "unchanged"] += 1
+            getattr(run.adapter, "on_stored", lambda _item: None)(item)
         except UpstreamFailure as failure:
             if failure.kind == "duplicate_identity":
                 run.counts["duplicates"] = run.counts.get("duplicates", 0) + 1
@@ -212,6 +213,7 @@ class Writer:
                                 lease_until=NULL WHERE source_id=? AND source_doc_id=?""",
                              (utcnow(), failure.detail[:500], content_hash, run.adapter.source_id,
                               item["source_doc_id"]))
+                getattr(run.adapter, "on_stored", lambda _item: None)(item)
                 return
             run.counts["failed"] += 1
             if failure.url is None:

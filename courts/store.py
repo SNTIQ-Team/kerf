@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS sources(
     CHECK(robots_policy IN ('respect','ignore_by_operator_decision')),
   policy_decided_at TEXT,
   policy_basis TEXT,
-  min_interval REAL
+  min_interval REAL,
+  source_kind TEXT NOT NULL DEFAULT 'primary' CHECK(source_kind IN ('primary','archive','aggregator')),
+  licence TEXT
 );
 CREATE TABLE IF NOT EXISTS captures(
   sha256 TEXT PRIMARY KEY,
@@ -229,7 +231,7 @@ CREATE TABLE IF NOT EXISTS http_validators(
 DROP VIEW IF EXISTS source_coverage;
 CREATE VIEW IF NOT EXISTS source_coverage AS
 SELECT s.source_id, s.label, s.land, s.status, s.status_reason, s.upstream_listed, s.listing_complete,
-       s.robots_policy, s.policy_decided_at, s.policy_basis, s.min_interval,
+       s.robots_policy, s.policy_decided_at, s.policy_basis, s.min_interval, s.source_kind, s.licence,
        (SELECT count(*) FROM decisions d WHERE d.source_id = s.source_id) AS decisions,
        (SELECT min(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_from,
        (SELECT max(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_to,
@@ -284,6 +286,25 @@ def connect(path: Path | None = None, *, readonly: bool = False, threads: bool =
     conn.execute("PRAGMA busy_timeout=120000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+# Additive (2026-09-28): secondary copies (archived pages, aggregators) never win over a primary source.
+SOURCE_COLUMNS_KIND = {
+    "source_kind": "TEXT NOT NULL DEFAULT 'primary' CHECK(source_kind IN ('primary','archive','aggregator'))",
+    "licence": "TEXT",
+}
+# Precedence on identity conflicts (same decision from two sources): lower rank wins.  The source kind of a
+# source id is fixed in code (adapters declare the same; tests check it) so that store needs no registry.
+SECONDARY_SOURCES = {"wayback": "archive", "old": "aggregator"}
+SOURCE_RANK = {"primary": 0, "archive": 1, "aggregator": 2}
+
+
+def source_kind(source_id: str) -> str:
+    return SECONDARY_SOURCES.get(source_id, "primary")
+
+
+def source_rank(source_id: str) -> int:
+    return SOURCE_RANK[source_kind(source_id)]
 
 
 SOURCE_COLUMNS_V2 = {
@@ -432,6 +453,11 @@ def _init_db(conn: sqlite3.Connection) -> None:
         for column, definition in SOURCE_COLUMNS_V2.items():
             if column not in columns:
                 conn.execute(f"ALTER TABLE sources ADD COLUMN {column} {definition}")
+    source_columns = {r[1] for r in conn.execute("PRAGMA table_info(sources)")}
+    if source_columns:
+        for column, definition in SOURCE_COLUMNS_KIND.items():
+            if column not in source_columns:
+                conn.execute(f"ALTER TABLE sources ADD COLUMN {column} {definition}")
     item_columns = {r[1] for r in conn.execute("PRAGMA table_info(source_items)")}
     if item_columns and "claimed_by" not in item_columns:
         _upgrade_source_items(conn)
@@ -487,13 +513,15 @@ def register_source(conn: sqlite3.Connection, source_id: str, label: str, base_u
                     land: str | None, adapter: str, policy: dict | None = None) -> None:
     policy = policy or {}
     conn.execute("""INSERT INTO sources(source_id,label,base_url,land,adapter,robots_policy,policy_decided_at,
-                                        policy_basis,min_interval) VALUES(?,?,?,?,?,?,?,?,?)
+                                        policy_basis,min_interval,source_kind,licence) VALUES(?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(source_id) DO UPDATE SET label=excluded.label, base_url=excluded.base_url,
                     land=excluded.land, adapter=excluded.adapter, robots_policy=excluded.robots_policy,
                     policy_decided_at=excluded.policy_decided_at, policy_basis=excluded.policy_basis,
-                    min_interval=excluded.min_interval""",
+                    min_interval=excluded.min_interval, source_kind=excluded.source_kind,
+                    licence=excluded.licence""",
                  (source_id, label, base_url, land, adapter, policy.get("robots_policy", "respect"),
-                  policy.get("policy_decided_at"), policy.get("policy_basis"), policy.get("min_interval")))
+                  policy.get("policy_decided_at"), policy.get("policy_basis"), policy.get("min_interval"),
+                  policy.get("source_kind") or source_kind(source_id), policy.get("licence")))
     conn.commit()
 
 
@@ -811,7 +839,13 @@ def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content
     superseded = None
     for row in existing:
         if (row["source_id"], row["source_doc_id"]) != (parsed.source_id, parsed.source_doc_id):
-            if row["numbering"] == "none" and numbering == "rn":
+            mine, theirs = source_rank(parsed.source_id), source_rank(row["source_id"])
+            if mine < theirs:
+                # A primary source replaces a secondary copy (archived page, aggregator) of the same decision;
+                # the copy stays as a skipped item with its capture (an offline verification pair).
+                superseded = row
+                continue
+            if mine == theirs and row["numbering"] == "none" and numbering == "rn":
                 # Precedence (SCHEMA.md "Duplicates"): the representation with explicit Randnummern wins; the
                 # unnumbered copy (e.g. bsg.bund.de without Rn, RII with Rn) stays as a skipped item + capture.
                 superseded = row
@@ -885,7 +919,9 @@ def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content
                             failure_detail=?, content_hash=coalesce(content_hash, ?)
                             WHERE source_id=? AND source_doc_id=?""",
                          (f"{decision_id} superseded by {parsed.source_id}:{parsed.source_doc_id} "
-                          "(explicit Randnummern take precedence)", superseded["content_hash"],
+                          + ("(a primary source takes precedence over a secondary copy)"
+                             if source_rank(parsed.source_id) < source_rank(superseded["source_id"])
+                             else "(explicit Randnummern take precedence)"), superseded["content_hash"],
                           superseded["source_id"], superseded["source_doc_id"]))
         conn.execute("COMMIT")
     except BaseException:

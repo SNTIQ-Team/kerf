@@ -1,0 +1,46 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.wayback-bverwg-7-b-80-05-reasons-after-tenor",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "bverwg.de page of an old decision (2006) prints the reasons after the tenor under an empty heading: they are 'gruende', not tenor",
+  "origin": "coordinator request 2026-09-28 (alternative sources for BAYERN.RECHT, bverwg.de, Länder gaps); Wayback capture 20240622222938",
+  "status": "active",
+  "input": {
+    "adapter": "wayback",
+    "fixture": "tests/courts/fixtures/wayback/bverwg-010206B7B80.05.0-20240622222938.html.gz",
+    "item": {
+      "source_doc_id": "bverwg:010206B7B80.05.0",
+      "url": "https://web.archive.org/web/20240622222938id_/https://www.bverwg.de/de/010206B7B80.05.0",
+      "listed_date": "2006-02-01",
+      "listed_court": "bverwg",
+      "listed_case_numbers": "7 B 80.05",
+      "extra": {
+        "route": "bverwg",
+        "doc": "010206B7B80.05.0",
+        "original": "https://www.bverwg.de/de/010206B7B80.05.0",
+        "captures": [
+          [
+            "20240622222938",
+            "https://www.bverwg.de/de/010206B7B80.05.0"
+          ]
+        ]
+      }
+    }
+  },
+  "expected": {
+    "sections": [
+      {
+        "name": "tenor",
+        "authorship": "court",
+        "blocks": 3
+      },
+      {
+        "name": "gruende",
+        "authorship": "court",
+        "blocks": 1
+      }
+    ]
+  },
+  "match": "subset"
+}

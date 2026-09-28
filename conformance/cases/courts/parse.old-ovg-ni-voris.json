@@ -1,0 +1,36 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.old-ovg-ni-voris",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "Open Legal Data copy of a VORIS (Niedersachsen) decision: div.tenor/div.gruende of <p>, no Randnummern (#p-n ids)",
+  "origin": "coordinator request 2026-09-28 (alternative sources for BAYERN.RECHT, bverwg.de, Länder gaps); OLD case 521478",
+  "status": "active",
+  "input": {
+    "adapter": "old",
+    "fixture": "tests/courts/fixtures/old/row-521478-ovg-ni-voris.json.gz",
+    "item": {
+      "source_doc_id": "521478",
+      "url": "https://de.openlegaldata.io/case/x",
+      "extra": {}
+    }
+  },
+  "expected": {
+    "court_id": "ovg-ni",
+    "numbering": "none",
+    "ecli": "ECLI:DE:OVGNI:2026:0624.4LA42.25.00",
+    "sections": [
+      {
+        "name": "tenor",
+        "authorship": "court",
+        "blocks": 2
+      },
+      {
+        "name": "gruende",
+        "authorship": "court",
+        "blocks": 8
+      }
+    ]
+  },
+  "match": "subset"
+}
