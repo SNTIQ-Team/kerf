@@ -827,7 +827,7 @@ def parse_amendment_commands(section: dict) -> tuple[list[dict], list[str]]:
     # address instead of publishing target-less commands.
     parent_ref: dict[str, str] = {}
     parent_scope: str | None = None
-    first_item = re.search(r"(?m)^[ \t]*1\.[ \t]+", body)
+    first_item = re.search(r"(?m)^[ \t]*(?:0a?|1)\.[ \t]+", body)
     if first_item:
         header = body[:first_item.start()].strip()
         if re.search(r"\bwird\b.{0,120}\bwie\s+folgt\s+geändert\b",
