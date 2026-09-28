@@ -325,3 +325,14 @@ def test_same_decision_from_second_source_is_skipped_not_failed(conn, fixture):
     assert result["failed"] == 0 and result["duplicates"] == 1 and result["status"] == "ok"
     row = conn.execute("SELECT state, failure_kind FROM source_items WHERE source_id='bverwg'").fetchone()
     assert tuple(row) == ("skipped", "duplicate_identity")
+
+
+def test_failed_parse_keeps_the_capture_hash_for_offline_reexamination(conn, fixture):
+    class Broken(FixtureAdapter):
+        def parse(self, capture, it):
+            raise UpstreamFailure("empty_document", "no decision text blocks")
+    result = sync_source(Broken(fixture, [item()]), conn, FakeHttp())
+    assert result["failed"] == 1
+    row = conn.execute("SELECT state, content_hash FROM source_items").fetchone()
+    assert row["state"] == "failed"
+    assert row["content_hash"] == conn.execute("SELECT sha256 FROM captures").fetchone()[0]
