@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS sources(
   last_sync_started TEXT,
   last_sync_finished TEXT,
   last_sync_status TEXT,
-  last_sync_run INTEGER
+  last_sync_run INTEGER,
+  listing_complete INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS source_items(
   source_id TEXT NOT NULL,
@@ -199,8 +200,9 @@ CREATE TABLE IF NOT EXISTS http_validators(
   content_hash TEXT,
   fetched_at TEXT NOT NULL
 );
-CREATE VIEW IF NOT EXISTS source_coverage AS
-SELECT s.source_id, s.label, s.land, s.status, s.status_reason, s.upstream_listed,
+DROP VIEW IF EXISTS source_coverage;
+CREATE VIEW source_coverage AS
+SELECT s.source_id, s.label, s.land, s.status, s.status_reason, s.upstream_listed, s.listing_complete,
        (SELECT count(*) FROM decisions d WHERE d.source_id = s.source_id) AS decisions,
        (SELECT min(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_from,
        (SELECT max(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_to,
@@ -239,6 +241,11 @@ def init_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version not in (0, SCHEMA_VERSION):
         raise RuntimeError(f"database schema v{version} != code schema v{SCHEMA_VERSION}")
+    if version == SCHEMA_VERSION:
+        # Additive v1 migrations for databases created by earlier v1 code.
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(sources)")}
+        if columns and "listing_complete" not in columns:
+            conn.execute("ALTER TABLE sources ADD COLUMN listing_complete INTEGER NOT NULL DEFAULT 0")
     conn.executescript(SCHEMA)
     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     conn.execute("INSERT OR REPLACE INTO meta VALUES('schema_version', ?)", (str(SCHEMA_VERSION),))

@@ -11,7 +11,7 @@ from .http import PoliteHttp
 from .read import citing_decisions, coverage, get_decision, get_paragraph, open_db, search
 from .sources import get_adapter, registry
 from .store import connect, init_db
-from .sync import SourceBusy, reparse_source, sync_source
+from .sync import SourceBusy, reparse_source, source_lock, sync_source
 
 
 def _date(value: str) -> str:
@@ -48,7 +48,11 @@ def cmd_reparse(args) -> int:
     init_db(conn)
     sources = [args.source] if args.source else [r[0] for r in conn.execute("SELECT source_id FROM sources")]
     for source_id in sources:
-        print(json.dumps({"source": source_id, **reparse_source(get_adapter(source_id), conn)}))
+        try:
+            with source_lock(source_id):
+                print(json.dumps({"source": source_id, **reparse_source(get_adapter(source_id), conn)}))
+        except SourceBusy as exc:
+            print(json.dumps({"source": source_id, "status": "busy", "detail": str(exc)}))
     return 0
 
 
@@ -100,7 +104,7 @@ def cmd_paragraph(args) -> int:
 def cmd_search(args) -> int:
     result = search(open_db(), args.q, court=args.court, date_from=args.date_from, date_to=args.date_to,
                     case_number=args.az, ecli=args.ecli, norm=args.norm, relation=args.relation,
-                    source=args.source, limit=args.limit)
+                    source=args.source.split(",") if args.source else None, limit=args.limit)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

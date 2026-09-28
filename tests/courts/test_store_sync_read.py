@@ -106,6 +106,8 @@ def seed(conn, fixture):
     parsed = parse_document(body.decode("utf-8"), f"https://nrwe.justiz.nrw.de/sgs/lsg_nrw/j2026/{NRW}.html", NRW)
     store_decision(conn, parsed, content_hash=content_hash, capture_path=rel, media_type="text/html")
     set_source_status(conn, "nrw", "ok", None)
+    # Both fixture sources count as fully listed (the RII fixture sync listed everything).
+    conn.execute("UPDATE sources SET listing_complete=1 WHERE source_id='nrw'")
 
 
 def test_search_complete_scope_counts_and_evidence(conn, fixture):
@@ -130,7 +132,7 @@ def test_search_zero_with_pending_backfill_is_not_a_silent_zero(conn, fixture):
     conn.execute("INSERT INTO source_items(source_id, source_doc_id, url, state) VALUES('nrw','pending-1','u','pending')")
     env = search(open_db(), "Quantenchromodynamik")
     assert env["status"] == "not_found_in_searched_scope" and env["total"] == 0
-    assert any("not yet synced" in w for w in env["warnings"])
+    assert any("backfill incomplete" in w for w in env["warnings"])
 
 
 def test_search_with_unavailable_source_returns_null_total(conn, fixture):
@@ -246,3 +248,31 @@ def test_second_concurrent_sync_of_the_same_source_is_refused(isolated_corpus):
                 pass
         with source_lock("rii", isolated_corpus):  # other sources are independent
             pass
+
+
+def test_search_scoped_to_several_available_sources_has_a_total(conn, fixture):
+    seed(conn, fixture)
+    register_source(conn, "by", "Bayern", "https://www.gesetze-bayern.de", "by", "x")
+    set_source_status(conn, "by", "blocked", "challenge")
+    db = open_db()
+    assert search(db, "Beschwerde")["total"] is None
+    scoped = search(db, "Beschwerde", source=["rii", "nrw"])
+    assert scoped["status"] == "ok" and scoped["total"] >= 2
+    assert [s["source"] for s in scoped["searched"]] == ["nrw", "rii"]
+    assert search(db, "Beschwerde", source=["nope"])["status"] == "not_in_corpus"
+
+
+def test_bounded_backfill_is_never_reported_as_complete(conn, fixture):
+    seed(conn, fixture)
+    conn.execute("UPDATE sources SET listing_complete=0 WHERE source_id='nrw'")  # e.g. synced with --limit
+    env = search(open_db(), "Beschwerde", source="nrw")
+    assert env["status"] == "partial" and env["total"] >= 1
+    assert any("backfill incomplete" in w for w in env["warnings"])
+    assert search(open_db(), "Quantenchromodynamik", source="nrw")["status"] == "not_found_in_searched_scope"
+
+
+def test_listing_complete_is_set_only_by_an_unbounded_full_listing(conn, fixture):
+    sync_source(FixtureAdapter(fixture, [item()]), conn, FakeHttp(), limit=1)
+    assert conn.execute("SELECT listing_complete FROM sources WHERE source_id='rii'").fetchone()[0] == 0
+    sync_source(FixtureAdapter(fixture, [item()]), conn, FakeHttp())
+    assert conn.execute("SELECT listing_complete FROM sources WHERE source_id='rii'").fetchone()[0] == 1
