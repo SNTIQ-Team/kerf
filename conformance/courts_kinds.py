@@ -133,12 +133,19 @@ def cross_representation(inp: dict) -> dict:
     paras, numbering = _paragraphs(parsed)
     stored = from_paragraphs("stored", [(p.rn, p.section, p.text) for p in paras], numbering, parsed.case_numbers)
     other_kind = inp["other"]["kind"]
-    if other_kind != "nrwe-pdf":
+    if other_kind == "nrwe-pdf":
+        other = parse_nrwe_pdf(read_input(inp["other"]["fixture"]), inp["other"].get("url", ""), "x")
+    elif other_kind == "bayern-recht-pdf":
+        from courts.sources.by_portal import parse_portal_pdf
+        from courts.store import finalise
+        other = finalise(parse_portal_pdf(read_input(inp["other"]["fixture"]), dict(inp["item"]),
+                                          inp["other"].get("url", "")))
+    else:
         raise ValueError(f"unsupported representation {other_kind}")
-    other = parse_nrwe_pdf(read_input(inp["other"]["fixture"]), inp["other"].get("url", ""), "x")
     rep = parsed_representation(other_kind, other)
     findings = compare(stored, rep)
     return {"numbering": [stored.numbering, rep.numbering],
+            "minor_findings": sorted({f"{f['kind']}" for f in findings if f["severity"] == "minor"}),
             "rn_labels_equal": list(stored.rn_texts) == list(rep.rn_texts),
             "rn_count": [len(stored.rn_texts), len(rep.rn_texts)],
             "rn_without_own_text": [parsed.metadata.get("rn_without_own_text"),
@@ -188,6 +195,67 @@ def assessment_attachment(inp: dict) -> dict:
             "filtered_decisions": sorted({r["source_id"] for r in filtered["relations"]})}
 
 
+def decision_parse(inp: dict) -> dict:
+    """The whole parsed decision in brief: identity, sections with authorship, Rn, procedural lines, metadata."""
+    from courts.store import decision_identity
+    parsed = _parsed(inp)
+    paras, numbering = _paragraphs(parsed)
+    rns = [p.rn for p in paras if p.rn]
+    by_anchor = {p.id.split("#", 1)[1]: p.text for p in paras}
+    return {"id": decision_identity(parsed), "court_id": parsed.court_id, "court_name": parsed.court_name,
+            "decision_date": parsed.decision_date, "decision_type": parsed.decision_type,
+            "case_numbers_raw": parsed.case_numbers_raw, "ecli": parsed.ecli, "numbering": numbering,
+            "rn_count": len(rns), "rn_first": rns[0] if rns else None, "rn_last": rns[-1] if rns else None,
+            "sections": [{"name": s.name, "authorship": s.authorship, "blocks": len(s.blocks)} for s in parsed.sections],
+            "procedural": [{k: p.get(k) for k in ("direction", "court", "date", "case_number")}
+                           for p in parsed.procedural],
+            "metadata": parsed.metadata,
+            "paragraph_text": {anchor: by_anchor.get(anchor, "") for anchor in inp.get("show", [])}}
+
+
+def capture_acceptance(inp: dict) -> dict:
+    """courts.capture's content checks for one user-browser capture (no database, no rate guard)."""
+    import time
+    from courts.capture import CaptureRefused, check_arguments, check_content
+    body = read_input(inp["fixture"])
+    try:
+        prepared = check_arguments(inp["source"], inp["url"], body, captured_at=inp.get("captured_at"),
+                                   captured_at_basis=None, now=time.time())
+        with lexgraph_snapshot():
+            check_content(prepared)
+    except CaptureRefused as refused:
+        return {"accepted": False, "status": refused.status, "reason": refused.reason}
+    return {"accepted": True, "doc_id": prepared.doc_id, "url": prepared.url, "media_type": prepared.media_type,
+            "court_id": prepared.parsed.court_id, "decision_date": prepared.parsed.decision_date}
+
+
+def ecli_court_codes(inp: dict) -> dict:
+    """Observed ECLI court codes (courts.courtmap.derive_ecli_codes) on a scratch corpus, and ECLI lookups
+    through courts.read.resolve_decision."""
+    import sqlite3
+    from courts.courtmap import derive_ecli_codes
+    from courts.model import Block, ParsedDecision, Section
+    from courts.read import resolve_decision
+    from courts.store import init_db, store_decision
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    init_db(conn)
+    with lexgraph_snapshot():
+        for d in inp["decisions"]:
+            parsed = ParsedDecision(
+                source_id=d.get("source", "rii"), source_doc_id=d["doc"], source_url=f"https://example.invalid/{d['doc']}",
+                court_name=d["court_name"], decision_date=d["date"], case_numbers_raw=d["case_number"],
+                case_numbers=[d["case_number"]], decision_type="Beschluss", ecli=d.get("ecli"), land=d.get("land"),
+                sections=[Section("gruende", "court", "fixture", [Block(t, str(i)) for i, t in
+                                                                  enumerate(d["paragraphs"], 1)])])
+            store_decision(conn, parsed, content_hash=d["doc"], capture_path="-", media_type="text/html")
+    report = derive_ecli_codes(conn)
+    codes = {r["court_slug"]: r["ecli_court_code"] for r in conn.execute(
+        "SELECT court_slug, ecli_court_code FROM court_map WHERE ecli_court_code IS NOT NULL")}
+    return {"codes": codes, "ambiguous": sorted(report["ambiguous"]),
+            "lookup": {ref: list(resolve_decision(conn, ref)) for ref in inp.get("lookup", [])}}
+
+
 KINDS = {f.__name__: f for f in (paragraphs_from_capture, cross_representation, assessment_attachment, quote_to_paragraph, decision_metadata, case_numbers,
                                  page_classification, norm_citations, decision_citations, relation_assessments,
-                                 act_resolution)}
+                                 act_resolution, decision_parse, capture_acceptance, ecli_court_codes)}

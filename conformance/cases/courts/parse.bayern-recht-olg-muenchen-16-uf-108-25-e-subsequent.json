@@ -1,0 +1,38 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.bayern-recht-olg-muenchen-16-uf-108-25-e-subsequent",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "BAYERN.RECHT 'Rechtsmittelinstanz: BGH vom -- – XII ZB 279/25': a subsequent procedural reference without a date",
+  "origin": "Wayback Machine capture (id_) of https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-13206, 20260115110020",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2025-N-13206.html.gz",
+    "item": {
+      "source_doc_id": "Y-300-Z-BECKRS-B-2025-N-13206",
+      "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-13206",
+      "extra": {
+        "route": "portal_capture"
+      }
+    }
+  },
+  "expected": {
+    "case_numbers_raw": "16 UF 108/25 e",
+    "procedural": [
+      {
+        "direction": "previous",
+        "court": "Amtsgericht Erding",
+        "date": "2024-12-18",
+        "case_number": "206 F 507/23"
+      },
+      {
+        "direction": "subsequent",
+        "court": "Bundesgerichtshof",
+        "date": null,
+        "case_number": "XII ZB 279/25"
+      }
+    ]
+  },
+  "match": "subset"
+}

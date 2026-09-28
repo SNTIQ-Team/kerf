@@ -219,6 +219,12 @@ def resolve_decision(conn: sqlite3.Connection, ref: str) -> tuple[str, list[str]
         return "ok", ids
     if ids:  # one portal gave two documents the same ECLI: both are candidates
         return "ambiguous_identity", ids
+    if ref.upper().startswith("ECLI:DE:"):
+        ids = decisions_by_ecli_components(conn, ref)
+        if len(ids) == 1:
+            return "ok", ids
+        if ids:
+            return "ambiguous_identity", ids
     if ":" in ref and not ref.startswith(("court:", "ECLI:")):
         source_id, _, doc = ref.partition(":")
         row = conn.execute("SELECT id FROM decisions WHERE source_id=? AND source_doc_id=?", (source_id, doc)).fetchone()
@@ -236,6 +242,23 @@ def resolve_decision(conn: sqlite3.Connection, ref: str) -> tuple[str, list[str]
     return "not_in_corpus", []
 
 
+def decisions_by_ecli_components(conn: sqlite3.Connection, ecli: str) -> list[str]:
+    """A German Land-court ECLI that no corpus decision carries (BAYERN.RECHT and court PDFs print none):
+    its court code (court_map.ecli_court_code, observed codes only), its date (year + MMDD) and its docket
+    part (alphanumerics of the Az) locate the decision.  Federal ordinals use other layouts and are not read."""
+    from .courtmap import _alnum, ecli_court_slugs, ecli_parts
+    parts = ecli_parts(ecli)
+    if not parts or not parts["date"] or not parts["docket"]:
+        return []
+    slugs = ecli_court_slugs(conn, parts["code"])
+    if not slugs:
+        return []
+    rows = conn.execute(f"""SELECT DISTINCT d.id, c.case_key FROM decisions d JOIN case_numbers c ON c.decision_id = d.id
+                            WHERE d.court_slug IN ({','.join('?' * len(slugs))}) AND d.decision_date = ?""",
+                        (*slugs, parts["date"])).fetchall()
+    return sorted({r["id"] for r in rows if _alnum(r["case_key"]) == parts["docket"]})
+
+
 def get_decision(conn: sqlite3.Connection, ref: str, *, with_paragraphs: bool = True,
                  with_relations: bool = True) -> dict:
     status, ids = resolve_decision(conn, ref)
@@ -245,6 +268,9 @@ def get_decision(conn: sqlite3.Connection, ref: str, *, with_paragraphs: bool = 
     result = {k: d[k] for k in d.keys() if k not in ("metadata", "case_numbers")}
     result["case_numbers"] = json.loads(d["case_numbers"])
     result["metadata"] = json.loads(d["metadata"])
+    if ref.upper().startswith("ECLI:") and ref not in (d["ecli"], d["id"]):
+        # Found by court code + date + docket (decisions_by_ecli_components), not by a stored ECLI.
+        result["identity_match"] = {"request": ref, "matched_by": "ecli_court_code_date_docket"}
     result["sections"] = [dict(r) for r in conn.execute(
         "SELECT name, authorship, authorship_basis, heading FROM sections WHERE decision_id=? ORDER BY position",
         (d["id"],))]

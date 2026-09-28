@@ -442,6 +442,13 @@ def _init_db(conn: sqlite3.Connection) -> None:
         from .schema_v4 import upgrade_in_place
         upgrade_in_place(conn, create_schema)
     create_schema(conn)
+    map_columns = {r[1] for r in conn.execute("PRAGMA table_info(court_map)")}
+    if map_columns and "ecli_court_code" not in map_columns:
+        # Additive (2026-09-28): observed ECLI court codes (courts.courtmap.derive_ecli_codes).
+        from .courtmap import ECLI_COLUMNS
+        for column, definition in ECLI_COLUMNS:
+            if column not in map_columns:
+                conn.execute(f"ALTER TABLE court_map ADD COLUMN {column} {definition}")
     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     conn.execute("INSERT OR REPLACE INTO meta VALUES('schema_version', ?)", (str(SCHEMA_VERSION),))
     conn.execute("INSERT OR IGNORE INTO meta VALUES('created_at', ?)", (utcnow(),))

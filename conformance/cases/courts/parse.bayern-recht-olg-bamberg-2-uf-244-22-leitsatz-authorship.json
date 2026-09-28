@@ -1,0 +1,81 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.bayern-recht-olg-bamberg-2-uf-244-22-leitsatz-authorship",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "BAYERN.RECHT OLG Bamberg 2 UF 244/22: Leitsätze without '(redaktioneller Leitsatz)' are the court's (leitsatz, court); the marked ones are the portal editors' (orientierungssatz, editorial); the Titel is editorial; tenor items are positional, not Rn",
+  "origin": "Wayback Machine capture (id_) of https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10253?hl=true, 20240622020504",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10253.html.gz",
+    "item": {
+      "source_doc_id": "Y-300-Z-BECKRS-B-2023-N-10253",
+      "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10253",
+      "extra": {
+        "route": "portal_capture"
+      }
+    },
+    "show": [
+      "tenor-2",
+      "rn-12"
+    ]
+  },
+  "expected": {
+    "id": "court:olg-bamberg/2023-05-04/2_UF_244-22",
+    "court_id": "olg-bamberg",
+    "decision_type": "Beschluss",
+    "case_numbers_raw": "2 UF 244/22",
+    "numbering": "rn",
+    "rn_count": 12,
+    "sections": [
+      {
+        "name": "titel",
+        "authorship": "editorial",
+        "blocks": 1
+      },
+      {
+        "name": "leitsatz",
+        "authorship": "court",
+        "blocks": 3
+      },
+      {
+        "name": "orientierungssatz",
+        "authorship": "editorial",
+        "blocks": 3
+      },
+      {
+        "name": "tenor",
+        "authorship": "court",
+        "blocks": 4
+      },
+      {
+        "name": "gruende",
+        "authorship": "court",
+        "blocks": 15
+      }
+    ],
+    "procedural": [
+      {
+        "direction": "previous",
+        "court": "Amtsgericht Haßfurt",
+        "date": "2022-03-25",
+        "case_number": "1 F 581/07"
+      }
+    ],
+    "metadata": {
+      "numbering_source": "bayern_recht",
+      "beckrs": "BeckRS 2023, 10253",
+      "preamble_omitted": true
+    },
+    "paragraph_text": {
+      "tenor-2": {
+        "$contains": "trägt die Kosten des Beschwerdeverfahrens"
+      },
+      "rn-12": {
+        "$contains": "Rechtsbeschwerde"
+      }
+    }
+  },
+  "match": "subset"
+}

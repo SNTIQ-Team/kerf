@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.capture.search-url-refused",
+  "module": "courts",
+  "kind": "capture_acceptance",
+  "description": "ingest-capture: search, hit-list and suggest URLs are no single decision (bulk is refused)",
+  "origin": "operator request 2026-09-28 (refuse bulk)",
+  "status": "active",
+  "input": {
+    "source": "by",
+    "url": "https://www.gesetze-bayern.de/Search/Suggest?query=16b+D&suggester=azSuggest",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10142.html.gz"
+  },
+  "expected": {
+    "accepted": false,
+    "reason": "not_a_decision_url"
+  },
+  "match": "subset"
+}

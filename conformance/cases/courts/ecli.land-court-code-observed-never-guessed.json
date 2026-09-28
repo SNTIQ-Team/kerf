@@ -1,0 +1,71 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.ecli.land-court-code-observed-never-guessed",
+  "module": "courts",
+  "kind": "ecli_court_codes",
+  "description": "Land-court ECLI court codes come only from ECLIs observed in the corpus: a decision's own published ECLI (OVGNRW) or an ECLI cited right after a named court citation with the same date and Az (BAYVGH). An ECLI with that code then finds the BayVGH decision the corpus stores without an ECLI (court + date + docket); a code never observed (VGMUENC here) finds nothing",
+  "origin": "coordinator request 2026-09-28 (MCP: Bavarian ECLIs could not be located)",
+  "status": "active",
+  "input": {
+    "decisions": [
+      {
+        "doc": "ovg-1",
+        "court_name": "Oberverwaltungsgericht für das Land Nordrhein-Westfalen",
+        "date": "2018-01-09",
+        "case_number": "13 A 3036/17.A",
+        "ecli": "ECLI:DE:OVGNRW:2018:0109.13A3036.17A.00",
+        "land": "nw",
+        "paragraphs": [
+          "Die Berufung hat keinen Erfolg.",
+          "Die Kammer folgt der Rechtsprechung (vgl. VGH München, Urteil vom 13. Juli 1989 - 22 N 87.870 [ECLI:DE:BAYVGH:1989:0713.22N87.870.0A] - BayVBl 1990, 20)."
+        ]
+      },
+      {
+        "doc": "vgh-1",
+        "source": "by",
+        "court_name": "Bayerischer Verwaltungsgerichtshof",
+        "date": "1989-07-13",
+        "case_number": "22 N 87.870",
+        "land": "by",
+        "paragraphs": [
+          "Die Berufung wird zurückgewiesen."
+        ]
+      },
+      {
+        "doc": "vg-1",
+        "source": "by",
+        "court_name": "Verwaltungsgericht München",
+        "date": "2020-01-01",
+        "case_number": "M 1 K 20.1",
+        "land": "by",
+        "paragraphs": [
+          "Die Klage wird abgewiesen."
+        ]
+      }
+    ],
+    "lookup": [
+      "ECLI:DE:BAYVGH:1989:0713.22N87.870.0A",
+      "ECLI:DE:VGMUENC:2020:0101.M1K20.1.00"
+    ]
+  },
+  "expected": {
+    "codes": {
+      "ovg-nw": "OVGNRW",
+      "vgh-by": "BAYVGH"
+    },
+    "ambiguous": [],
+    "lookup": {
+      "ECLI:DE:BAYVGH:1989:0713.22N87.870.0A": [
+        "ok",
+        [
+          "court:vgh-by/1989-07-13/22_N_87.870"
+        ]
+      ],
+      "ECLI:DE:VGMUENC:2020:0101.M1K20.1.00": [
+        "not_in_corpus",
+        []
+      ]
+    }
+  },
+  "match": "subset"
+}

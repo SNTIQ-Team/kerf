@@ -1,0 +1,54 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.rn.bayern-recht-bayvgh-16b-d-22-2183-html-pdf",
+  "module": "courts",
+  "kind": "cross_representation",
+  "description": "BAYERN.RECHT BayVGH 16b D 22.2183: the portal page and the portal's PDF of it yield the same 36 Rn (the PDF prints each Rn alone on a line; a page break must neither end nor start one)",
+  "origin": "Wayback Machine capture (id_) of https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10142, 20250817161656; PDF /Content/Pdf/…?all=False, 20250818024930; operator request 2026-09-28 (user-browser captures)",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10142.html.gz",
+    "item": {
+      "source_doc_id": "Y-300-Z-BECKRS-B-2023-N-10142",
+      "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10142",
+      "extra": {
+        "route": "portal_capture"
+      }
+    },
+    "other": {
+      "kind": "bayern-recht-pdf",
+      "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10142.pdf",
+      "url": "https://www.gesetze-bayern.de/Content/Pdf/Y-300-Z-BECKRS-B-2023-N-10142?all=False"
+    },
+    "show_rn": [
+      "1",
+      "2",
+      "36"
+    ]
+  },
+  "expected": {
+    "numbering": [
+      "rn",
+      "rn"
+    ],
+    "rn_labels_equal": true,
+    "rn_count": [
+      36,
+      36
+    ],
+    "major_findings": [],
+    "rn_texts_other": {
+      "1": {
+        "$contains": "Der Kläger begehrt die Aufhebung"
+      },
+      "2": {
+        "$contains": "Der 1984 geborene Kläger"
+      },
+      "36": {
+        "$contains": "Die Revision war mangels"
+      }
+    }
+  },
+  "match": "subset"
+}
