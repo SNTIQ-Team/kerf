@@ -22,7 +22,7 @@ For every requested act (default: the 13 federal priority acts) this
 Capture timestamps are *capture* dates (``known_at``), never legal dates.
 
 Per-norm pages (``<slug>/__7.html``) are not captured by default.  Full-act
-captures exist for 251 of 273 act-years 2006-2026 of the 13 priority acts;
+captures exist for 253 of 273 act-years 2006-2026 of the 13 priority acts;
 kind ``norm_html_gap`` lists, with one bounded prefix query per remaining
 gap year and host, every per-norm page captured in such a year.  The 2026-09
 run fetched all 376 of them: 375 showed a text already known from full-act
