@@ -96,24 +96,17 @@ def act_text_key(norm_ids: list[str]) -> str:
     return hashlib.sha256("\n".join(norm_ids).encode()).hexdigest()
 
 
-def cdx_listed(archive: HistoryArchive, act_id: str) -> Counter:
-    counter: Counter = Counter()
-    base = archive.root / "cdx" / "wayback_gii" / act_id
-    if not base.is_dir():
-        return counter
-    for path in sorted(base.glob("*.json")):
-        kind = path.name.split(".")[0]
-        try:
-            rows = json.loads(path.read_text(encoding="utf-8"))["rows"]
-        except (OSError, ValueError, KeyError):
-            continue
-        for row in rows:
-            if row.get("statuscode") != "200" or (
-                    row.get("mimetype") or "").startswith("warc/"):
-                continue
-            if kind == "act_html_alt":
-                continue            # counted via the ledger (filtered later)
-            counter[kind] += 1
+def cdx_listed(archive: HistoryArchive, web_data: Path, act_id: str) -> Counter:
+    """Capture targets exactly as the fetcher lists them (cached CDX only)."""
+    import fetch_history_wayback as wb
+    try:
+        slug, doknr = wb.load_acts(web_data, [act_id])[act_id]
+    except SystemExit:
+        return Counter()
+    targets = wb.discover(None, archive, act_id, slug, doknr,
+                          wb.DEFAULT_KINDS, max_age_days=0, offline=True)
+    counter = Counter(t.kind for t in targets)
+    counter["total"] = len(targets)
     return counter
 
 
@@ -241,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         dates += [r.get("last_captured_at") for r in wb if r.get("last_captured_at")]
         led = ledgers["wayback_gii"].get(act_id, Counter())
         entry.update({
-            "cdx_listed": dict(cdx_listed(archive, act_id)),
+            "cdx_listed": dict(cdx_listed(archive, web_data, act_id)),
             "ledger": dict(led),
             "parsed_wayback": len(wb), "parsed_neuris": len(nr),
             "complete": sum(r["complete"] for r in records),
@@ -255,36 +248,48 @@ def main(argv: list[str] | None = None) -> int:
             "latest_capture": max(dates) if dates else None,
         })
         report["acts"][act_id] = entry
-        best_rates = [c["best_match"] / c["best_total"] for c in checks
-                      if c["best_total"]]
-        newest = checks[-1] if checks else None
+        newest = {src: next((c for c in reversed(checks) if c["source"] == src),
+                            None) for src in SOURCES}
         xml_rates = [c["match"] / c["total"] for c in cross if c["total"]]
-        table.append((act_id, entry, newest, best_rates, xml_rates))
+        entry["newest_in_period"] = newest
+        table.append((act_id, entry, newest, xml_rates))
 
-    print(f"{'act':20} {'fetched':>7} {'dup':>4} {'fail':>4} {'parsed':>6} "
+    def cell(check) -> str:
+        if not check:
+            return "-"
+        return (f"{check['best_match']}/{check['best_total']} "
+                f"{check['captured_at'][:10]}")
+
+    print(f"{'act':18} {'listed':>6} {'ok':>4} {'dup':>4} {'fail':>4} {'parsed':>6} "
           f"{'incompl':>7} {'acttexts':>8} {'normvers':>8} {'lexgraph':>8} "
-          f"{'new':>6} {'newest-in-period':>24} {'xmlcheck':>12} first..last")
-    for act_id, entry, newest, best_rates, xml_rates in table:
+          f"{'new':>5} {'wayback newest in period':>25} "
+          f"{'neuris newest':>21} {'xml-check':>9} captures")
+    for act_id, entry, newest, xml_rates in table:
         led = entry["ledger"]
-        newest_s = (f"{newest['best_match']}/{newest['best_total']} "
-                    f"{newest['captured_at'][:10]}" if newest else "-")
-        xml_s = (f"{min(xml_rates) * 100:.1f}%..{max(xml_rates) * 100:.1f}%"
+        xml_s = (f"{100 * sum(c['match'] for c in entry['xml_cross_checks']) / sum(c['total'] for c in entry['xml_cross_checks']):.2f}%"
                  if xml_rates else "-")
-        print(f"{act_id:20} {led.get('ok', 0):7} {led.get('skipped', 0):4} "
-              f"{led.get('error', 0):4} {entry['parsed_wayback'] + entry['parsed_neuris']:6} "
+        print(f"{act_id:18} {entry['cdx_listed'].get('total', 0):6} "
+              f"{led.get('ok', 0):4} {led.get('skipped', 0):4} "
+              f"{led.get('error', 0):4} "
+              f"{entry['parsed_wayback'] + entry['parsed_neuris']:6} "
               f"{entry['incomplete']:7} {entry['distinct_act_texts']:8} "
               f"{entry['distinct_norm_versions']:8} "
               f"{entry['lexgraph_distinct_norm_versions']:8} "
-              f"{entry['new_vs_lexgraph']:6} {newest_s:>24} {xml_s:>12} "
+              f"{entry['new_vs_lexgraph']:5} {cell(newest['wayback_gii']):>25} "
+              f"{cell(newest['neuris']):>21} {xml_s:>9} "
               f"{(entry['earliest_capture'] or '')[:10]}..{(entry['latest_capture'] or '')[:10]}")
-        if args.show_mismatches and newest and newest["best_missing"]:
-            for miss in newest["best_missing"][:args.show_mismatches]:
-                print(f"    residual (daily state): {miss['enbez']} {miss['titel'][:60]}")
-    total_match = sum(t[2]["best_match"] for t in table if t[2])
-    total_norms = sum(t[2]["best_total"] for t in table if t[2])
-    if total_norms:
-        print(f"newest in-period captures: {total_match}/{total_norms} "
-              f"= {100 * total_match / total_norms:.2f}% identical norms")
+        if args.show_mismatches:
+            for src, check in newest.items():
+                for miss in (check or {}).get("best_missing", [])[:args.show_mismatches]:
+                    print(f"    residual {src}: {miss['enbez']} {miss['titel'][:60]}")
+    for src in SOURCES:
+        checks = [t[2][src] for t in table if t[2][src]]
+        match = sum(c["best_match"] for c in checks)
+        total = sum(c["best_total"] for c in checks)
+        if total:
+            print(f"{src}: newest in-period capture per act: {match}/{total} "
+                  f"= {100 * match / total:.2f}% identical norms "
+                  f"({len(checks)} acts)")
     xml_match = sum(c["match"] for t in table for c in t[1]["xml_cross_checks"])
     xml_total = sum(c["total"] for t in table for c in t[1]["xml_cross_checks"])
     if xml_total:
