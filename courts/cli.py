@@ -143,10 +143,10 @@ def cmd_migrate_captures(args) -> int:
 
 
 def cmd_compact(args) -> int:
-    """FTS optimize + VACUUM INTO a fresh file in the NOCOW corpus directory, then an atomic swap."""
+    """FTS optimize + VACUUM INTO a fresh btrfs-compressed file, then an atomic swap."""
     import os
     import sqlite3 as _sqlite3
-    from .packs import _nocow
+    from .packs import _nocow, compressed_empty_file
     if not space_ok("compact"):
         return 4
     home = data_home()
@@ -163,9 +163,9 @@ def cmd_compact(args) -> int:
         before = db_path().stat().st_size
         conn.execute("INSERT INTO paragraphs_fts(paragraphs_fts) VALUES('optimize')")
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        _nocow(home)  # new files in the corpus root inherit NOCOW (fewer btrfs extents)
+        _nocow(home)  # WAL/SHM and packs stay NOCOW (fewer btrfs extents) ...
         target = home / "courts.sqlite.compact"
-        target.unlink(missing_ok=True)
+        compressed_empty_file(target)  # ... the database itself is compressed (zstd: ~40 % of its size)
         conn.execute("VACUUM INTO ?", (str(target),))
         conn.close()
         check = _sqlite3.connect(target)
@@ -180,6 +180,29 @@ def cmd_compact(args) -> int:
         for suffix in ("-wal", "-shm"):
             (home / f"courts.sqlite{suffix}").unlink(missing_ok=True)
         print(json.dumps({"status": "ok", "bytes_before": before, "bytes_after": db_path().stat().st_size}))
+    return 0
+
+
+def cmd_dedupe(args) -> int:
+    """Merge stored republications and settle shared ECLIs (dry run unless --apply; no syncs may run)."""
+    from .dedupe import dedupe
+    if args.apply and not space_ok("dedupe"):
+        return 4
+    conn = connect()
+    init_db(conn)
+    sources = [r[0] for r in conn.execute("SELECT source_id FROM sources")]
+    with contextlib.ExitStack() as stack:
+        try:
+            for source_id in sources:
+                stack.enter_context(source_lock(source_id))
+        except SourceBusy as exc:
+            print(json.dumps({"status": "busy", "detail": str(exc)}), file=sys.stderr)
+            return 3
+        result = dedupe(conn, apply=args.apply)
+    journal = data_home() / "logs" / f"dedupe-{time.strftime('%Y%m%d-%H%M%S')}{'' if args.apply else '-dry'}.json"
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_text(json.dumps(result, ensure_ascii=False, indent=1))
+    print(json.dumps({"applied": args.apply, "journal": str(journal), **result["summary"]}, ensure_ascii=False))
     return 0
 
 
@@ -508,6 +531,9 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_migrate_captures)
     p = sub.add_parser("compact", help="FTS optimize + VACUUM INTO a NOCOW file (no syncs may run)")
     p.set_defaults(func=cmd_compact)
+    p = sub.add_parser("dedupe", help="merge stored republications, settle shared ECLIs (dry run unless --apply)")
+    p.add_argument("--apply", action="store_true")
+    p.set_defaults(func=cmd_dedupe)
     p = sub.add_parser("running", help="which sources are being synced right now (PIDs)")
     p.set_defaults(func=cmd_running)
     p = sub.add_parser("classify", help="(re)run the rule-based relation assessment stage")

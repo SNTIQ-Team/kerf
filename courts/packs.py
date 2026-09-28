@@ -92,6 +92,27 @@ def _nocow(directory: Path) -> None:
         pass
 
 
+def compressed_empty_file(path: Path) -> None:
+    """Best effort: create an empty file with btrfs transparent compression (FS_COMPR_FL) and without NOCOW.
+    The corpus database compresses to ~40 % with zstd; NOCOW (inherited from the corpus directory) would
+    disable compression.  The flags can only be changed while the file is empty."""
+    Path(path).unlink(missing_ok=True)
+    Path(path).touch()
+    try:
+        import fcntl
+        FS_IOC_GETFLAGS, FS_IOC_SETFLAGS, FS_NOCOW_FL, FS_COMPR_FL = 0x80086601, 0x40086602, 0x00800000, 0x00000004
+        fd = os.open(path, os.O_RDONLY)
+        try:
+            buf = bytearray(struct.pack("l", 0))
+            fcntl.ioctl(fd, FS_IOC_GETFLAGS, buf)
+            flags = struct.unpack("l", buf)[0]
+            fcntl.ioctl(fd, FS_IOC_SETFLAGS, struct.pack("l", (flags & ~FS_NOCOW_FL) | FS_COMPR_FL))
+        finally:
+            os.close(fd)
+    except (OSError, ImportError):
+        pass
+
+
 class PackStore:
     """Writer/reader for one corpus home.  One writer per source (see sync.source_lock)."""
 
