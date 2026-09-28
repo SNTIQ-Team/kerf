@@ -88,6 +88,9 @@ def cmd_reparse(args) -> int:
                     include_skipped=args.include_skipped and ids is None)}))
         except SourceBusy as exc:
             print(json.dumps({"source": source_id, "status": "busy", "detail": str(exc)}))
+    if args.include_skipped and ids is None and args.source is None:
+        from .sync import reexamine_twins
+        print(json.dumps({"twins": reexamine_twins(conn)}))
     return 0
 
 
