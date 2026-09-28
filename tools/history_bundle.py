@@ -99,6 +99,21 @@ def _stand_text(stand: Any) -> str | None:
     return stand.get("raw") or None
 
 
+def _captures_json(captures: list[Any], limit: int = 20000) -> str:
+    """Capture list as JSON of at most ``limit`` characters.
+
+    Drops trailing captures instead of cutting the string, so the value is
+    always valid JSON.  The builder reads only each capture's ``kind``.
+    """
+    items = list(captures)
+    text = json.dumps(items, ensure_ascii=False)
+    while len(text) > limit and items:
+        keep = max(0, min(len(items) - 1, len(items) * limit // len(text)))
+        items = items[:keep]
+        text = json.dumps(items, ensure_ascii=False)
+    return text
+
+
 class CorpusWriter:
     def __init__(self, path: Path):
         if path.exists():
@@ -153,7 +168,7 @@ class CorpusWriter:
              len(norms), json.dumps(parsed.get("warnings") or [],
                                     ensure_ascii=False),
              first, last, max(1, len(captures)),
-             json.dumps(captures, ensure_ascii=False)[:20000],
+             _captures_json(captures),
              parsed.get("layout"),
              json.dumps(parsed.get("source_identifiers"), ensure_ascii=False)
              if parsed.get("source_identifiers") else None, blob))
