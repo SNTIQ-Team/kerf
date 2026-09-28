@@ -293,6 +293,7 @@ class SourceRun:
     requests_before: int = 0
     started: float = field(default_factory=time.monotonic)
     result: dict | None = None
+    phase: str = "starting"   # starting | listing | fetching | finishing
 
     active = set()           # runs in progress (metrics); class attributes, not fields
     governors = None
@@ -433,6 +434,7 @@ def run_source(run: SourceRun, governors: Governors, log) -> None:
             run.notes = f"listing reused from run {reuse['id']}"
         else:
             try:
+                run.phase = "listing"
                 listing = adapter.list_items(http, WriterProxy(writer), since=run.since, limit=run.limit,
                                              courts=run.spec.courts)
             except UpstreamFailure as failure:
@@ -464,6 +466,7 @@ def run_source(run: SourceRun, governors: Governors, log) -> None:
         if run.limit is not None:
             run.frontier = min(run.frontier, run.limit)
         log(f"{source_id}: listed {run.counts['listed']}, fetching {run.frontier}")
+        run.phase = "fetching"
         concurrency = concurrency_of(adapter)
         slots = governors.get(host_of(adapter.base_url))
         fetchers = [threading.Thread(target=_fetcher, args=(run, slots, concurrency.maximum),
@@ -580,6 +583,11 @@ def run_pipeline(conn: sqlite3.Connection, specs: list[SourceSpec], *, since=Non
         while waiting and len(alive) < limit_sources and not STOP_AFTER_ITEM.is_set() and not writer.stop.is_set():
             start(waiting.pop(0))
             alive = [t for t in threads if t.is_alive()]
+        if alive and (STOP_AFTER_ITEM.is_set() or writer.stop.is_set()):
+            # A listing cannot be cut short and has nothing in flight: such runs are recorded as interrupted
+            # (the finally below) and their threads end with the process.
+            listing = {r.adapter.source_id for r in runs.values() if r.phase in ("starting", "listing")}
+            return all(t.name.removeprefix("source-") in listing for t in alive)
         return not alive
 
     try:
@@ -590,9 +598,10 @@ def run_pipeline(conn: sqlite3.Connection, specs: list[SourceSpec], *, since=Non
         _release_worker(conn, worker)
         for run in runs.values():
             if run.result is None and run.run_id is not None:
+                note = "listing abandoned (SIGTERM)" if run.phase in ("starting", "listing") else \
+                    "interrupted at once (second SIGTERM)"
                 try:
-                    finish_run(conn, run.run_id, run.adapter.source_id, "interrupted", run.counts,
-                               "interrupted at once (second SIGTERM)")
+                    finish_run(conn, run.run_id, run.adapter.source_id, "interrupted", run.counts, note)
                 except Exception:  # noqa: BLE001
                     pass
         checkpoint(conn)
