@@ -304,8 +304,11 @@ def reexamine_skipped(adapter: Adapter, conn: sqlite3.Connection, *, home=None) 
                         f"{failure.detail[:160]}")
             continue
         target = (row["failure_detail"] or "").split(" already stored", 1)[0].split(" superseded", 1)[0].strip()
-        other = conn.execute("SELECT numbering FROM decisions WHERE id=?", (target,)).fetchone() if target else None
-        if other is None or other["numbering"] == "none":
+        other = conn.execute("SELECT numbering, source_id FROM decisions WHERE id=?",
+                             (target,)).fetchone() if target else None
+        # Re-queued: the collided decision is gone (its id changed), is unnumbered (an explicit-Rn copy now
+        # supersedes it), or comes from the same portal (another document sharing its ECLI is now kept).
+        if other is None or other["numbering"] == "none" or other["source_id"] == row["source_id"]:
             conn.execute("UPDATE source_items SET state='pending', failure_kind=NULL, failure_detail=NULL "
                          "WHERE source_id=? AND source_doc_id=?", (row["source_id"], row["source_doc_id"]))
             conn.commit()
