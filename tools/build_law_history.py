@@ -1173,6 +1173,9 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
     act_id = str(act["id"])
     prefix = act_prefix(act)
     findings: list[dict[str, Any]] = []
+    if act_id.startswith("by_") and act_id in BAVARIAN_RECORDS:
+        return build_bavarian_bundle_act(writer, act, as_of,
+                                         BAVARIAN_RECORDS[act_id])
     if act_id.startswith("by_") and not _bundle_has(bundle, act_id):
         return build_bavarian_archive_act(writer, act, as_of)
     if act_id.startswith("by_"):
@@ -1445,6 +1448,210 @@ def store_index_summaries(path: Path, as_of: str) -> None:
     db.close()
 
 
+BAVARIAN_RECORDS: dict[str, dict[str, list[dict[str, Any]]]] = {}
+
+
+def load_bavarian_records(path: Path | None) -> int:
+    """Bavarian version/change/finding records from the archive worker bundle."""
+    BAVARIAN_RECORDS.clear()
+    if path is None or not path.is_file():
+        return 0
+    count = 0
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            act = BAVARIAN_RECORDS.setdefault(str(row.get("act_id")), {
+                "version": [], "change": [], "finding": []})
+            kind = row.get("record_type")
+            if kind in act:
+                act[kind].append(row)
+                count += 1
+    return count
+
+
+def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
+                              as_of: str,
+                              records: dict[str, list[dict[str, Any]]]
+                              ) -> dict[str, Any]:
+    """Bavarian versions and GVBl-dated change records (archive worker build).
+
+    tools/bavarian_history.py already chains archived BAYERN.RECHT captures
+    and daily snapshots per norm and dates every change from the GVBl
+    document; this writes them into the common schema.
+    """
+    act_id = str(act["id"])
+    versions_by_norm: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in records["version"]:
+        versions_by_norm[str(row["canonical_id"])].append(row)
+    vseq_of: dict[str, tuple[str, int]] = {}
+    states: dict[tuple[str, str], dict[str, Any]] = {}
+    norm_rows = []
+    total = 0
+    for norm_id, rows in versions_by_norm.items():
+        rows.sort(key=lambda r: int(r.get("sequence") or 0))
+        for vseq, row in enumerate(rows):
+            vseq_of[str(row.get("version_id"))] = (norm_id, vseq)
+            pin = row.get("pinpoint") or {}
+            text_row = {"enbez": pin.get("label"), "titel": pin.get("title"),
+                        "text": row.get("text") or ""}
+            identity = (row.get("content_hash") or {}).get("identity") or \
+                norm_identity(text_row["enbez"], text_row["titel"],
+                              text_row["text"])
+            temporal = row.get("temporal") or {}
+            attestations = []
+            for att in row.get("attestations") or []:
+                attestations.append({
+                    "source": att.get("source"), "role": att.get("role"),
+                    "known_from": att.get("known_at"),
+                    "known_until": att.get("last_seen") or att.get(
+                        "known_at"),
+                    "count": att.get("count") or 1, "kind": att.get("kind"),
+                    "samples": [{k: v for k, v in {
+                        "url": att.get("url"),
+                        "archive_url": att.get("archive_url"),
+                        "sha256": att.get("sha256"),
+                        "known_at": att.get("known_at"),
+                        "stand": att.get("stand")}.items() if v}]})
+                if att.get("kind") == "full" and att.get("sha256"):
+                    key = (str(att.get("sha256")), str(att.get("known_at")))
+                    states.setdefault(key, {
+                        "source": ("wayback_bayern" if att.get("role") ==
+                                   "archived_capture" else "bayern_recht"),
+                        "role": att.get("role") or "archived_capture",
+                        "known_from": att.get("known_at"),
+                        "known_until": att.get("last_seen") or
+                        att.get("known_at"),
+                        "url": att.get("url"),
+                        "archive_url": att.get("archive_url"),
+                        "sha256": att.get("sha256"),
+                        "stand": att.get("stand")})
+            change = row.get("change") or {}
+            record = {
+                "state_intervals": [],
+                "attestations": attestations,
+                "temporal": {
+                    "valid_from": temporal.get("valid_from"),
+                    "valid_from_status": temporal.get("valid_from_status")
+                    if temporal.get("valid_from") else "unresolved",
+                    "valid_from_basis": temporal.get("valid_from_basis"),
+                    "valid_until": temporal.get("valid_until_exclusive"),
+                    "valid_until_status": temporal.get("valid_until_status"),
+                    "change_ids": [change["change_id"]]
+                    if change.get("change_id") else [],
+                    "attribution": ({"status": "bracketed_by_captures",
+                                     "verification": "bracketed_by_captures"}
+                                    if temporal.get("valid_from") and
+                                    change.get("change_id") else None),
+                    "known_from": temporal.get("observed_from"),
+                    "known_until": temporal.get("observed_until"),
+                    "consolidation_dates": temporal.get(
+                        "consolidation_dates"),
+                    "consolidation_basis": temporal.get(
+                        "consolidation_basis")},
+                "completeness": row.get("completeness"),
+                "verification": row.get("verification"),
+                "source_version_id": row.get("version_id"),
+            }
+            writer.db.execute(
+                "INSERT INTO versions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (norm_id, vseq, act_id, writer.text_id(identity, text_row),
+                 None, None, temporal.get("observed_from"),
+                 temporal.get("observed_until"),
+                 row.get("source_role") or "archived_capture",
+                 pack_json(record)))
+            total += 1
+        last = rows[-1]
+        pin = last.get("pinpoint") or {}
+        present = (last.get("source_role") == "official_consolidation")
+        norm_rows.append((norm_id, act_id, pin.get("label"), pin.get("title"),
+                          int(present), len(rows), 0,
+                          (rows[0].get("temporal") or {}).get("observed_from"),
+                          _json({})))
+    changes = []
+    per_norm_changes: dict[str, int] = defaultdict(int)
+    for change in records["change"]:
+        change = dict(change)
+        effect = dict(change.get("text_effect") or {})
+        before = vseq_of.get(str(effect.get("before_version_id")))
+        after = vseq_of.get(str(effect.get("after_version_id")))
+        effect["before_version"] = before[1] if before else None
+        effect["after_version"] = after[1] if after else None
+        change["text_effect"] = effect if (before or after) else None
+        change["source_role"] = "official_promulgation"
+        change["sort_date"] = (change_effective_date(change) or (
+            (change.get("dates") or {}).get("promulgated") or {}).get(
+                "date") or "0000-00-00")
+        changes.append(change)
+        per_norm_changes[str(change.get("norm_id"))] += 1
+    norm_rows = [row[:6] + (per_norm_changes.get(row[0], 0),) + row[7:]
+                 for row in norm_rows]
+    writer.db.executemany("INSERT INTO norms VALUES (?,?,?,?,?,?,?,?,?)",
+                          norm_rows)
+    for change in changes:
+        writer.db.execute(
+            "INSERT INTO changes VALUES (?,?,?,?,?,?,?,?)",
+            (change["change_id"], act_id, change.get("norm_id"),
+             change.get("norm_label"),
+             (change.get("amending_act") or {}).get("document_id"),
+             change["sort_date"],
+             "in_force" if change_effective_date(change) else "unknown",
+             pack_json(change)))
+    ordered = sorted(states.values(), key=lambda s: str(s["known_from"]))
+    head = {"source": "bayern_recht", "role": "official_consolidation",
+            "known_from": None, "known_until": None,
+            "url": act.get("permalink"), "archive_url": None, "sha256": None,
+            "stand": None}
+    build = str(act.get("build") or "")
+    if m := re.fullmatch(r"(\d{2})\.(\d{2})\.(\d{4})", build):
+        head["known_from"] = head["known_until"] = \
+            f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    ordered.append(head)
+    for seq, state in enumerate(ordered):
+        writer.db.execute(
+            "INSERT INTO states VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (act_id, seq, f"{act_id}:{state['sha256'] or 'head'}:{seq}",
+             state["source"], state["role"], state["known_from"],
+             state["known_until"], state["url"], state["archive_url"],
+             state["sha256"], state["stand"], _json({}), 1, None, None, None,
+             None, None))
+    for finding in records["finding"]:
+        writer.db.execute(
+            "INSERT INTO findings(act_id, norm_id, kind, detail_json) "
+            "VALUES (?,?,?,?)",
+            (act_id, finding.get("norm_id"), str(finding.get("kind")),
+             _json({k: v for k, v in finding.items() if k not in {
+                 "kind", "norm_id", "act_id", "record_type"}})))
+    kinds: dict[str, int] = defaultdict(int)
+    for finding in records["finding"]:
+        kinds[str(finding.get("kind"))] += 1
+    summary = {
+        "states": len(ordered),
+        "states_by_role": {}, "states_by_source": {
+            src: sum(1 for s in ordered if s["source"] == src)
+            for src in sorted({s["source"] for s in ordered})},
+        "earliest_text": min((s["known_from"] for s in ordered
+                              if s["known_from"]), default=None),
+        "latest_text": max((s["known_until"] for s in ordered
+                            if s["known_until"]), default=None),
+        "norm_versions": total, "norms": len(norm_rows),
+        "changes": len(changes),
+        "amending_documents": len({(c.get("amending_act") or {}).get(
+            "document_id") for c in changes}),
+        "findings": dict(kinds),
+        "event_history_start": min((c["sort_date"] for c in changes
+                                    if c["sort_date"] > "0000"),
+                                   default=None),
+        "event_history_status": "gvbl_dated",
+    }
+    writer.db.execute("INSERT INTO acts VALUES (?,?,?,?,?,?)",
+                      (act_id, act_prefix(act), act.get("jurabk"),
+                       act.get("title"), act.get("juris"), _json(summary)))
+    writer.db.commit()
+    return summary
+
+
 def _bundle_has(bundle: sqlite3.Connection | None, act_id: str) -> bool:
     if bundle is None:
         return False
@@ -1617,6 +1824,8 @@ def main(argv: list[str] | None = None) -> int:
             bundle_meta = json.loads(manifest.read_text())
     if args.bundle and (args.bundle / "change_dates.jsonl.gz").is_file():
         date_paths.append(args.bundle / "change_dates.jsonl.gz")
+    load_bavarian_records(args.bundle / "bavarian.jsonl.gz"
+                          if args.bundle else None)
     dates = ChangeDates(date_paths)
     bgbl = load_bgbl_documents(args.documents if args.documents and
                                args.documents.is_dir() else None)

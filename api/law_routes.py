@@ -775,8 +775,10 @@ def _diff_url(norm_id: str, change: dict[str, Any],
     if before is None or after is None or not (
             0 <= before < len(versions) and 0 <= after < len(versions)):
         return None
-    return (f"/norms/{norm_id}/diff?from={versions[before].version_id}"
-            f"&to={versions[after].version_id}")
+    from urllib.parse import quote
+    return (f"/norms/{norm_id}/diff?from="
+            f"{quote(versions[before].version_id, safe='')}"
+            f"&to={quote(versions[after].version_id, safe='')}")
 
 
 def _summary(history: LawHistoryStore | None, chain: ActChain,

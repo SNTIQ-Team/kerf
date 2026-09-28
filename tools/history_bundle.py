@@ -188,6 +188,27 @@ def iter_parsed(archive: Path, sources: Iterable[str] | None = None
             yield parsed
 
 
+def bavarian_records(directory: Path, target: Path) -> int:
+    """versions/changes/findings.jsonl of tools/bavarian_history.py → one
+    typed JSONL (``record_type`` version | change | finding)."""
+    count = 0
+    with gzip.open(target, "wt", encoding="utf-8", compresslevel=9) as out:
+        for name, kind in (("versions.jsonl", "version"),
+                           ("changes.jsonl", "change"),
+                           ("findings.jsonl", "finding")):
+            path = directory / name
+            if not path.is_file():
+                continue
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    row = json.loads(line)
+                    row["record_type"] = kind
+                    out.write(json.dumps(row, ensure_ascii=False,
+                                         sort_keys=True) + "\n")
+                    count += 1
+    return count
+
+
 def export(archive: Path, out: Path, *, change_dates: Path | None = None,
            bavarian: Path | None = None, key: Path | None = None,
            acts: set[str] | None = None,
@@ -211,7 +232,10 @@ def export(archive: Path, out: Path, *, change_dates: Path | None = None,
     for name, source in (("change_dates.jsonl.gz", change_dates),
                          ("bavarian.jsonl.gz", bavarian)):
         target = out / name
-        if source:
+        if source and Path(source).is_dir():
+            bavarian_records(Path(source), target)
+            files[name] = target
+        elif source:
             if str(source).endswith(".gz"):
                 shutil.copyfile(source, target)
             else:
