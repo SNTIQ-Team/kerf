@@ -198,7 +198,7 @@ def test_coverage_report(conn, fixture):
     report = coverage(open_db())
     rows = {s["source_id"]: s for s in report["sources"]}
     assert rows["rii"]["decisions"] == 1 and rows["rii"]["date_from"] == "2016-03-16"
-    assert report["schema_version"] == 2 and report["paragraphs"] > 0
+    assert report["schema_version"] == 3 and report["paragraphs"] > 0
     assert rows["rii"]["robots_policy"] == "respect" and rows["rii"]["policy_decided_at"] is None
 
 

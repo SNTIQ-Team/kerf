@@ -1,4 +1,4 @@
-# Court corpus – SQLite schema v2
+# Court corpus – SQLite schema v3
 
 The corpus is local only (not deployed to the VPS). The SNTIQ Legal MCP (Node, `node:sqlite`)
 reads it directly and read-only. This file is the contract between them.
@@ -10,10 +10,10 @@ reads it directly and read-only. This file is the contract between them.
 | Root | `~/.local/share/sntiq-legal/courts/` (override: `SNTIQ_COURTS_HOME`) |
 | Database | `courts.sqlite` (WAL mode; writers are `python -m courts sync` processes) |
 | Raw captures | Packed: `packs/<source_id>/<source_id>-<NNNN>.pack`, append-only, rotated at 512 MiB (O(100) files in total, not one file per capture; per-file storage exhausted btrfs metadata). Indexed by table `captures`. |
-| Schema version | `PRAGMA user_version` = `2`, also `meta.schema_version`. |
-| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.3.0`). |
+| Schema version | `PRAGMA user_version` = `3`, also `meta.schema_version`. |
+| Parser version | `meta.parser_version` and `decisions.parser_version` (e.g. `courts-parser/1.4.0`). |
 
-Readers must check `PRAGMA user_version == 2` and refuse any other value. Within a version, changes are additive only (new tables, new nullable columns, new views). Removing or renaming a column, or changing identity or storage rules, bumps the version. v1 → v2 (2026-09-28): added `captures` and the `sources` policy columns; `decisions.capture_path` became a pack reference. `init_db` upgrades v1 in place, and `python -m courts migrate-captures --delete-legacy` moves v1 `raw/*.gz` files into packs, verifying every hash before anything is deleted.
+Readers must check `PRAGMA user_version == 3` and refuse any other value. Within a version, changes are additive only (new tables, new nullable columns, new views). Removing or renaming a column, or changing identity or storage rules, bumps the version. v1 → v2 (2026-09-28): added `captures` and the `sources` policy columns; `decisions.capture_path` became a pack reference. `init_db` upgrades v1 in place, and `python -m courts migrate-captures --delete-legacy` moves v1 `raw/*.gz` files into packs, verifying every hash before anything is deleted. v2 → v3 (2026-09-28): `decisions.court_id` became the Amtsgraph court id (`court:de:<XJustiz-ID>`, `court:eu:<ECLI code>`) where one is mapped, and the corpus slug moved to the new column `decisions.court_slug`. Added the tables `relation_assessments`, `corrections`, `verification_runs`, `verification_checks`, `verification_findings`, `amtsgraph_courts` and `court_map`, all documented below. `init_db` upgrades v1/v2 in place.
 
 ### Pack record format
 Each record is a header followed by a payload; the header makes a pack self-describing, so the index can be rebuilt by scanning:
@@ -47,7 +47,7 @@ One row per decision. Keys: `id` PK, `UNIQUE(source_id, source_doc_id)`.
 |---|---|
 | `ecli` | ECLI as published (can be NULL). |
 | `source_id`, `source_doc_id` | Portal and its document id (e.g. `rii` / `jb-WBRE201600193`, `nrw` / `sgs/lsg_nrw/j2026/…`). |
-| `court_id`, `court_name`, `court_type`, `jurisdiction`, `land`, `chamber` | `jurisdiction` ∈ `verfassung, ordentlich, verwaltung, sozial, finanz, arbeit, patent`; `land` ∈ `de` (federal) or an ISO code. |
+| `court_id`, `court_slug`, `court_name`, `court_type`, `jurisdiction`, `land`, `chamber` | `court_id` is the Amtsgraph court id `court:de:<XJustiz-ID>` (federal courts via their ECLI code, e.g. BVerwG `court:de:U8572`; EuGH `court:eu:C`) when `court_map` has one, otherwise the corpus slug. `court_slug` is always the corpus slug (`lsg-nw`, `vg-muenchen`, `bverwg`); it is the alias used in synthetic decision ids and in `relations.target_court_id`. Filters accept either. `jurisdiction` ∈ `verfassung, ordentlich, verwaltung, sozial, finanz, arbeit, patent`; `land` ∈ `de` (federal) or an ISO code. |
 | `decision_type` | As published (`Beschluss`, `Urteil`, `Gerichtsbescheid`, …). |
 | `decision_date` | ISO date. This is **not** the date of the applicable law (see paper §5.2). |
 | `case_numbers_raw` | Published docket string, verbatim (`L 9 SO 202/26 B ER und L 9 SO 203/26 B`). |
@@ -102,6 +102,35 @@ Norm prefix query (segment-exact, index-friendly): `target_id = :n OR (target_id
 ### `captures`
 `(sha256 PK, source_id, extension, pack, offset, stored_size, raw_size, codec, stored_at)`: one row per distinct capture. It includes captures that failed to parse, which remain available for re-parsing.
 
+### `relation_assessments`
+Proposals from the separate polarity stage (`courts/polarity.py`, classifier `courts-polarity-rules/1.0.0`) and user decisions. Parser rows in `relations` are never changed.
+
+| Column | Meaning |
+|---|---|
+| `id` | PK |
+| `relation_id` | `relations.id` of the parser relation assessed. Rule rows are recomputed whenever the decision is stored or re-parsed, so relation ids are not stable across re-parses. For user rows it is NULL: join those on `paragraph_id` + `target_id`. |
+| `decision_id`, `paragraph_id`, `target_kind` (`norm`/`decision`), `target_id`, `span_start`, `span_end` | The parser relation's identity and citation span. |
+| `assessment` | `applies`, `interprets`, `holds_inapplicable`, `rejects_application_of`, `follows`, `departs_from`, `overrules` or `distinguishes`. |
+| `polarity` | `positive` (applies, follows), `neutral` (interprets) or `negative` (holds_inapplicable, rejects_application_of, departs_from, overrules, distinguishes). Views of "supporting" case law must exclude `negative`. |
+| `cue`, `cue_start`, `cue_end`, `evidence_text` | The cue phrase, its offsets in the paragraph text, and the clause it was found in. |
+| `rule_id`, `confidence`, `classifier_version` | E.g. `norm.keine_anwendung`, 0.8. |
+| `derived_by`, `legal_effect_verified` | `derived_by` ∈ `rules`, `model`, `user`. `legal_effect_verified` is 1 only for `user` rows (CHECK). |
+| `status`, `created_at` | `status` ∈ `proposed`, `confirmed`, `rejected`. Ledger corrections set it; rejected proposals must not be shown as findings. |
+
+### `corrections` (append-only ledger)
+Columns: `id` PK, `target` (decision id, or paragraph id `<decision>#rn-10`), `kind` ∈ `decision_field, case_numbers, relation_assessment, paragraph_boundary, relation, other`, `field` (decision field name; for `relation_assessment`/`relation` the `target_id`; for `paragraph_boundary` the quote), `old` (JSON), `new` (JSON), `evidence`, `author`, `created_at`, `fixture` (path of the conformance case written for it). UPDATE and DELETE raise errors (triggers). `decision_field`, `case_numbers` and `relation_assessment` corrections are applied as an overlay after every store or re-parse. The other kinds are recorded, and their conformance case stays `status: open` until the parser is fixed. CLI: `python -m courts correct …`, `python -m courts corrections [--target]`.
+
+### Verification (`verification_runs`, `verification_checks`, `verification_findings`)
+- `verification_runs`: `id`, `started_at`, `finished_at`, `sample`, `pairs`, `agreeing`, `findings`, `errors`, `verifier_version`.
+- `verification_checks` (one row per compared pair): `id`, `run_id`, `decision_id`, `representation_a` (e.g. `stored:nrw`), `representation_b` (`nrwe-pdf`, `bverwg-html`, `rii-xml`, `capture:<source>`), `outcome` ∈ `agree, disagree, error`, `detail` (JSON), `checked_at`.
+- `verification_findings` (one row per disagreement): `id`, `run_id`, `decision_id`, `kind` ∈ `numbering_mismatch, rn_count_mismatch, rn_boundary_mismatch, text_mismatch, case_numbers_mismatch, representation_error`, `severity` ∈ `major, minor`, `representation_a`, `representation_b`, `locator` (`rn-<n>` or `body`), `value_a`, `value_b` (JSON), `detail` (JSON: similarity, normalised text hashes, next Rn), `created_at`, `status` ∈ `open, explained, corrected`.
+- The stored decision is never changed by verification. CLI: `python -m courts verify --sample N [--source S] [--offline]`.
+
+### Court identity (`amtsgraph_courts`, `court_map`)
+- `amtsgraph_courts`: a copy of Amtsgraph `/v1/courts/mapping` with `court_id` PK, `official_name`, `xjustiz_id`, `ecli_court_code`, `kind`, `land_code` (AGS), `status`, `unit_type`, `parent_court_id`, `aliases` (JSON), `snapshot_id`, `fetched_at`.
+- `court_map`: `court_slug` PK, `court_id` (NULL if unmapped or ambiguous), `basis` ∈ `ecli_code, name_active, name_dissolved, ambiguous, unmapped`, `candidates` (JSON), `snapshot_id`. Names are matched through the canonical `courts.courtids.resolve`. An ambiguous name, e.g. "Amtsgericht Fürth" (BY and HE), is settled per decision by its Land, never by guessing.
+- CLI: `python -m courts courts-map [--file payload.json]`.
+
 ### Sync bookkeeping
 
 | Table | Content |
@@ -140,5 +169,6 @@ WHERE paragraphs_fts MATCH '"Streitgegenstand" AND "Untätigkeitsklage" AND "Mit
 
 - `python -m courts space`: the btrfs guard. Bulk writes (sync, reparse, migrate-captures) start only if "Device unallocated" ≥ 10 GiB and metadata usage ≤ 90 %. Metadata usage = used / (allocated + unallocated / metadata ratio). A running sync re-checks every 25 items and stops (run status `failed`, reason in `sync_runs.notes`) if metadata usage exceeds 90 % or unallocated falls below 4 GiB. Items stay `pending`.
 - `python -m courts status`: coverage per source, including the robots policy and the space guard verdict.
+- `python -m courts check-norm-ids`: every federal norm id in `relations` must be a canonical Lexgraph id (a GII slug known to the resolver). It exits with 1 and lists examples otherwise, e.g. stale `de/bund/sgb14/…`.
 - `python -m courts compact`: FTS `optimize` plus `VACUUM INTO` a new file in the NOCOW corpus directory, then an atomic swap. It needs all source locks, so no sync may be running.
 - One sync process per source (lock file `locks/<source>.lock`); a second one exits with code 3.

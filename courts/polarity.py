@@ -232,7 +232,8 @@ CREATE INDEX IF NOT EXISTS relation_assessments_target ON relation_assessments(t
 
 def assess_decision(conn: sqlite3.Connection, decision_id: str) -> int:
     """(Re)compute rule proposals for one decision; user/model rows are kept."""
-    decision = conn.execute("SELECT court_id, jurisdiction FROM decisions WHERE id=?", (decision_id,)).fetchone()
+    decision = conn.execute("SELECT court_slug AS court_id, jurisdiction FROM decisions WHERE id=?",
+                            (decision_id,)).fetchone()
     if decision is None:
         return 0
     rows = conn.execute(f"""SELECT r.id, r.paragraph_id, r.target_kind, r.target_id, r.span_start, r.span_end,

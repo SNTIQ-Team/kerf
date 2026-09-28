@@ -172,3 +172,18 @@ def test_missing_lexgraph_data_fails_loudly(monkeypatch, tmp_path):
     monkeypatch.setattr(acts.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
     with pytest.raises(LexgraphDataUnavailable):
         lexgraph_data_dir()
+
+
+def test_check_norm_ids_flags_stale_ids(fixture):
+    from courts.acts import check_norm_ids
+    from courts.store import connect, init_db
+    from courts.sync import sync_source
+    from tests.courts.test_store_sync_read import FakeHttp, FixtureAdapter, item
+    conn = connect()
+    init_db(conn)
+    sync_source(FixtureAdapter(fixture, [item()]), conn, FakeHttp())
+    assert check_norm_ids(conn)["not_canonical"] == 0
+    conn.execute("UPDATE relations SET target_id='de/bund/sgb14/para/37' WHERE id=(SELECT min(id) FROM relations "
+                 "WHERE target_kind='norm')")
+    report = check_norm_ids(conn)
+    assert report["not_canonical"] == 1 and "de/bund/sgb14/para/37" in report["not_canonical_examples"]

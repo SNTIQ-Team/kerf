@@ -254,7 +254,7 @@ def alternates(conn: sqlite3.Connection, decision: sqlite3.Row, http=None) -> li
             return parse_nrwe_pdf(response.body, pdf_url, decision["source_doc_id"])
         out.append(Alternate("nrwe-pdf", load_pdf, True))
     # 3. RII XML <-> bverwg.de HTML for BVerwG decisions with an ECLI
-    if decision["court_id"] == "bverwg" and decision["ecli"] and http is not None:
+    if decision["court_slug"] == "bverwg" and decision["ecli"] and http is not None:
         suffix = decision["ecli"].rsplit(":", 1)[-1]
         if decision["source_id"] == "rii":
             def load_site():
@@ -287,7 +287,7 @@ def verify_sample(conn: sqlite3.Connection, *, sample: int, http=None, source: s
     dup_ids = [r[0] for r in conn.execute("""SELECT DISTINCT substr(failure_detail, 1, instr(failure_detail, ' ') - 1)
                                              FROM source_items WHERE state='skipped' AND content_hash IS NOT NULL
                                              AND failure_kind='duplicate_identity'""")]
-    where = ["(source_id = 'nrw' OR court_id = 'bverwg')"] if http is not None else ["0"]
+    where = ["(source_id = 'nrw' OR court_slug = 'bverwg')"] if http is not None else ["0"]
     params: list = []
     if source:
         where.append("source_id = ?")

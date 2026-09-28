@@ -43,7 +43,7 @@ BEGIN SELECT RAISE(ABORT, 'corrections ledger is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS corrections_append_only_delete BEFORE DELETE ON corrections
 BEGIN SELECT RAISE(ABORT, 'corrections ledger is append-only'); END;
 """
-DECISION_FIELDS = {"decision_date", "decision_type", "court_id", "court_name", "ecli", "chamber", "title",
+DECISION_FIELDS = {"decision_date", "decision_type", "court_id", "court_slug", "court_name", "ecli", "chamber", "title",
                    "jurisdiction", "land"}
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "conformance" / "cases" / "courts"
@@ -199,7 +199,7 @@ def _write_fixture(conn: sqlite3.Connection, decision, *, kind: str, field, new,
             else None
         if text is None:
             return None
-        inp = {"text": text[0], "own_court_id": decision["court_id"], "land": decision["land"],
+        inp = {"text": text[0], "own_court_id": decision["court_slug"], "land": decision["land"],
                "jurisdiction": decision["jurisdiction"]}
         if kind == "relation_assessment":
             key = f"{new['assessment']}|{field}"

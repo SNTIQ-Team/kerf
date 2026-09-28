@@ -217,6 +217,23 @@ def cmd_verify(args) -> int:
     return 0
 
 
+def cmd_check_norm_ids(args) -> int:
+    from .acts import check_norm_ids
+    report = check_norm_ids(open_db())
+    print(json.dumps(report, indent=2))
+    return 0 if not report["not_canonical"] else 1
+
+
+def cmd_courts_map(args) -> int:
+    from .courtmap import fetch_payload, store_mapping
+    conn = connect()
+    init_db(conn)
+    payload = json.loads(open(args.file, encoding="utf-8").read()) if args.file else \
+        fetch_payload(PoliteHttp(respect_robots=False))
+    print(json.dumps(store_mapping(conn, payload), indent=2))
+    return 0
+
+
 def cmd_space(args) -> int:
     report = check_space(data_home(), starting=True)
     print(json.dumps({"bulk_writes_allowed": not report.problems, **report.as_dict()}, indent=2))
@@ -335,6 +352,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seed", type=int)
     p.add_argument("--offline", action="store_true", help="only pairs whose second capture is already packed")
     p.set_defaults(func=cmd_verify)
+    p = sub.add_parser("check-norm-ids", help="every relation norm id must be canonical for Lexgraph's resolver")
+    p.set_defaults(func=cmd_check_norm_ids)
+    p = sub.add_parser("courts-map", help="map corpus court slugs to Amtsgraph court ids (court:de:<XJustiz-ID>)")
+    p.add_argument("--file", help="use a saved /v1/courts/mapping payload instead of fetching it")
+    p.set_defaults(func=cmd_courts_map)
     p = sub.add_parser("space", help="btrfs/disk guard for bulk writes")
     p.set_defaults(func=cmd_space)
     p = sub.add_parser("status", help="coverage per source")
@@ -363,4 +385,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=_positive, default=20)
     p.set_defaults(func=cmd_cites)
     args = parser.parse_args(argv)
-    return args.func(args)
+    # SIGTERM (e.g. `kill <pid>`) ends a sync like Ctrl-C: the run is recorded as interrupted and every
+    # committed decision stays; pending items resume on the next run.
+    import signal
+
+    def _terminate(signum, frame):
+        raise KeyboardInterrupt(f"signal {signum}")
+    signal.signal(signal.SIGTERM, _terminate)
+    try:
+        return args.func(args)
+    except KeyboardInterrupt:
+        print(json.dumps({"status": "interrupted"}), file=sys.stderr)
+        return 130

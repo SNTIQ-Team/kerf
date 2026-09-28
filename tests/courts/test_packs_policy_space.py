@@ -125,7 +125,7 @@ def test_v1_database_is_upgraded_in_place(isolated_corpus):
     old.close()
     conn = connect(db)
     init_db(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
     row = conn.execute("SELECT robots_policy, listing_complete FROM sources WHERE source_id='nrw'").fetchone()
     assert tuple(row) == ("respect", 0)
     assert conn.execute("SELECT count(*) FROM captures").fetchone()[0] == 0
