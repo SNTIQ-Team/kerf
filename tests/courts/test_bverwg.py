@@ -271,3 +271,22 @@ def test_store_roundtrip(urteil):
     rel = conn.execute("SELECT origin, detail FROM relations WHERE decision_id=? AND relation='procedural_reference'",
                        (decision_id,)).fetchall()
     assert len(rel) == 2 and {r["origin"] for r in rel} == {"source_metadata"}
+
+
+def test_one_missing_senat_sitemap_does_not_discard_the_listing(fixture):
+    # Live regression: sitemap_ent_10.xml answered 404 and the whole listing was lost.
+    class MissingOne(ListingHttp):
+        def get(self, url, **kwargs):
+            if url.endswith("sitemap_ent_10.xml"):
+                self.urls.append(url)
+                raise UpstreamFailure("error_page", "title='404 Not Found'", url=url, status=404)
+            return super().get(url, **kwargs)
+    http = MissingOne(fixture)
+    conn = connect()
+    init_db(conn)
+    rss = parse_rss(fixture("bverwg/entscheidungen.rss"))
+    conn.executemany("INSERT INTO source_items(source_id, source_doc_id, url, state) VALUES('bverwg', ?, ?, 'stored')",
+                     [(i["source_doc_id"], i["url"]) for i in rss])
+    listing = BverwgAdapter().list_items(http, conn, since=None, limit=2, courts=None)
+    assert len(listing.items) > 50 and listing.complete is False and listing.upstream_total is None
+    assert [tuple(r) for r in conn.execute("SELECT kind, http_status FROM failures")] == [("error_page", 404)]
