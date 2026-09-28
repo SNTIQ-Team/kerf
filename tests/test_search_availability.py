@@ -14,8 +14,10 @@ def test_successful_zero_is_distinct_from_missing_archive(available, monkeypatch
     monkeypatch.setattr(main, '_retrospective_manifest', lambda **kwargs: None)
     missing = main._append_temporal_search({'result_total': 2}, 'x')
     assert missing['status'] == 'partial' and missing['change_total'] is None
-    assert missing['components']['changes']['reason'] == 'not_in_corpus'
-    assert missing['result_total'] == 2 and missing['result_total_is_partial']
+    # A missing archive was never consulted: unavailable, never "not in corpus".
+    assert missing['components']['changes'] == {'status': 'unavailable', 'reason': 'not_built'}
+    assert missing['result_total'] is None and missing['result_total_is_partial']
+    assert missing['result_total_lower_bound'] == 2
 
 @pytest.mark.parametrize('where', ['_retrospective_manifest','resolve_changes'])
 def test_manifest_and_archive_integrity_errors_survive(available, monkeypatch, where):
@@ -33,7 +35,8 @@ def test_decision_failure_does_not_erase_successful_history(available, monkeypat
     monkeypatch.setattr(main, '_load', fail)
     result = main._append_temporal_search({'result_total': 2}, 'x')
     assert result['status'] == 'partial' and result['decision_total'] is None
-    assert result['change_total'] == 3 and result['result_total'] == 5
+    assert result['change_total'] == 3 and result['result_total'] is None
+    assert result['result_total_lower_bound'] == 5
     assert result['components']['decisions']['status'] == 'unavailable'
 
 def test_wrapped_manifest_integrity_failure_retains_reason(available, monkeypatch):

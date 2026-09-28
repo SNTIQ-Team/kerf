@@ -63,6 +63,10 @@ from fetch_bgbl_documents import (
 from fetch_dip import BASE as DIP_BASE
 from fetch_dip import current_key
 from patch_parser import _split_items, parse_command
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from api.page_furniture import strip_page_furniture  # noqa: E402
 SCHEMA_VERSION = 1
 DEFAULT_START = "2023-01-01"
 DEFAULT_WAHLPERIODEN = (20, 21)
@@ -795,13 +799,12 @@ def parse_amendment_commands(section: dict) -> tuple[list[dict], list[str]]:
             section.get("heading")):
         lines = lines[1:]
     body = "\n".join(lines)
-    # pdftotext repeats the official page furniture inside long commands.
+    # pdftotext repeats the official page furniture inside long commands,
+    # sometimes mid-line ("… ersetzt. Seite 3 von 4 Bundesgesetzblatt …").
     # It is evidence about the PDF page, not amendment wording; remove only
-    # the narrowly shaped BGBl header while retaining every operative byte.
-    body = re.sub(
-        r"(?m)^[ \t]*Seite\s+\d+\s+von\s+\d+\s+Bundesgesetzblatt\s+"
-        r"Jahrgang\s+\d{4}\s+Teil\s+[IVX]+\s+Nr\.\s+\d+[^\n]*$",
-        "", body).replace("\f", "\n")
+    # the narrowly shaped BGBl header/footer while retaining every operative
+    # byte (api.page_furniture reports each removed span).
+    body, _removed = strip_page_furniture(body.replace("\f", "\n"))
     # Drop the Stammgesetz citation and outer ``wird wie folgt geändert``
     # preamble.  Otherwise an unnumbered one-command subsection can resolve a
     # § reference from the citation instead of from the operative command.
@@ -825,7 +828,7 @@ def parse_amendment_commands(section: dict) -> tuple[list[dict], list[str]]:
     # address instead of publishing target-less commands.
     parent_ref: dict[str, str] = {}
     parent_scope: str | None = None
-    first_item = re.search(r"(?m)^[ \t]*1\.[ \t]+", body)
+    first_item = re.search(r"(?m)^[ \t]*(?:0a?|1)\.[ \t]+", body)
     if first_item:
         header = body[:first_item.start()].strip()
         if re.search(r"\bwird\b.{0,120}\bwie\s+folgt\s+geändert\b",

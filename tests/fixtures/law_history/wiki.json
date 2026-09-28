@@ -1,0 +1,53 @@
+[
+ {
+  "id": "fed_asylvfg_1992",
+  "jurabk": "AsylVfG 1992",
+  "juris": "DE",
+  "source_url": "https://www.gesetze-im-internet.de/asylvfg_1992/",
+  "title": "Asylgesetz",
+  "norms": 131,
+  "build": "20260728",
+  "last_change": null,
+  "next_change": null,
+  "pending": 12,
+  "decisions": 0
+ },
+ {
+  "id": "fed_gg",
+  "jurabk": "GG",
+  "juris": "DE",
+  "source_url": "https://www.gesetze-im-internet.de/gg/",
+  "title": "Grundgesetz für die Bundesrepublik Deutschland",
+  "norms": 205,
+  "build": "20260506",
+  "last_change": null,
+  "next_change": null,
+  "pending": 22,
+  "decisions": 24
+ },
+ {
+  "id": "fed_sgb_14",
+  "jurabk": "SGB 14",
+  "juris": "DE",
+  "source_url": "https://www.gesetze-im-internet.de/sgb_14/",
+  "title": "Sozialgesetzbuch Vierzehntes Buch - Soziale Entschädigung -",
+  "norms": 162,
+  "build": "20260630",
+  "last_change": null,
+  "next_change": null,
+  "pending": 2,
+  "decisions": 0
+ },
+ {
+  "id": "by_agsg",
+  "jurabk": "AGSG",
+  "juris": "DE-BY",
+  "title": "Gesetz zur Ausführung der Sozialgesetze (AGSG)",
+  "norms": 144,
+  "build": "17.09.2026",
+  "last_change": "2026-08-01",
+  "next_change": null,
+  "pending": 0,
+  "decisions": 0
+ }
+]

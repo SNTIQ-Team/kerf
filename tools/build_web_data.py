@@ -321,20 +321,57 @@ def month_str(ord_: int) -> str:
 
 
 # ------------------------------------------------------------------ feed
+def bgbl_publication_dates() -> dict[str, str]:
+    """``<year>/<issue>`` → official publication date of captured BGBl I.
+
+    Only integrity-checked final BGBl captures supply a promulgation date.
+    """
+    dates: dict[str, str] = {}
+    for source in ("bgbl_documents", "bgbl_history_backfill"):
+        for row in load(source, "documents.jsonl"):
+            year, issue = row.get("year"), row.get("issue")
+            published = row.get("publication_date")
+            if year and issue and published and \
+                    re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(published)):
+                dates.setdefault(f"{year}/{issue}", str(published))
+    return dates
+
+
 def build_feed() -> list[dict]:
     rows: list[dict] = []
 
-    def add(time, juris, source, kind, title, url=None, badge=None):
+    def add(time, juris, source, kind, title, url=None, badge=None,
+            time_basis=None):
         if not time:
             return
-        rows.append({"time": str(time)[:10], "juris": juris,
-                     "source": source, "kind": kind,
-                     "title": (title or "")[:160], "url": url,
-                     "badge": badge})
+        row = {"time": str(time)[:10], "juris": juris,
+               "source": source, "kind": kind,
+               "title": (title or "")[:160], "url": url,
+               "badge": badge}
+        if time_basis:
+            row["time_basis"] = time_basis
+        rows.append(row)
 
+    # The GII Aktualitätendienst RSS dates each item with the day the feed
+    # listed it, not the promulgation date, and lists one item per act, so
+    # an issue with two acts appeared twice under the same citation.  Use the
+    # captured final BGBl publication date where one exists; otherwise say
+    # that the date is the update service's.
+    published_on = bgbl_publication_dates()
     for e in load("bgbl_events", "events.jsonl"):
-        add(e.get("time"), "DE", "BGBl", "verkündet",
-            e.get("bgbl_citation") or e.get("title"), e.get("eli"))
+        citation = e.get("bgbl_citation")
+        act_title = e.get("title") if e.get("title") != citation else None
+        label = " — ".join(part for part in (citation, act_title) if part)
+        match = re.search(r"/eli/bund/bgbl[_-]1/(\d{4})/(\d+)",
+                          str(e.get("eli") or ""), re.I)
+        published = published_on.get(f"{match.group(1)}/{match.group(2)}") \
+            if match else None
+        if published:
+            add(published, "DE", "BGBl", "verkündet", label, e.get("eli"),
+                time_basis="official_publication_date")
+        else:
+            add(e.get("time"), "DE", "BGBl", "gemeldet", label, e.get("eli"),
+                time_basis="gii_update_service_item_date")
     for e in load("gvbl_events", "events.jsonl"):
         add(e.get("time"), "DE-BY", e.get("gazette", "GVBl"), "verkündet",
             e.get("title"), e.get("permalink"), e.get("authenticity"))
@@ -370,6 +407,12 @@ def build_feed() -> list[dict]:
             "Entscheidung",
             (d.get("az") or "") + " — " + (d.get("title") or ""),
             d.get("url"))
+    unique: dict[tuple, dict] = {}
+    for row in rows:
+        key = (row["time"], row["juris"], row["source"], row["kind"],
+               row["title"], row["url"])
+        unique.setdefault(key, row)
+    rows = list(unique.values())
     rows.sort(key=lambda r: r["time"], reverse=True)
     # court decisions are high-value — never let the 600-row cap
     # crowd them out: seat decisions first, fill the rest with the newest
@@ -1301,8 +1344,11 @@ def build_git(official_transitions: list[dict] | None = None,
             "lane": 1,
             "type": "commit",
             "actor": "BGBl / Lexgraph",
-            "msg": ("Amtliche Änderung wirksam · "
+            "msg": (("Amtliche Änderung wird wirksam · "
+                     if str(review["effective_at"]) > TODAY else
+                     "Amtliche Änderung wirksam · ") +
                     f"{review.get('jurabk') or review.get('act') or ''}"),
+            "future": str(review["effective_at"]) > TODAY,
             "acts": [review.get("jurabk") or review.get("act")],
             "paras": paras[:20],
             "refs": refs,
@@ -1361,9 +1407,14 @@ def build_git(official_transitions: list[dict] | None = None,
             "lane": 1,
             "type": "commit",
             "actor": "BGBl / Lexgraph",
-            "msg": (("Amtliche Änderung wirksam" if effective else
+            # An effective date in the future is a scheduled change, not
+            # an effective one.
+            "msg": (("Amtliche Änderung wird wirksam"
+                     if effective and str(effective) > TODAY else
+                     "Amtliche Änderung wirksam" if effective else
                      "Amtliche Änderung veröffentlicht") +
                     (f" · {jurabk}" if jurabk else "")),
+            "future": bool(effective and str(effective) > TODAY),
             "acts": [jurabk] if jurabk else [],
             "paras": list(event.get("affected_norms") or [])[:20],
             "refs": refs,
