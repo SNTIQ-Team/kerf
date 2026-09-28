@@ -21,12 +21,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 GIB = 1024 ** 3
+GB = 1000 ** 3
 MIN_UNALLOCATED_TO_START = 10 * GIB
-MIN_UNALLOCATED_WHILE_RUNNING = 4 * GIB
+MIN_UNALLOCATED_WHILE_RUNNING = 5 * GIB   # courts.writer checks this (and the WAL) every batch
 MAX_METADATA_USED = 0.90
-MIN_FREE_OTHER = 1 * GIB
-MIN_BTRFS_FREE_TO_START = 25 * GIB      # data space ("Free (estimated)")
-MIN_BTRFS_FREE_WHILE_RUNNING = 10 * GIB
+MIN_FREE_OTHER = 50 * GB
+MIN_BTRFS_FREE_TO_START = 60 * GB         # data space ("Free (estimated)"); runs stop below 50 GB
+MIN_BTRFS_FREE_WHILE_RUNNING = 50 * GB
 
 
 @dataclass

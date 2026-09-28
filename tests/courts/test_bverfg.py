@@ -265,5 +265,5 @@ def test_store_roundtrip(kopftuch):
     assert changed and decision_id == "ECLI:DE:BVerfG:2015:rs20150127.1bvr047110"
     row = conn.execute("SELECT numbering, chamber FROM decisions WHERE id=?", (decision_id,)).fetchone()
     assert row["numbering"] == "rn" and row["chamber"] == "Erster Senat"
-    ids = {r["id"] for r in conn.execute("SELECT id FROM paragraphs WHERE decision_id=?", (decision_id,))}
+    ids = {r["id"] for r in conn.execute("SELECT decision_id || '#' || anchor AS id FROM paragraphs WHERE decision_id=?", (decision_id,))}
     assert f"{decision_id}#rn-159" in ids and f"{decision_id}#abweichende_meinung-rn-31" in ids

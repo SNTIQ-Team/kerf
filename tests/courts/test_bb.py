@@ -156,7 +156,7 @@ def test_stored_decision_has_numbering_none(fixture, tmp_path):
     assert changed and decision_id == "ECLI:DE:OVGBEBB:2026:0813.OVG3N89.26.00"
     row = conn.execute("SELECT numbering, paragraph_count FROM decisions WHERE id=?", (decision_id,)).fetchone()
     assert row["numbering"] == "none" and row["paragraph_count"] == 27
-    ids = [r["id"] for r in conn.execute("SELECT id FROM paragraphs WHERE decision_id=? ORDER BY ordinal",
+    ids = [r["id"] for r in conn.execute("SELECT decision_id || '#' || anchor AS id FROM paragraphs WHERE decision_id=? ORDER BY ordinal",
                                          (decision_id,))]
     assert ids[3] == decision_id + "#p-1"
 

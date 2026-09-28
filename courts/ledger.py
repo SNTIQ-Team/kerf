@@ -23,6 +23,8 @@ import re
 import sqlite3
 from pathlib import Path
 
+from .paragraphs import split_paragraph_id
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS corrections(
   id INTEGER PRIMARY KEY,
@@ -106,6 +108,14 @@ def record(conn: sqlite3.Connection, *, target: str, kind: str, new, evidence: s
             "fixture": fixture}
 
 
+def paragraph_ordinal(conn: sqlite3.Connection, paragraph_id: str) -> int | None:
+    """The (decision_id, ordinal) key of a public paragraph id ``<decision>#<anchor>`` (schema v4)."""
+    key = split_paragraph_id(paragraph_id)
+    row = conn.execute("SELECT ordinal FROM paragraphs WHERE decision_id=? AND anchor=?", key).fetchone() \
+        if key else None
+    return row[0] if row else None
+
+
 def apply_corrections(conn: sqlite3.Connection, decision_id: str) -> int:
     """Overlay the ledger on one decision (run after every store / re-parse)."""
     rows = conn.execute("SELECT * FROM corrections WHERE target = ? OR target LIKE ? OR target LIKE ? ORDER BY id",
@@ -118,27 +128,34 @@ def apply_corrections(conn: sqlite3.Connection, decision_id: str) -> int:
         elif row["kind"] == "case_numbers":
             from .casenumbers import case_key
             conn.execute("BEGIN IMMEDIATE")
-            conn.execute("UPDATE decisions SET case_numbers=? WHERE id=?", (json.dumps(new, ensure_ascii=False),
-                                                                          decision_id))
-            conn.execute("DELETE FROM case_numbers WHERE decision_id=?", (decision_id,))
-            conn.executemany("INSERT INTO case_numbers VALUES(?,?,?,?)",
-                             [(decision_id, i, c, case_key(c)) for i, c in enumerate(new, 1)])
+            try:
+                conn.execute("UPDATE decisions SET case_numbers=? WHERE id=?", (json.dumps(new, ensure_ascii=False),
+                                                                              decision_id))
+                conn.execute("DELETE FROM case_numbers WHERE decision_id=?", (decision_id,))
+                conn.executemany("INSERT INTO case_numbers VALUES(?,?,?,?)",
+                                 [(decision_id, i, c, case_key(c)) for i, c in enumerate(new, 1)])
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
             conn.execute("COMMIT")
         elif row["kind"] == "relation_assessment":
-            paragraph_id = row["target"] if "#" in row["target"] else None
-            where = "decision_id=? AND target_id=? AND assessment=?" + (" AND paragraph_id=?" if paragraph_id else "")
-            params = [decision_id, row["field"], new["assessment"]] + ([paragraph_id] if paragraph_id else [])
+            ordinal = paragraph_ordinal(conn, row["target"]) if "#" in row["target"] else None
+            if "#" in row["target"] and ordinal is None:
+                continue  # the paragraph is gone (re-parse changed the anchors): the correction waits
+            where = "decision_id=? AND target_id=? AND assessment=?" + \
+                (" AND paragraph_ordinal=?" if ordinal is not None else "")
+            params = [decision_id, row["field"], new["assessment"]] + ([ordinal] if ordinal is not None else [])
             conn.execute(f"UPDATE relation_assessments SET status=? WHERE derived_by='rules' AND {where}",
                          [new["status"], *params])
             if new["status"] == "confirmed" and not conn.execute(
                     f"SELECT 1 FROM relation_assessments WHERE derived_by='user' AND {where}", params).fetchone():
                 from .polarity import ASSESSMENTS
-                conn.execute("""INSERT INTO relation_assessments(decision_id, paragraph_id, target_kind, target_id,
+                conn.execute("""INSERT INTO relation_assessments(decision_id, paragraph_ordinal, target_kind, target_id,
                                   assessment, polarity, cue, evidence_text, rule_id, derived_by, legal_effect_verified,
                                   confidence, classifier_version, status, created_at)
                                 VALUES(?,?,?,?,?,?,'',?,?, 'user', 1, 1.0, 'corrections-ledger', 'confirmed',
                                        strftime('%Y-%m-%dT%H:%M:%S+00:00','now'))""",
-                             (decision_id, paragraph_id, "decision" if not str(row["field"]).startswith(("de/", "eu/", "int/"))
+                             (decision_id, ordinal, "decision" if not str(row["field"]).startswith(("de/", "eu/", "int/"))
                               else "norm", row["field"], new["assessment"], ASSESSMENTS[new["assessment"]],
                               row["evidence"], f"correction:{row['id']}"))
         else:
@@ -197,9 +214,9 @@ def _write_fixture(conn: sqlite3.Connection, decision, *, kind: str, field, new,
             case.update(kind="quote_to_paragraph", input={**base, "quote": field}, expected={"paragraph_ids": [new]},
                         description=f"{decision['id']}: quote belongs to {new}")
     elif kind in ("relation_assessment", "relation"):
-        paragraph_id = target if "#" in target else None
-        text = conn.execute("SELECT text FROM paragraphs WHERE id=?", (paragraph_id,)).fetchone() if paragraph_id \
-            else None
+        key = split_paragraph_id(target) if "#" in target else None
+        text = conn.execute("SELECT text FROM paragraphs WHERE decision_id=? AND anchor=?", key).fetchone() \
+            if key else None
         if text is None:
             return None
         inp = {"text": text[0], "own_court_id": decision["court_slug"], "land": decision["land"],
