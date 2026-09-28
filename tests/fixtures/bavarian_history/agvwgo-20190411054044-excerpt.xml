@@ -1,0 +1,107 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE byrecht-norm PUBLIC "-//Verlag C.H.Beck/DTD Vorschriften//DE" "http://gesetze-bayern.de/schema/byrecht.normen.dtd">
+<byrecht-norm builddate="11.04.2019_00:01">
+  <kopf>
+    <angaben.versunabh>
+      <dokumentation doktyp="Gesetz" dokid="xxx" ersatz="BayAGVwGO" />
+      <ausfertigung>
+        <ausfertigungsdatum>1992-06-20</ausfertigungsdatum>
+        <fundstelle.GVBl>
+          <jahr>
+              2015
+            </jahr>
+          <seite>178</seite>
+        </fundstelle.GVBl>
+      </ausfertigung>
+    </angaben.versunabh>
+    <angaben.versabh version.id="p">
+      <inkraft>2015-11-01</inkraft>
+      
+      <fassung>
+        <fassungsdatum>1992-06-20</fassungsdatum>
+        <fundstelle.GVBl>
+          <jahr>
+            1992
+          </jahr>
+          <seite>162</seite>
+        </fundstelle.GVBl>
+      </fassung>
+      <gliederungsNr.BayRS>
+        
+            
+          BayRS 34-1-I</gliederungsNr.BayRS>
+      <kurzbezeichnung></kurzbezeichnung>
+      <titelangaben>Gesetz zur Ausführung der Verwaltungsgerichtsordnung<br /> (<amtlicheAbk>AGVwGO</amtlicheAbk>)<br />
+        in der Fassung der Bekanntmachung vom 20. Juni 1992<br />(GVBl. S. 162)<br />
+            
+          BayRS 34-1-I</titelangaben>
+      <amtlicheAbk>AGVwGO</amtlicheAbk>
+    </angaben.versabh>
+  </kopf>
+  <rumpf>
+    <aenderungsverlauf>
+      <p>Änderungen</p>
+      <ul>
+        <li>
+          <symbol id="x">1.</symbol>
+          <p>§ 1 ÄndG vom 23. 6. 1993<br />(GVBl. S. 408, geänd. 2015 S. 178)</p>
+        </li>
+        <li>
+          <symbol id="x">2.</symbol>
+          <p>§ 7 G zur Vereinfachung und Beschleunigung bau- und wasserrechtlicher Verfahren vom 12. 4. 1994<br />(GVBl. S. 210)</p>
+        </li>
+      </ul>
+    </aenderungsverlauf>
+    <normzitat>Gesetz zur Ausführung der Verwaltungsgerichtsordnung (AGVwGO) in der Fassung der Bekanntmachung vom 20. Juni 1992 (GVBl. S. 162, BayRS 34-1-I), das zuletzt durch Art. 10b Abs. 4 des Gesetzes vom 23. Juni 2015 (GVBl. S. 178) geändert worden ist</normzitat>
+    <einzelnorm version="p" einzelnormid="P_1">
+      <para.titel>
+        </para.titel>
+      <para.nr>Art. 1</para.nr>
+      <para.titel>
+        (Zu <verweis.norm>§§ <v.norm ersatz="VwGO">2</v.norm>, <v.norm ersatz="VwGO">3</v.norm> Abs. 1, § <v.norm ersatz="VwGO">184</v.norm> <v.abk ersatz="VwGO">VwGO</v.abk></verweis.norm>)</para.titel>
+      <jurAbsatz>
+        <absatz.nr>(1)</absatz.nr>
+        <absatz.text>
+          <p>
+          <satz.nr id="xx">1</satz.nr>Das Oberverwaltungsgericht für den Freistaat Bayern führt die Bezeichnung „Bayerischer Verwaltungsgerichtshof“.
+          <satz.nr id="xx">2</satz.nr>Der Verwaltungsgerichtshof hat seinen Sitz in München.
+          <satz.nr id="xx">3</satz.nr>In Ansbach werden vier auswärtige Senate des Verwaltungsgerichtshofs errichtet.</p>
+          
+          
+        </absatz.text>
+      </jurAbsatz>
+      <jurAbsatz>
+        <absatz.nr>(2)</absatz.nr>
+        <absatz.text>
+          <p>Die bayerischen Verwaltungsgerichte haben ihren Sitz</p>
+          <ul>
+            <li>
+              <symbol id="x">1.</symbol>
+              <p>in München für den Regierungsbezirk Oberbayern,</p>
+            </li>
+            <li>
+              <symbol id="x">2.</symbol>
+              <p>in Regensburg für die Regierungsbezirke Niederbayern und Oberpfalz,</p>
+            </li>
+            <li>
+              <symbol id="x">3.</symbol>
+              <p>in Bayreuth für den Regierungsbezirk Oberfranken,</p>
+            </li>
+            <li>
+              <symbol id="x">4.</symbol>
+              <p>in Ansbach für den Regierungsbezirk Mittelfranken,</p>
+            </li>
+            <li>
+              <symbol id="x">5.</symbol>
+              <p>in Würzburg für den Regierungsbezirk Unterfranken,</p>
+            </li>
+            <li>
+              <symbol id="x">6.</symbol>
+              <p>in Augsburg für den Regierungsbezirk Schwaben.</p>
+            </li>
+          </ul>
+        </absatz.text>
+      </jurAbsatz>
+    </einzelnorm>
+  </rumpf>
+</byrecht-norm>
