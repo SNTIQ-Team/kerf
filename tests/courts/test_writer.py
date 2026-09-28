@@ -129,3 +129,18 @@ def test_two_sources_as_threads_of_one_writer(fixture):
     assert maintenance.last_report is not None                      # the guard ran during the threads
     from courts.writer import checkpoint
     assert checkpoint(conn)[0] == 0                                  # and the WAL truncates once they are done
+
+
+def test_then_sources_start_when_a_slot_frees_up(monkeypatch):
+    """`sync --source a --then b,c`: one thread at a time here, b after a, c after b (batch order)."""
+    import courts.cli as cli
+    order = []
+
+    def fake_sync(adapter, conn, http, **kw):
+        order.append(adapter.source_id)
+        time.sleep(0.05)
+        return {"status": "ok"}
+    monkeypatch.setattr(cli, "sync_source", fake_sync)
+    monkeypatch.setattr(cli, "space_ok", lambda what: True)
+    assert cli.main(["sync", "--source", "nrw", "--then", "rii,bverwg"]) == 0
+    assert order == ["nrw", "rii", "bverwg"]
