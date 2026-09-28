@@ -109,6 +109,7 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
         consecutive_blocking = 0
         for position, item in enumerate(frontier, 1):
             counts["attempted"] += 1
+            content_hash = None
             try:
                 capture = adapter.fetch(http, item)
                 content_hash, relpath = write_capture(capture.body, adapter.source_id, capture.extension, home,
@@ -133,6 +134,9 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                 if failure.url is None:
                     failure.url = item["url"]
                 record_failure(conn, run_id, adapter.source_id, item["source_doc_id"], failure)
+                if content_hash:  # the capture is packed: the item can be re-examined offline
+                    conn.execute("UPDATE source_items SET content_hash=? WHERE source_id=? AND source_doc_id=?",
+                                 (content_hash, adapter.source_id, item["source_doc_id"]))
                 log(f"{adapter.source_id}: {item['source_doc_id']}: {failure.kind}: {failure.detail[:160]}")
                 consecutive_blocking = consecutive_blocking + 1 if is_blocking(failure) else 0
                 if consecutive_blocking >= MAX_CONSECUTIVE_BLOCKING:
@@ -151,6 +155,9 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                 detail = f"{type(exc).__name__}: {exc} | " + traceback.format_exc(limit=3).replace("\n", " ")[-600:]
                 record_failure(conn, run_id, adapter.source_id, item["source_doc_id"],
                                UpstreamFailure("parse_error", detail, url=item["url"]))
+                if content_hash:
+                    conn.execute("UPDATE source_items SET content_hash=? WHERE source_id=? AND source_doc_id=?",
+                                 (content_hash, adapter.source_id, item["source_doc_id"]))
                 log(f"{adapter.source_id}: {item['source_doc_id']}: parse_error: {exc}")
             if position % SPACE_CHECK_EVERY == 0:
                 space = check_space(home or data_home(), starting=False)
