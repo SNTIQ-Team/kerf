@@ -106,7 +106,8 @@ PARAGRAPH_COLUMNS = """p.rowid AS rowid, p.id, p.decision_id, p.section, p.autho
 def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None = None,
            date_from: str | None = None, date_to: str | None = None, case_number: str | None = None,
            ecli: str | None = None, norm: str | None = None, relation: str | None = None,
-           source: str | None = None, section: str | None = None, limit: int = 10, offset: int = 0) -> dict:
+           source: str | list[str] | None = None, section: str | None = None, limit: int = 10,
+           offset: int = 0) -> dict:
     scope = {k: v for k, v in dict(q=q, court=court, date_from=date_from, date_to=date_to,
                                    case_number=case_number, ecli=ecli, norm=norm, relation=relation,
                                    source=source, section=section, limit=limit, offset=offset).items()
@@ -126,10 +127,12 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
         return _envelope("invalid_argument", request_scope=scope, searched=[], evidence=[], total=None,
                          warnings=["q has no searchable tokens"])
     states = sources_state(conn)
-    in_scope = [source] if source else sorted(states)
-    if source and source not in states:
-        return _envelope("not_in_corpus", request_scope=scope, searched=[{"source": source, "status": "unknown",
-                                                                           "count": None}], evidence=[], total=None)
+    wanted = [source] if isinstance(source, str) else list(source or [])
+    in_scope = sorted(set(wanted)) if wanted else sorted(states)
+    unknown = [s for s in in_scope if s not in states]
+    if unknown:
+        return _envelope("not_in_corpus", request_scope=scope, evidence=[], total=None,
+                         searched=[{"source": s, "status": "unknown", "count": None} for s in unknown])
     where, params = ["1=1"], []
     join = ""
     if match:
@@ -163,9 +166,9 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
             sub.append("r.relation = ?")
             params.append(relation)
         where.append("EXISTS (SELECT 1 FROM relations r WHERE " + " AND ".join(sub) + ")")
-    if source:
-        where.append("d.source_id = ?")
-        params.append(source)
+    if wanted:
+        where.append(f"d.source_id IN ({','.join('?' * len(in_scope))})")
+        params += in_scope
     base = f" FROM paragraphs p JOIN decisions d ON d.id = p.decision_id{join} WHERE " + " AND ".join(where)
     counts = {r[0]: r[1] for r in conn.execute("SELECT d.source_id, count(*)" + base + " GROUP BY d.source_id",
                                                 params)}
@@ -179,10 +182,12 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
         st = states[sid]
         available = st["status"] not in UNAVAILABLE
         unavailable |= not available
-        if available and (st["pending_items"] or 0) > 0:
+        if available and ((st["pending_items"] or 0) > 0 or not st["listing_complete"]):
             incomplete = True
-            warnings.append(f"{sid}: local corpus holds {st['decisions']} decisions; "
-                            f"{st['pending_items']} listed upstream decisions not yet synced")
+            upstream = st["upstream_listed"]
+            warnings.append(f"{sid}: local corpus holds {st['decisions']} decisions; backfill incomplete "
+                            f"({st['pending_items']} listed but not synced; upstream total "
+                            f"{upstream if upstream is not None else 'unknown'})")
         if not available:
             failed.append({"source": sid, "status": st["status"], "reason": st["status_reason"]})
         searched.append({"source": sid, "status": st["status"] if not available else "ok",

@@ -93,20 +93,20 @@ Norm prefix query (segment-exact, index-friendly): `target_id = :n OR (target_id
 
 | Table | Content |
 |---|---|
-| `sources` | One row per portal. `status` ∈ `ok, partial, unavailable, blocked, never_synced`; `status_reason`; `upstream_listed`; last sync timestamps. |
+| `sources` | One row per portal. `status` ∈ `ok, partial, unavailable, blocked, never_synced`; `status_reason`; `upstream_listed`; `listing_complete` (1 only after an unbounded run listed the whole upstream archive; added within v1, readers must tolerate its absence as 0); last sync timestamps. |
 | `source_items` | The incremental frontier: every listed upstream document with `state` ∈ `pending, stored, failed, skipped`; `priority` (0 = social/administrative courts first); `listed_modified` versus `fetched_modified` (a change re-queues the item); typed `failure_kind`. |
-| `sync_runs` | One row per run: counts, request total, status. |
+| `sync_runs` | One row per run: counts, request total, status; `notes = 'listing incomplete…'` marks runs that cannot serve as an incremental baseline. |
 | `failures` | Typed failures (`challenge, login, error_page, http_error, rate_limited, network, robots_disallowed, unexpected_representation, parse_error, identity_mismatch, empty_document, duplicate_identity`). A failure is never stored as a decision. |
 | `http_validators` | ETag / Last-Modified per URL, for conditional requests. |
-| `source_coverage` (view) | Per source: status, decisions, date range, pending/failed item counts, last sync. |
+| `source_coverage` (view) | Per source: status, `listing_complete`, decisions, date range, pending/failed item counts, last sync. |
 
 ## Tool mapping and envelope rules (mirror `courts/read.py`)
 
-- **`decisions_search`**
+- **`decisions_search`** (`source` may be one id or a list; scoping to available sources yields a definite total)
   1. Count matches per source with `GROUP BY d.source_id` over the full filter (FTS + court, date, `case_key`, ECLI, norm/relation via `EXISTS (SELECT 1 FROM relations r WHERE r.paragraph_id = p.id …)`).
   2. `searched` has one entry per in-scope source. `count` is NULL for sources whose status is `blocked`, `unavailable` or `never_synced`.
   3. If any in-scope source is unavailable: `status: "partial"`, `total: null`, and the source is listed in `failed_components`. **Never return a silent 0.**
-  4. Otherwise `total` is the sum. If `total == 0` but an in-scope source still has pending items (an incomplete backfill): `status: "not_found_in_searched_scope"`. If `total > 0` with pending items: `status: "partial"` plus a warning. Only a complete scope yields `status: "ok"`.
+  4. Otherwise `total` is the sum. A source is *complete* only if `listing_complete = 1` **and** it has no pending items. If any in-scope source is incomplete (a bounded or unfinished backfill): `total == 0` gives `status: "not_found_in_searched_scope"`, and `total > 0` gives `status: "partial"`, each with a warning naming the local and upstream counts. Only a complete scope yields `status: "ok"`.
 - **`decision_get`**: resolve the argument as `id`, then `ecli`, then `source_id:source_doc_id`, then `case_numbers.case_key`. More than one hit returns `ambiguous_identity` with the candidates.
 - **`decision_paragraph`**: select by `paragraphs.id`, verify `sha256(text) == text_hash` (otherwise `integrity_check_failed`), and return `blocks` and the paragraph's relations.
 - **`citing_decisions`**: select `relations` by norm prefix or by `target_id` / `target_decision_id`. Always state which relation types were included. Parser relations say that a decision *mentions/quotes* a target, never that it applies it.

@@ -84,6 +84,10 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
         if not listing.complete:
             # Incremental adapters treat only runs with a complete listing as a baseline.
             notes = "listing incomplete"
+        elif limit is None and since is None:
+            # The whole upstream archive was listed at least once: from now on "no pending
+            # items" really means the local corpus covers the source.
+            conn.execute("UPDATE sources SET listing_complete=1 WHERE source_id=?", (adapter.source_id,))
         counts["listed"] = upsert_items(conn, adapter.source_id, listing.items)
         if listing.upstream_total is not None:
             conn.execute("UPDATE sources SET upstream_listed=? WHERE source_id=?",
