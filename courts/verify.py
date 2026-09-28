@@ -504,7 +504,12 @@ def verify_sample(conn: sqlite3.Connection, *, sample: int, http=None, source: s
         if decision is None:
             continue
         stored = stored_representation(conn, decision_id)
-        for alt in alternates(conn, decision, http, {kind}):
+        alts = alternates(conn, decision, http, {kind})
+        if not alts and reuse_run is not None:
+            # The stored copy changed source since that run (explicit-Rn precedence: RII replaced the
+            # unnumbered bsg.bund.de copy), so the same decision is re-checked against what is available.
+            alts = alternates(conn, decision, None, None)
+        for alt in alts:
             counts["pairs"] += 1
             try:
                 other = parsed_representation(alt.label, alt.load())
