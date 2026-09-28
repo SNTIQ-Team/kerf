@@ -25,6 +25,7 @@ from .ledger import SCHEMA as LEDGER_SCHEMA
 from .paragraphs import assemble
 from .polarity import SCHEMA as POLARITY_SCHEMA
 from .verify import SCHEMA as VERIFY_SCHEMA
+from .courtmap import SCHEMA as COURTMAP_SCHEMA, canonical_court_id
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -89,6 +90,7 @@ CREATE TABLE IF NOT EXISTS decisions(
   source_doc_id TEXT NOT NULL,
   court_id TEXT NOT NULL,
   court_name TEXT NOT NULL,
+  court_slug TEXT NOT NULL DEFAULT '',
   court_type TEXT,
   jurisdiction TEXT,
   land TEXT,
@@ -112,6 +114,7 @@ CREATE TABLE IF NOT EXISTS decisions(
   UNIQUE(source_id, source_doc_id)
 );
 CREATE INDEX IF NOT EXISTS decisions_court_date ON decisions(court_id, decision_date);
+CREATE INDEX IF NOT EXISTS decisions_court_slug ON decisions(court_slug, decision_date);
 CREATE INDEX IF NOT EXISTS decisions_date ON decisions(decision_date);
 CREATE INDEX IF NOT EXISTS decisions_ecli ON decisions(ecli);
 CREATE INDEX IF NOT EXISTS decisions_source ON decisions(source_id, decision_date);
@@ -269,8 +272,15 @@ SOURCE_COLUMNS_V2 = {
 
 def init_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1, SCHEMA_VERSION):
+    if version not in (0, 1, 2, SCHEMA_VERSION):
         raise RuntimeError(f"database schema v{version} != code schema v{SCHEMA_VERSION}")
+    if version in (1, 2):
+        # v2 -> v3: decisions.court_id becomes the Amtsgraph id (when mapped); the corpus slug moves to
+        # decisions.court_slug (alias, used in synthetic decision ids and citation linking).
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(decisions)")}
+        if columns and "court_slug" not in columns:
+            conn.execute("ALTER TABLE decisions ADD COLUMN court_slug TEXT NOT NULL DEFAULT ''")
+            conn.execute("UPDATE decisions SET court_slug = court_id WHERE court_slug = ''")
     if version == 1:
         # v1 -> v2: source policy columns and the packed-capture index (additive; legacy
         # raw/*.gz captures stay readable until `python -m courts migrate-captures`).
@@ -282,6 +292,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(POLARITY_SCHEMA)
     conn.executescript(LEDGER_SCHEMA)
     conn.executescript(VERIFY_SCHEMA)
+    conn.executescript(COURTMAP_SCHEMA)
     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     conn.execute("INSERT OR REPLACE INTO meta VALUES('schema_version', ?)", (str(SCHEMA_VERSION),))
     conn.execute("INSERT OR IGNORE INTO meta VALUES('created_at', ?)", (utcnow(),))
@@ -513,13 +524,14 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
         conn.execute("BEGIN IMMEDIATE")
         for row in existing:
             _delete_decision(conn, row["id"])
-        conn.execute("""INSERT INTO decisions(id, ecli, source_id, source_doc_id, court_id, court_name, court_type,
-                          jurisdiction, land, chamber, decision_type, decision_date, case_numbers_raw, case_numbers,
-                          title, numbering, paragraph_count, source_url, content_hash, capture_path, media_type,
-                          text_hash, parser_version, first_seen, observed_at, metadata)
-                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                     (decision_id, parsed.ecli, parsed.source_id, parsed.source_doc_id, parsed.court_id,
-                      parsed.court_name, parsed.court_type, parsed.jurisdiction, parsed.land, parsed.chamber,
+        conn.execute("""INSERT INTO decisions(id, ecli, source_id, source_doc_id, court_id, court_name, court_slug,
+                          court_type, jurisdiction, land, chamber, decision_type, decision_date, case_numbers_raw,
+                          case_numbers, title, numbering, paragraph_count, source_url, content_hash, capture_path,
+                          media_type, text_hash, parser_version, first_seen, observed_at, metadata)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                     (decision_id, parsed.ecli, parsed.source_id, parsed.source_doc_id,
+                      canonical_court_id(conn, parsed.court_id, parsed.land), parsed.court_name, parsed.court_id,
+                      parsed.court_type, parsed.jurisdiction, parsed.land, parsed.chamber,
                       parsed.decision_type, parsed.decision_date, parsed.case_numbers_raw,
                       json.dumps(parsed.case_numbers, ensure_ascii=False), parsed.title, numbering,
                       len(paragraphs), parsed.source_url, content_hash, capture_path, media_type, text_hash,
@@ -609,7 +621,7 @@ def relink(conn: sqlite3.Connection) -> int:
     cur = conn.execute("""
       UPDATE relations SET target_decision_id = (
         SELECT d.id FROM decisions d JOIN case_numbers c ON c.decision_id = d.id
-        WHERE d.court_id = relations.target_court_id AND d.decision_date = relations.target_date
+        WHERE d.court_slug = relations.target_court_id AND d.decision_date = relations.target_date
           AND c.case_key = relations.target_case_key LIMIT 1)
       WHERE target_kind = 'decision' AND target_decision_id IS NULL AND target_case_key IS NOT NULL""")
     changed = cur.rowcount

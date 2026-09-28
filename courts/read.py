@@ -83,6 +83,7 @@ def evidence_item(row, *, excerpt: bool = True, match_terms: list[str] = ()) -> 
         "text": shown, "text_offset": start, "text_truncated": len(shown) < len(text),
         "section": row["section"], "authorship": row["authorship"],
         "decision": {"id": row["decision_id"], "ecli": row["ecli"], "court_id": row["court_id"],
+                     "court_slug": row["court_slug"],
                      "court_name": row["court_name"], "decision_type": row["decision_type"],
                      "decision_date": row["decision_date"], "case_numbers": json.loads(row["case_numbers"]),
                      "case_numbers_raw": row["case_numbers_raw"], "numbering": row["numbering_d"]},
@@ -98,7 +99,7 @@ def evidence_item(row, *, excerpt: bool = True, match_terms: list[str] = ()) -> 
 
 
 PARAGRAPH_COLUMNS = """p.rowid AS rowid, p.id, p.decision_id, p.section, p.authorship, p.rn, p.numbering, p.text,
-  p.text_hash, p.block_count, d.ecli, d.court_id, d.court_name, d.decision_type, d.decision_date,
+  p.text_hash, p.block_count, d.ecli, d.court_id, d.court_slug, d.court_name, d.decision_type, d.decision_date,
   d.case_numbers, d.case_numbers_raw, d.numbering AS numbering_d, d.source_url, d.source_id,
   d.observed_at, d.content_hash, d.parser_version"""
 
@@ -140,8 +141,8 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
         where.append("paragraphs_fts MATCH ?")
         params.append(match)
     if court:
-        where.append("d.court_id = ?")
-        params.append(court)
+        where.append("(d.court_id = ? OR d.court_slug = ?)")   # Amtsgraph id or corpus slug
+        params += [court, court]
     if date_from:
         where.append("d.decision_date >= ?")
         params.append(date_from)
