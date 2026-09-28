@@ -94,6 +94,28 @@ class CaptureSource:
     route: str
 
 
+CAPTURE_SOURCE_IDS = ("by", "bverwg")
+LEGACY_WRITER_SOURCES = ("by",)      # writers started before the lock named its capture sources
+
+
+def running_writer_sources(home: Path | None = None) -> tuple[str, ...] | None:
+    """Capture sources the writer that holds the lock can store; None when no writer runs."""
+    path = Path(home or data_home()) / ".writer.lock"
+    try:
+        handle = open(path, "r+")
+    except FileNotFoundError:
+        return None
+    with handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            text = handle.read()
+            m = re.search(r"^capture-sources (.*)$", text, re.M)
+            return tuple(x for x in m.group(1).split(",") if x) if m else LEGACY_WRITER_SOURCES
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        return None
+
+
 def capture_sources() -> dict[str, CaptureSource]:
     from .sources import bverwg, by_portal
     return {"by": CaptureSource("by", "BAYERN.RECHT (gesetze-bayern.de) decision page", by_portal.canonical_url,
@@ -493,6 +515,12 @@ def ingest_capture(source: str, url: str, body: bytes, *, captured_at: str | Non
             return earlier | {"warnings": list(earlier.get("warnings") or []) + ["the same capture was ingested "
                                                                                     "before: first result returned"]}
         queued = ticket in pending_tickets(home)
+        writer_sources = running_writer_sources(home)
+        if writer_sources is not None and source not in writer_sources:
+            # The running writer was started before this capture source existed: it would refuse the item.
+            raise CaptureRefused("busy", f"the running writer cannot store {source} captures yet (it started "
+                                 "before they were supported); it will after its next start", reason="writer_outdated",
+                                 retry_after_s=3600)
         if not queued:
             rate_check(home, now)
             try:

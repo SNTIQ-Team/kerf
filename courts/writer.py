@@ -53,7 +53,9 @@ def writer_lock(what: str, home: Path | None = None):
             raise WriterBusy(f"another writer holds {path}: {handle.read().strip() or 'unknown'}") from None
         handle.seek(0)
         handle.truncate()
-        handle.write(f"pid {os.getpid()} {what}\n")
+        from .capture import CAPTURE_SOURCE_IDS
+        # The second line tells ingest-capture which user-browser capture sources this writer can store.
+        handle.write(f"pid {os.getpid()} {what}\ncapture-sources {','.join(CAPTURE_SOURCE_IDS)}\n")
         handle.flush()
         try:
             yield

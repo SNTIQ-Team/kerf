@@ -273,3 +273,22 @@ def test_capture_of_a_decision_stored_from_the_court_pdf_is_a_skipped_duplicate(
     item = db().execute("SELECT state, failure_kind, content_hash FROM source_items WHERE source_doc_id=?",
                         (DOC,)).fetchone()
     assert item["state"] == "skipped" and item["failure_kind"] == "duplicate_identity" and item["content_hash"]
+
+
+def test_a_writer_started_before_a_capture_source_existed_is_reported_busy():
+    from courts.config import data_home
+    from courts.writer import writer_lock
+    import fcntl
+    with writer_lock("sync (new writer)"):
+        assert capture.running_writer_sources() == ("by", "bverwg")
+    lock = data_home() / ".writer.lock"
+    with open(lock, "r+") as handle:            # a writer from before the capture-sources line
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        handle.write("pid 1 sync sync --source nrw\n")
+        handle.flush()
+        assert capture.running_writer_sources() == ("by",)
+        body = gzip.decompress((ROOT / "tests/courts/fixtures/wayback/bverwg-010223B4BN1.23.0-20230605075242.html.gz").read_bytes())
+        with pytest.raises(CaptureRefused) as refused:
+            ingest_capture("bverwg", "https://www.bverwg.de/de/010223B4BN1.23.0", body)
+        assert refused.value.reason == "writer_outdated" and refused.value.status == "busy"
+        assert capture.ledger_entries() == []
