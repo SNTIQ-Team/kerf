@@ -106,7 +106,8 @@ RETRO_ENTRY_RE = re.compile(
 # BGBl amendment headings/DIP's Rechtsmaterialien vocabulary.  They are not
 # fuzzy search terms.
 EXACT_NAME_ALIASES: dict[str, tuple[str, ...]] = {
-    "asylvfg_1992": ("Asylgesetz",),
+    # BGBl I 2015 p. 1722, Art. 1 Nr. 1 renames the same act.
+    "asylvfg_1992": ("Asylgesetz", "Asylverfahrensgesetz"),
     "aufenthg_2004": ("Aufenthaltsgesetz",),
     "azrg": ("AZR-Gesetz", "Gesetz über das Ausländerzentralregister"),
     "baf_g": ("Bundesausbildungsförderungsgesetz",),

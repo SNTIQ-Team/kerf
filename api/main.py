@@ -68,6 +68,9 @@ from api.citation_store import CitationStoreError, query_citations
 from api.search_engine import SearchEngine, normalize_search_text
 from api.procedure_search import ProcedureSearchIndex
 from api.official_state_store import OfficialStateError, load_observed_state
+from api.markdown_layout import source_paragraph_layouts
+from tools.reader_blocks import ReaderBlocksError, load_sidecar
+from tools.archived_reader_store import ArchivedReaderError, load_archived_reader
 from api.retrospective_store import (
     RetrospectiveAmbiguity,
     RetrospectiveIntegrityError,
@@ -85,6 +88,8 @@ from api.retrospective_store import (
 DATA_DIR = Path(os.environ.get(
     "LEXGRAPH_DATA",
     Path(__file__).resolve().parent.parent / "web" / "data")).resolve()
+READER_DIR = Path(os.environ.get(
+    "LEX_READER_DIR", Path(__file__).resolve().parent.parent / "data" / "reader"))
 
 app = FastAPI(title="Lexgraph", version="1.5")
 app.include_router(decision_passages_router(lambda: DATA_DIR))
@@ -196,6 +201,20 @@ def _load(name: str) -> object:
 def _cached(payload: object) -> JSONResponse:
     """The data plane is static per deploy, so let clients cache it too."""
     return JSONResponse(payload, headers={"Cache-Control": "public, max-age=3600"})
+
+
+def _live(payload: object) -> JSONResponse:
+    """Same data plane, but for surfaces that are republished intra-day.
+
+    The blanket max-age=3600 is right for a corpus that changes once a night;
+    it is wrong for the watch, which the procedure-watch job republishes twice
+    a day and any fix republishes again. Clients went on showing a superseded
+    card — an adopted act still badged "Entwurf" — for up to an hour, and a
+    normal reload did not help because an XHR with a fresh max-age never
+    reaches the network. `no-cache` still permits storage, it just forces
+    revalidation, so the payload is re-fetched only when it actually changed.
+    """
+    return JSONResponse(payload, headers={"Cache-Control": "no-cache"})
 
 
 def _retrospective_manifest(*, optional: bool = False) -> dict | None:
@@ -476,6 +495,59 @@ def acts():
 def act_detail(act_id: str):
     """One full act (acts/<id>.json): temporal, patches, versions, norms, …."""
     return _cached(_load_act(act_id))
+
+
+@app.get("/acts/{act_id}/reader")
+def act_reader(act_id: str, at: date | None = None,
+               as_of: datetime | None = None):
+    """Official structure bound to the same immutable state as Markdown."""
+    if as_of is not None and at is None:
+        raise HTTPException(422, "as_of requires an explicit legal date in at")
+    act = _load_act(act_id)
+    if at is None:
+        try:
+            return _live(load_sidecar(READER_DIR, act))
+        except ReaderBlocksError as exc:
+            raise HTTPException(404, "reader structure unavailable") from exc
+    requested_at = at.isoformat()
+    try:
+        interval, retrospective, observed = _resolve_archive_states(
+            act, requested_at, _knowledge_value(as_of))
+        state = ({**retrospective, 'state_sha256': interval['state_sha256']}
+                 if retrospective is not None else observed)
+        payload = (None if state is None else load_archived_reader(
+            DATA_DIR / "reader-history", act, state,
+            requested_at=requested_at))
+    except RetrospectiveNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (OfficialStateError, ArchivedReaderError) as exc:
+        raise HTTPException(503, str(exc)) from exc
+    if payload is None:
+        raise HTTPException(404, "historical reader structure unavailable")
+    return _live(payload)
+
+
+def _resolve_archive_states(act: dict, requested_at: str | None,
+                            knowledge: str | None):
+    """Shared selection order prevents historical text/structure disagreement."""
+    interval = state = None
+    manifest = _retrospective_manifest(optional=True)
+    if requested_at is not None and manifest is not None:
+        try:
+            interval = resolve_interval(
+                manifest, act['id'], requested_at, as_of=knowledge)
+            state = load_interval_state(interval, DATA_DIR / "federal_states")
+        except RetrospectiveNotFound:
+            if knowledge is not None:
+                raise
+        except (RetrospectiveIntegrityError, RetrospectiveAmbiguity) as exc:
+            raise HTTPException(
+                503, f"retrospective history integrity failure: {exc}") from exc
+    elif knowledge is not None:
+        raise HTTPException(503, "retrospective history is not built")
+    observed = (None if state is not None else
+                load_observed_state(DATA_DIR, act, requested_at))
+    return interval, state, observed
 
 
 def _load_act(act_id: str) -> dict:
@@ -763,38 +835,39 @@ def act_markdown(
     knowledge = _knowledge_value(as_of)
     try:
         act = _load_act(act_id)
-        retrospective_interval = None
-        retrospective_state = None
-        manifest = _retrospective_manifest(optional=True)
-        if requested_at is not None and manifest is not None:
+        retrospective_interval, retrospective_state, observed_state = \
+            _resolve_archive_states(act, requested_at, knowledge)
+        paragraph_layouts = None
+        if download:
+            payloads = []
             try:
-                retrospective_interval = resolve_interval(
-                    manifest, act_id, requested_at, as_of=knowledge)
-                retrospective_state = load_interval_state(
-                    retrospective_interval, DATA_DIR / "federal_states")
-            except RetrospectiveNotFound:
-                if knowledge is not None:
-                    raise
-            except (RetrospectiveIntegrityError,
-                    RetrospectiveAmbiguity) as exc:
-                raise HTTPException(
-                    503, f"retrospective history integrity failure: {exc}") \
-                    from exc
-        elif knowledge is not None:
-            raise HTTPException(503, "retrospective history is not built")
-        observed_state = (None if retrospective_state is not None else
-                          load_observed_state(DATA_DIR, act, requested_at))
+                payloads.append(load_sidecar(READER_DIR, act))
+            except ReaderBlocksError:
+                pass  # Optional layout: canonical text remains usable.
+            state = ({**retrospective_state,
+                      "state_sha256": retrospective_interval["state_sha256"]}
+                     if retrospective_state is not None else observed_state)
+            if requested_at is not None and state is not None:
+                archived = load_archived_reader(
+                    DATA_DIR / "reader-history", act, state,
+                    requested_at=requested_at)
+                if archived is not None:
+                    payloads.append(archived)
+            paragraph_layouts = source_paragraph_layouts(
+                payloads, (act.get("norms") or []) +
+                ((state or {}).get("norms") or []))
         result = render_markdown_snapshot(
             act, requested_at=requested_at, norm=norm,
             fallback_head=_archive_head_fallback(),
             observed_state=observed_state,
             retrospective_state=retrospective_state,
-            retrospective_interval=retrospective_interval)
+            retrospective_interval=retrospective_interval,
+            paragraph_layouts=paragraph_layouts)
     except UnknownNormError as exc:
         raise HTTPException(404, str(exc)) from exc
     except RetrospectiveNotFound as exc:
         raise HTTPException(404, str(exc)) from exc
-    except OfficialStateError as exc:
+    except (OfficialStateError, ArchivedReaderError) as exc:
         # Integrity failure is a broken immutable data generation, not a bad
         # user date.  Fail closed instead of falling back to a reconstruction.
         raise HTTPException(503, str(exc)) from exc
@@ -985,7 +1058,7 @@ def watched_procedures():
     ``pending_final_review`` until the final Article 2 has been compared with
     the tracked proposal and that review is persisted.
     """
-    return _cached(_load("watched_procedures"))
+    return _live(_load("watched_procedures"))
 
 
 @app.get("/amendment-fates")

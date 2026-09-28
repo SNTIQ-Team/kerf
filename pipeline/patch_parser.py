@@ -195,16 +195,25 @@ def _split_items(body: str) -> list[str]:
     starts; a body without numbering is a single command. Two guards
     against phantom items: the number must continue the 1,2,3… sequence
     (a quoted "31. Juli 2025" at a line break is a date, not item 31),
-    and it must not sit inside a „…" quotation."""
+    and it must not sit inside a „…" quotation. Inserted item numbers such
+    as 1a/1b belong between 1 and 2 and must not absorb a different norm."""
     spans = [m.span() for m in QUOTE_RE.finditer(body)]
-    cuts, expect = [], 1
-    for m in re.finditer(r"(?m)^\s{0,3}(\d{1,2})\.\s+", body):
-        if int(m.group(1)) != expect:
+    cuts, expect, last_suffix = [], 1, ""
+    for m in re.finditer(r"(?m)^[ \t]{0,3}(\d{1,3})([a-z]?)\.[ \t]+", body):
+        number, suffix = int(m.group(1)), m.group(2)
+        if suffix:
+            if number != expect - 1 or not cuts or suffix <= last_suffix:
+                continue
+        elif number != expect:
             continue
         if any(a < m.start() < b for a, b in spans):
             continue
         cuts.append(m)
-        expect += 1
+        if suffix:
+            last_suffix = suffix
+        else:
+            expect += 1
+            last_suffix = ""
     if not cuts:
         return [body] if _clean(body) else []
     out = []
