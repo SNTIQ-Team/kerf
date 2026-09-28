@@ -144,13 +144,16 @@ def test_symlinks_cannot_escape_source_or_archive_boundaries(
     assert list(outside.iterdir()) == [target]
 
 
-def test_budget_and_free_space_fail_before_replacing_sources(
+def test_budget_defers_and_free_space_fails_before_replacing_sources(
         tmp_path: Path, archive) -> None:
     root, paths = _snapshots(tmp_path)
     before = {p: p.read_bytes() for p in paths}
-    with pytest.raises(archive.SnapshotArchiveError, match="budget"):
-        archive.compact_snapshots(root, dry_run=False, max_new_bytes=0,
-                                  min_free_bytes=0)
+    # A full archive budget is a scheduling state, not an error: every
+    # candidate is deferred and stays raw.
+    result = archive.compact_snapshots(root, dry_run=False, max_new_bytes=0,
+                                       min_free_bytes=0)
+    assert result["deferred_files"] == 2 and result["compacted_files"] == 0
+    assert "budget" in result["deferred_reason"]
     with pytest.raises(archive.SnapshotArchiveError, match="free space"):
         archive.compact_snapshots(root, dry_run=False,
                                   min_free_bytes=10**30)
@@ -510,10 +513,11 @@ def test_configurable_cumulative_cap_counts_existing_and_new_objects(
         paths.append(_file(root, "2026-01-05", b'{"day":5}\n'))
         cap = existing_bytes + 1
     before = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
-    with pytest.raises(archive.SnapshotArchiveError, match="archive budget"):
-        archive.compact_snapshots(root, dry_run=False,
-                                  max_new_bytes=500 * 1024 * 1024,
-                                  max_archive_bytes=cap, min_free_bytes=0)
+    result = archive.compact_snapshots(root, dry_run=False,
+                                       max_new_bytes=500 * 1024 * 1024,
+                                       max_archive_bytes=cap, min_free_bytes=0)
+    assert result["compacted_files"] == 0
+    assert result["deferred_files"] == (1 if add_new_snapshot else 0)
     assert {path: path.read_bytes() for path in root.rglob("*") if path.is_file()} == before
 
 
@@ -533,8 +537,8 @@ def test_cli_exposes_configurable_cumulative_archive_cap(
                "compact", "--snapshots-root", str(root), "--max-new-mib", "500",
                "--min-free-mib", "0", "--max-archive-mib"]
     result = subprocess.run(command + ["0"], capture_output=True, text=True)
-    assert result.returncode == 1
-    assert "archive budget" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["deferred_files"] == 2
     result = subprocess.run(command + ["300"], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["candidate_files"] == 2
