@@ -134,10 +134,9 @@ def build_record(source: str, act_id: str, sha: str, ext: str, parsed: dict,
         "warnings": parsed.get("warnings") or [],
         "date_basis": "capture_observation_not_legal_date",
     }
-    if parsed.get("source_identifiers"):
-        record["source_identifiers"] = parsed["source_identifiers"]
-    if parsed.get("page_title"):
-        record["page_title"] = parsed["page_title"]
+    for extra in ("source_identifiers", "page_title", "truncated_after"):
+        if parsed.get(extra):
+            record[extra] = parsed[extra]
     return record
 
 

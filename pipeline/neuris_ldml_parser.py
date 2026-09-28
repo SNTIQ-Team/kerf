@@ -31,7 +31,8 @@ PARSER_VERSION = "neuris-ldml/1"
 CONTAINERS = {"book", "part", "chapter", "section", "subsection", "title",
               "subtitle", "division", "subdivision"}
 SKIP = {"authorialNote", "meta", "marker", "noteRef"}
-RANGE_ENBEZ = re.compile(r"^(?:§§|Art\.?|Artikel)\s.*\b(?:bis|und)\b")
+RANGE_ENBEZ = re.compile(
+    r"^(?:§§\s|(?:Art\.?|Artikel)\s\S+(?:\s*,|\s+(?:bis|und|u\.)\s))")
 STAND_TYPES = {"neuf": "Neuf", "stand": "Stand", "hinweis": "Hinweis",
                "sonst": "Sonst"}
 
