@@ -21,6 +21,8 @@ def fixture_bytes(relpath: str) -> bytes:
 def isolated_corpus(tmp_path, monkeypatch):
     """Never touch the live corpus in ~/.local/share/sntiq-legal from tests."""
     monkeypatch.setenv("SNTIQ_COURTS_HOME", str(tmp_path / "corpus"))
+    # The btrfs space guard is exercised explicitly in test_packs_policy_space.py.
+    monkeypatch.setenv("SNTIQ_COURTS_SPACE_GUARD", "off")
     return tmp_path / "corpus"
 
 

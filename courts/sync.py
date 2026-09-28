@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .config import data_home
 from .errors import UpstreamFailure
+from .space import check as check_space
 from .http import PoliteHttp
 from .sources.base import Adapter
 from .store import (finish_run, record_failure, register_source, relink, select_frontier,
@@ -19,7 +20,13 @@ from .store import (finish_run, record_failure, register_source, relink, select_
 
 # Failures that mean "the source is refusing us": stop instead of hammering.
 BLOCKING = {"challenge", "login", "robots_disallowed", "rate_limited"}
+BLOCKING_HTTP_STATUS = {403, 429, 503}
 MAX_CONSECUTIVE_BLOCKING = 3
+SPACE_CHECK_EVERY = 25
+
+
+def is_blocking(failure: UpstreamFailure) -> bool:
+    return failure.kind in BLOCKING or (failure.kind == "http_error" and failure.status in BLOCKING_HTTP_STATUS)
 
 
 def log(message: str) -> None:
@@ -63,8 +70,11 @@ def sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *,
 
 def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *, since: str | None,
                  limit: int | None, courts: list[str] | None, retry_failed: bool, home) -> dict:
-    register_source(conn, adapter.source_id, adapter.label, adapter.base_url, adapter.land, adapter.adapter_name)
+    register_source(conn, adapter.source_id, adapter.label, adapter.base_url, adapter.land, adapter.adapter_name,
+                    adapter.operator_policy())
     run_id = start_run(conn, adapter.source_id, since, limit)
+    policy_note = (f"robots: {adapter.robots_policy} ({adapter.policy_decided_at}, operator decision)"
+                   if adapter.robots_policy != "respect" else None)
     conn.execute("UPDATE sources SET status='partial', status_reason='first sync in progress' "
                  "WHERE source_id=? AND status='never_synced'", (adapter.source_id,))
     counts = {"listed": 0, "attempted": 0, "stored": 0, "unchanged": 0, "failed": 0, "requests": 0}
@@ -75,7 +85,7 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
             listing = adapter.list_items(http, conn, since=since, limit=limit, courts=courts)
         except UpstreamFailure as failure:
             record_failure(conn, run_id, adapter.source_id, None, failure)
-            blocked = failure.kind in BLOCKING
+            blocked = is_blocking(failure)
             set_source_status(conn, adapter.source_id, "blocked" if blocked else "unavailable",
                               f"listing failed: {failure.kind}: {failure.detail}"[:500])
             status, notes = ("blocked" if blocked else "failed"), f"listing: {failure}"
@@ -101,7 +111,8 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
             counts["attempted"] += 1
             try:
                 capture = adapter.fetch(http, item)
-                content_hash, relpath = write_capture(capture.body, adapter.source_id, capture.extension, home)
+                content_hash, relpath = write_capture(capture.body, adapter.source_id, capture.extension, home,
+                                                      conn=conn)
                 parsed = adapter.parse(capture, item)
                 _, changed = store_decision(conn, parsed, content_hash=content_hash, capture_path=relpath,
                                             media_type=capture.media_type, observed_at=utcnow())
@@ -113,7 +124,7 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                     failure.url = item["url"]
                 record_failure(conn, run_id, adapter.source_id, item["source_doc_id"], failure)
                 log(f"{adapter.source_id}: {item['source_doc_id']}: {failure.kind}: {failure.detail[:160]}")
-                consecutive_blocking = consecutive_blocking + 1 if failure.kind in BLOCKING else 0
+                consecutive_blocking = consecutive_blocking + 1 if is_blocking(failure) else 0
                 if consecutive_blocking >= MAX_CONSECUTIVE_BLOCKING:
                     status, notes = "blocked", f"stopped after {consecutive_blocking} consecutive {failure.kind}"
                     set_source_status(conn, adapter.source_id, "blocked", notes)
@@ -131,6 +142,12 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                 record_failure(conn, run_id, adapter.source_id, item["source_doc_id"],
                                UpstreamFailure("parse_error", detail, url=item["url"]))
                 log(f"{adapter.source_id}: {item['source_doc_id']}: parse_error: {exc}")
+            if position % SPACE_CHECK_EVERY == 0:
+                space = check_space(home or data_home(), starting=False)
+                if space.problems:
+                    status, notes = "failed", ("space guard stopped the run: " + "; ".join(space.problems))[:500]
+                    log(f"{adapter.source_id}: {notes}")
+                    break
             if position % 50 == 0:
                 log(f"{adapter.source_id}: {position}/{len(frontier)} stored={counts['stored']} "
                     f"unchanged={counts['unchanged']} failed={counts['failed']}")
@@ -148,7 +165,9 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
         raise
     finally:
         counts["requests"] = http.requests_made - requests_before
-        finish_run(conn, run_id, adapter.source_id, status, counts, notes)
+        # The policy note goes last: incremental adapters look for notes starting "listing incomplete".
+        finish_run(conn, run_id, adapter.source_id, status, counts,
+                   "; ".join(n for n in (notes, policy_note) if n) or None)
 
 
 def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None) -> dict:
@@ -167,8 +186,9 @@ def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None) -> 
                            WHERE d.source_id = ?""", (adapter.source_id,)).fetchall()
     for row in rows:
         try:
-            body = read_capture(row["capture_path"], row["content_hash"], home)
-            extension = row["capture_path"].rsplit(".", 2)[-2]
+            body = read_capture(conn, row["content_hash"], row["capture_path"], home)
+            ext_row = conn.execute("SELECT extension FROM captures WHERE sha256=?", (row["content_hash"],)).fetchone()
+            extension = ext_row[0] if ext_row else row["capture_path"].rsplit(".", 2)[-2]
             capture = Capture(body, row["source_url"], row["media_type"] or "", extension)
             parsed = adapter.parse(capture, row)
             _, changed = store_decision(conn, parsed, content_hash=row["content_hash"],

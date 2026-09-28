@@ -261,6 +261,7 @@ class BrandenburgAdapter(Adapter):
     base_url = BASE
     land = "bb"
     adapter_name = "bb-html"
+    min_interval = 2.0  # small court site (robots.txt Crawl-delay, if any, still applies)
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         window = since or (None if limit else incremental_since(conn, self.source_id, INCREMENTAL_OVERLAP_DAYS))

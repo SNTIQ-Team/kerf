@@ -6,5 +6,5 @@ SQLite database with an FTS5 index over paragraphs.  ``SCHEMA.md`` documents
 the database contract that the Node MCP reads directly.
 """
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 PARSER_VERSION = "courts-parser/1.2.0"

@@ -64,7 +64,8 @@ LANDS = {
     "nordrhein-westfalen": "nw", "nrw": "nw", "rheinland-pfalz": "rp",
     "saarland": "sl", "saarlaendisch": "sl", "sachsen-anhalt": "st", "sachsen": "sn",
     "saechsisch": "sn", "schleswig-holstein": "sh", "schleswig-holsteinisch": "sh",
-    "thueringen": "th", "thueringer": "th", "mv": "mv", "lsa": "st",
+    "thueringen": "th", "thueringer": "th", "mv": "mv", "lsa": "st", "saarlandes": "sl",
+    "sachsen-anhalts": "st", "brandenburgs": "bb", "rheinland-pfaelzisch": "rp",
 }
 # Seat names that denote the Land-level court in citations.
 SEATS = {
@@ -119,11 +120,16 @@ def resolve(name: str, *, default_land: str | None = None) -> CourtInfo:
         if not match:
             continue
         rest = (folded[:match.start()] + " " + folded[match.end():])
-        rest = re.sub(r"\b(fuer das land|fuer den freistaat|des landes|fuer|das|land|der|die|in|zu|am|freistaat)\b",
+        rest = re.sub(r"\b(fuer das land|fuer den freistaat|des landes|fuer|das|des|land|der|die|in|zu|am|freistaat)\b",
                       " ", rest)
         rest = " ".join(rest.replace("(", " ").replace(")", " ").split())
         land = _land_of(rest)
         if ctype in LAND_LEVEL and land:
+            return CourtInfo(f"{ctype}-{land}", ctype, branch, land)
+        if land and rest not in ("berlin", "bremen", "hamburg") and \
+                re.sub(r"isch(?:es|er|en|e)\b", "isch", rest).strip() in LANDS:
+            # A local court named only by its Land ("Schleswig-Holsteinisches Verwaltungsgericht"):
+            # the Land's single court of that type.
             return CourtInfo(f"{ctype}-{land}", ctype, branch, land)
         if ctype == "oblg" and not rest:
             return CourtInfo("oblg-by", ctype, branch, "by")

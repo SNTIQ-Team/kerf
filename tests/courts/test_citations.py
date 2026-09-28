@@ -137,3 +137,15 @@ def test_norm_identities_in_context(text, land, expected):
 def test_trailing_annotation_is_not_part_of_the_docket():
     rels = extract_decisions("(BVerfG Beschluss vom 17.12.2014 - 1 BvL 21/12 mwN)", "p", own_court_id="bsg")
     assert [r.target_id for r in rels] == ["court:bverfg/2014-12-17/1_BvL_21-12"]
+
+
+@pytest.mark.parametrize("name,court_id", [
+    ("Schleswig-Holsteinisches Verwaltungsgericht", "vg-sh"),     # live juris SH
+    ("Oberverwaltungsgericht des Saarlandes", "ovg-sl"),           # live juris SL
+    ("Verwaltungsgericht Hamburg", "vg-hamburg"),                  # city-state seats keep their name
+    ("Verwaltungsgericht Bremen", "vg-bremen"),
+    ("Oberverwaltungsgericht des Landes Sachsen-Anhalt", "ovg-st"),
+])
+def test_court_ids_of_new_laender(name, court_id):
+    from courts.courtids import resolve
+    assert resolve(name).court_id == court_id

@@ -19,7 +19,7 @@ from ..courtids import FEDERAL, priority
 from ..errors import UpstreamFailure
 from ..http import PoliteHttp
 from ..model import Block, ParsedDecision, Section
-from .base import Adapter, Capture, Listing, iso_date, squash
+from .base import OPERATOR_DECISION_BASIS, OPERATOR_DECISION_DATE, Adapter, Capture, Listing, iso_date, squash
 
 BASE = "https://www.rechtsprechung-im-internet.de"
 TOC_URL = BASE + "/rii-toc.xml"
@@ -217,6 +217,10 @@ class RiiAdapter(Adapter):
     base_url = BASE
     land = "de"
     adapter_name = "rii-xml"
+    robots_policy = "ignore_by_operator_decision"
+    policy_decided_at = OPERATOR_DECISION_DATE
+    policy_basis = OPERATOR_DECISION_BASIS
+    min_interval = 1.1
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         response = http.get(TOC_URL, timeout=600)

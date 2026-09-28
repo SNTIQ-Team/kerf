@@ -63,9 +63,10 @@ def test_sync_stores_decision_capture_and_is_incremental(conn, fixture, isolated
     row = conn.execute("SELECT * FROM decisions").fetchone()
     assert row["id"] == ECLI and row["numbering"] == "rn" and row["parser_version"].startswith("courts-parser/")
     assert json.loads(row["case_numbers"]) == ["1 B 19/16", "1 PKH 55/16"]
-    raw = read_capture(row["capture_path"], row["content_hash"], isolated_corpus)
+    raw = read_capture(conn, row["content_hash"], row["capture_path"], isolated_corpus)
     assert raw == fixture(f"rii/{DOC}.zip")
-    assert row["capture_path"].endswith(".zip.gz")
+    assert row["capture_path"].startswith("packs/rii/rii-0001.pack@")
+    assert not (isolated_corpus / "raw").exists()  # no per-capture files any more
     # Unchanged listing: nothing pending, nothing fetched.
     second = sync_source(adapter, conn, FakeHttp())
     assert second["attempted"] == 0
@@ -102,7 +103,7 @@ def seed(conn, fixture):
     from courts.store import store_decision, write_capture
     register_source(conn, "nrw", "NRWE", "https://nrwe.justiz.nrw.de", "nw", "nrwe-html")
     body = fixture(f"nrw/{NRW}.html")
-    content_hash, rel = write_capture(body, "nrw", "html")
+    content_hash, rel = write_capture(body, "nrw", "html", conn=conn)
     parsed = parse_document(body.decode("utf-8"), f"https://nrwe.justiz.nrw.de/sgs/lsg_nrw/j2026/{NRW}.html", NRW)
     store_decision(conn, parsed, content_hash=content_hash, capture_path=rel, media_type="text/html")
     set_source_status(conn, "nrw", "ok", None)
@@ -197,7 +198,8 @@ def test_coverage_report(conn, fixture):
     report = coverage(open_db())
     rows = {s["source_id"]: s for s in report["sources"]}
     assert rows["rii"]["decisions"] == 1 and rows["rii"]["date_from"] == "2016-03-16"
-    assert report["schema_version"] == 1 and report["paragraphs"] > 0
+    assert report["schema_version"] == 2 and report["paragraphs"] > 0
+    assert rows["rii"]["robots_policy"] == "respect" and rows["rii"]["policy_decided_at"] is None
 
 
 def test_reader_refuses_other_schema_versions(conn):

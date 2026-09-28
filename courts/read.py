@@ -314,6 +314,12 @@ def coverage(conn: sqlite3.Connection) -> dict:
         item["last_run"] = dict(last) if last else None
         sources.append(item)
     totals = conn.execute("SELECT (SELECT count(*) FROM decisions), (SELECT count(*) FROM paragraphs), "
-                          "(SELECT count(*) FROM relations)").fetchone()
+                          "(SELECT count(*) FROM relations), (SELECT count(*) FROM captures), "
+                          "(SELECT count(DISTINCT pack) FROM captures)").fetchone()
+    for item in sources:
+        if item.get("robots_policy") and item["robots_policy"] != "respect":
+            item["policy_note"] = (f"robots.txt/TDM reservation not applied: operator decision "
+                                   f"{item.get('policy_decided_at')}")
     return {"status": "ok", "schema_version": SCHEMA_VERSION, "parser_version": PARSER_VERSION,
-            "decisions": totals[0], "paragraphs": totals[1], "relations": totals[2], "sources": sources}
+            "decisions": totals[0], "paragraphs": totals[1], "relations": totals[2], "captures": totals[3],
+            "pack_files": totals[4], "sources": sources}
