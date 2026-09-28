@@ -361,12 +361,10 @@ def _looks_like_toc_element(block: Node) -> bool:
     return all(isinstance(c, str) or c.tag == "br" for c in first.children)
 
 
-def _is_empty_body(nodes) -> bool:
-    return not flatten(nodes)
-
-
 def _xxxx(enbez: str, flags: list[str]) -> str:
-    """GII XML prefixes range pseudo-norms ("§§ 3 bis 6") with "(XXXX) "."""
+    """GII XML prefixes range pseudo-norms ("§§ 3 bis 6") with "(XXXX) "
+    (241 of 242 range designators in the 2026 GII corpus); the HTML
+    heading omits the prefix, so identities only line up with it."""
     if RANGE_ENBEZ.match(enbez):
         flags.append("range_enbez_xxxx_prefixed")
         return f"(XXXX) {enbez}"
@@ -430,10 +428,7 @@ def _parse_jnnorm(root: Node, record: dict) -> None:
             flags.append("toc_element_text_suppressed")
         else:
             text = flatten(body)
-        if not text and _is_empty_body(body):
-            enbez = _xxxx(enbez, flags)
-        elif RANGE_ENBEZ.match(enbez):
-            enbez = _xxxx(enbez, flags)
+        enbez = _xxxx(enbez, flags)
         norm = {"enbez": enbez, "titel": titel, "text": text,
                 "gliederung": gliederung, "doknr": block.get("id")}
         if flags:
@@ -469,10 +464,7 @@ def _parse_table_layout(root: Node, record: dict) -> None:
             text = flatten(current_nodes)
             # list numbers sit in their own cell followed by two nbsp
             text = re.sub(r"(\S)\xa0\xa0(?=\S)", r"\1", text)
-            if not text:
-                current["enbez"] = _xxxx(current["enbez"], flags)
-            elif RANGE_ENBEZ.match(current["enbez"]):
-                current["enbez"] = _xxxx(current["enbez"], flags)
+            current["enbez"] = _xxxx(current["enbez"], flags)
             current["text"] = text
             flags.append("legacy_table_layout")
             record["norms"].append(current)

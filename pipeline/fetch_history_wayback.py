@@ -275,7 +275,9 @@ def cdx_query(client: PoliteClient, archive: HistoryArchive, act_id: str,
                                             tzinfo=timezone.utc)
             fresh = datetime.now(timezone.utc) - fetched < timedelta(
                 days=max_age_days)
-            if fresh or offline:
+            # An empty listing is never trusted as fresh: the CDX server
+            # answers transient overload with empty 200 bodies.
+            if (fresh and cached["rows"]) or offline:
                 return cached["rows"]
         except (OSError, ValueError, KeyError):
             pass
@@ -292,7 +294,7 @@ def cdx_query(client: PoliteClient, archive: HistoryArchive, act_id: str,
         print(f"  [cdx] {act_id} {name}: unparsable response", file=sys.stderr)
         return None
     archive.write_json(path, {"query": query, "fetched_at": utc_now(),
-                              "rows": rows})
+                              "rows": rows, "empty": not rows})
     return rows
 
 
