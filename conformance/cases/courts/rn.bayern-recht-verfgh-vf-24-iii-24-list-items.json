@@ -1,0 +1,28 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.rn.bayern-recht-verfgh-vf-24-iii-24-list-items",
+  "module": "courts",
+  "kind": "paragraphs_from_capture",
+  "description": "BAYERN.RECHT BayVerfGH Vf. 24-III-24: an enumeration (dl/dt/dd with empty div.rd) continues Rn 3; each item keeps its marker ('1.', the mis-split '180', '2.' …)",
+  "origin": "Wayback Machine capture (id_) of https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-15010, 20260115105932",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2025-N-15010.html.gz",
+    "item": {
+      "source_doc_id": "Y-300-Z-BECKRS-B-2025-N-15010",
+      "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-15010",
+      "extra": {
+        "route": "portal_capture"
+      }
+    }
+  },
+  "expected": {
+    "numbering": "rn",
+    "rn_blocks": {
+      "3": 9,
+      "4": 1
+    }
+  },
+  "match": "subset"
+}

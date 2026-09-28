@@ -1,0 +1,34 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.bayern-recht-larbg-muenchen-3-sa-194-22-court-name",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "BAYERN.RECHT 'LArbG München' is the Landesarbeitsgericht München (lag-muenchen, the corpus slug of the LAG's own publications), the Vorinstanz 'ArbG München' the Arbeitsgericht",
+  "origin": "Wayback Machine capture (id_) of https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10068, 20230531143614",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10068.html.gz",
+    "item": {
+      "source_doc_id": "Y-300-Z-BECKRS-B-2023-N-10068",
+      "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2023-N-10068",
+      "extra": {
+        "route": "portal_capture"
+      }
+    }
+  },
+  "expected": {
+    "court_id": "lag-muenchen",
+    "court_name": "Landesarbeitsgericht München",
+    "rn_count": 50,
+    "procedural": [
+      {
+        "direction": "previous",
+        "court": "Arbeitsgericht München",
+        "date": "2022-03-09",
+        "case_number": "36 Ca 15764/20"
+      }
+    ]
+  },
+  "match": "subset"
+}

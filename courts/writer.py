@@ -32,6 +32,7 @@ MIN_UNALLOCATED = 5 * GIB              # btrfs "Device unallocated"
 MAX_METADATA_USED = 0.90               # btrfs metadata, effective fraction
 MAX_WAL_BYTES = 2 * GIB                # after a checkpoint that could not truncate
 JOURNAL_SIZE_LIMIT = 256 * 1024 ** 2   # PRAGMA journal_size_limit
+INBOX_POLL = 2.0                       # seconds between looks into the user-browser capture inbox
 
 
 class WriterBusy(RuntimeError):
@@ -200,7 +201,8 @@ def _db_file(conn) -> Path | None:
 class Maintenance:
     """Rate-limited :func:`guard` for long loops (sync items, re-parse decisions), shared by threads."""
 
-    def __init__(self, conn, home: Path | None = None, *, every_items: int = 25, every_seconds: float = 60.0):
+    def __init__(self, conn, home: Path | None = None, *, every_items: int = 25, every_seconds: float = 60.0,
+                 inbox: bool = True, log=None):
         self.conn, self.home = conn, home
         self.every_items, self.every_seconds = every_items, every_seconds
         self._items = 0
@@ -208,6 +210,40 @@ class Maintenance:
         self._lock = threading.Lock()
         self.last_report: GuardReport | None = None
         self.stopped: list[str] = []
+        self.inbox = inbox
+        self.log = log
+        self._inbox_last = 0.0
+        self.inbox_served = 0
+
+    def serve_inbox(self, *, force: bool = False) -> int:
+        """User-browser captures queued by ``ingest-capture`` (courts.capture) while this process holds the
+        writer lock: ingested with top priority, at most every INBOX_POLL seconds, never inside a transaction
+        and never after the guard stopped the run."""
+        if not self.inbox or self.stopped:
+            return 0
+        now = time.monotonic()
+        if not force and now - self._inbox_last < INBOX_POLL:
+            return 0
+        self._inbox_last = now
+        from .capture import inbox_dir
+        pending = inbox_dir(self.home) / "pending"
+        try:
+            if not pending.is_dir() or not any(pending.glob("*.json")):
+                return 0
+        except OSError:
+            return 0
+        if getattr(self.conn, "in_transaction", False):
+            return 0
+        from .capture import drain_inbox
+        try:
+            done = drain_inbox(self.conn, self.home, log=self.log)
+        except Exception as exc:  # noqa: BLE001 - OSError (ENOSPC …) included: the item stays queued and the
+            # next guard check stops the run if space is the cause; the inbox never stops a writer by itself
+            if self.log:
+                self.log(f"inbox: {type(exc).__name__}: {exc}")
+            return 0
+        self.inbox_served += done
+        return done
 
     def tick(self, items: int = 1) -> list[str]:
         """Count work; when due, checkpoint and check.  Returns the problems (empty: carry on)."""
@@ -215,10 +251,18 @@ class Maintenance:
             if self.stopped:
                 return self.stopped
             self._items += items
-            if self._items < self.every_items and time.monotonic() - self._last < self.every_seconds:
-                return []
+            due = self._items >= self.every_items or time.monotonic() - self._last >= self.every_seconds
+        if not due:
+            self.serve_inbox()
+            return []
+        with self._lock:
+            if self.stopped:
+                return self.stopped
             self._items, self._last = 0, time.monotonic()
             self.last_report = guard(self.conn, self.home)
             if self.last_report.problems:
                 self.stopped = self.last_report.problems
-            return self.last_report.problems
+            problems = self.last_report.problems
+        if not problems:
+            self.serve_inbox()
+        return problems

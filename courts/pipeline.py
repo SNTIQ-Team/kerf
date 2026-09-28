@@ -126,6 +126,7 @@ class Writer:
             except queue.Empty:
                 if self.commands.empty() and finished() and self.commands.empty() and self.results.empty():
                     return
+                self._serve_inbox()
                 self.wake.wait(0.2)
                 continue
             started = time.monotonic()
@@ -145,6 +146,18 @@ class Writer:
             if time.monotonic() - last_metrics >= METRICS_EVERY:
                 last_metrics = time.monotonic()
                 self.log_metrics()
+
+    def _serve_inbox(self) -> None:
+        """User-browser captures (courts.capture) go before the next document; tick() also serves them."""
+        serve = getattr(self.maintenance, "serve_inbox", None)
+        if serve is None or self.stop.is_set():
+            return
+        try:
+            serve()
+        except OSError as exc:
+            self.halt(f"local I/O error in the capture inbox, run stopped: {type(exc).__name__}: {exc}")
+        except Exception as exc:  # noqa: BLE001 - the inbox never stops the backfill
+            self.log(f"writer: capture inbox: {type(exc).__name__}: {exc}")
 
     def halt(self, reason: str) -> None:
         self.stop_reason = reason[:500]
@@ -552,6 +565,8 @@ def run_pipeline(conn: sqlite3.Connection, specs: list[SourceSpec], *, since=Non
     log = log or default_log
     # Checkpoint + space guard every 200 documents or 60 s (the btrfs probes are subprocesses).
     maintenance = maintenance or Maintenance(conn, home, every_items=200, every_seconds=60)
+    if getattr(maintenance, "log", "absent") is None:
+        maintenance.log = log
     governors = governors or Governors(log=log, monitor_lag=True)
     for spec in [*specs, *(queued or [])]:
         governors.declare(host_of(spec.adapter.base_url), concurrency_of(spec.adapter), spec.adapter.min_interval)

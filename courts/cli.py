@@ -347,6 +347,31 @@ def cmd_courts_map(args) -> int:
     return 0
 
 
+def cmd_ecli_codes(args) -> int:
+    """Land-court ECLI court codes observed in the corpus -> court_map (see courts.courtmap.derive_ecli_codes)."""
+    from .courtmap import derive_ecli_codes
+    conn = connect(readonly=args.dry_run)
+    if not args.dry_run:
+        init_db(conn)
+    report = derive_ecli_codes(conn, store=not args.dry_run)
+    logs = data_home() / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    path = logs / ("ecli-codes-report.json" if not args.dry_run else "ecli-codes-report.dry-run.json")
+    path.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    summary = {k: v for k, v in report.items() if k not in ("assigned", "ambiguous", "codes_new_to_amtsgraph")}
+    summary["codes_new_to_amtsgraph"] = len(report["codes_new_to_amtsgraph"])
+    summary["ambiguous"] = sorted(report["ambiguous"])
+    summary["report"] = str(path)
+    summary["stored"] = not args.dry_run
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_ingest_capture(args) -> int:  # dispatched before argparse (courts.capture.cli); listed for --help
+    from .capture import cli
+    return cli(sys.argv[2:])
+
+
 def cmd_space(args) -> int:
     report = check_space(data_home(), starting=True)
     print(json.dumps({"bulk_writes_allowed": not report.problems, **report.as_dict()}, indent=2))
@@ -421,10 +446,16 @@ def cmd_cites(args) -> int:
 
 
 WRITING_COMMANDS = {cmd_sync, cmd_reparse, cmd_migrate_captures, cmd_compact, cmd_classify, cmd_correct,
-                    cmd_verify, cmd_courts_map, cmd_migrate_schema}
+                    cmd_verify, cmd_courts_map, cmd_migrate_schema, cmd_ecli_codes}
+# ingest-capture takes the writer lock itself, and only when no writer runs (else: the inbox).
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["ingest-capture"]:
+        # Its own parser: every refusal, a usage error too, is one JSON line on stderr (courts.capture).
+        from .capture import cli
+        return cli(argv[1:])
     parser = argparse.ArgumentParser(prog="python -m courts", description="Local German court decision corpus")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("sync", help="incremental sync of one or more sources (one writer process)")
@@ -494,6 +525,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("courts-map", help="map corpus court slugs to Amtsgraph court ids (court:de:<XJustiz-ID>)")
     p.add_argument("--file", help="use a saved /v1/courts/mapping payload instead of fetching it")
     p.set_defaults(func=cmd_courts_map)
+    p = sub.add_parser("ingest-capture", help="ingest ONE decision page saved from the operator's browser "
+                       "(--source by --url <url> --file <html|pdf> [--captured-at ISO]; JSON contract, see "
+                       "courts/capture.py)", add_help=False)
+    p.set_defaults(func=cmd_ingest_capture)
+    p = sub.add_parser("ecli-codes", help="Land-court ECLI court codes observed in the corpus -> court_map")
+    p.add_argument("--dry-run", action="store_true", help="report only (read-only, no writer lock needed)")
+    p.set_defaults(func=cmd_ecli_codes)
     p = sub.add_parser("space", help="btrfs/disk guard for bulk writes")
     p.set_defaults(func=cmd_space)
     p = sub.add_parser("status", help="coverage per source")
@@ -536,7 +574,7 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, _terminate)
     from .writer import WriterBusy, writer_lock
     try:
-        if args.func in WRITING_COMMANDS:
+        if args.func in WRITING_COMMANDS and not getattr(args, "dry_run", False):
             with writer_lock(f"{args.command} " + " ".join(argv or sys.argv[1:])):
                 return args.func(args)
         return args.func(args)

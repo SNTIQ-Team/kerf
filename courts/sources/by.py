@@ -13,6 +13,10 @@ courts publish themselves:
 * LAG Nürnberg / LAG München decision database (arbg.bayern.de, robots allows all).
 
 These are partial by nature; coverage says so.
+
+BAYERN.RECHT decision pages themselves enter only as user-browser captures: the operator opens one page in
+Chrome, and ``python -m courts ingest-capture --source by`` stores it (courts.capture, parsed by
+courts.sources.by_portal; ``source_items.extra.route = "portal_capture"``).
 """
 from __future__ import annotations
 
@@ -26,6 +30,7 @@ from ..courtids import priority, resolve as resolve_court
 from ..errors import UpstreamFailure
 from ..http import PoliteHttp
 from ..model import Block, ParsedDecision, Section
+from . import by_portal
 from .base import Adapter, Capture, Listing, decode_html, iso_date, squash
 from .pdftext import layout_blocks, pdf_text
 
@@ -339,6 +344,11 @@ class BayernAdapter(Adapter):
     def fetch(self, http: PoliteHttp, item) -> Capture:
         extra = item["extra"] if isinstance(item["extra"], dict) else __import__("json").loads(item["extra"])
         url = item["url"]
+        if extra.get("route") == by_portal.ROUTE:
+            # BAYERN.RECHT pages enter the corpus only as user-browser captures (courts.capture); the portal's
+            # bot challenge is never bypassed, so there is nothing to fetch.
+            raise UpstreamFailure("unexpected_representation", "BAYERN.RECHT item: user-browser capture only "
+                                  "(python -m courts ingest-capture)", url=url)
         if extra["route"] == "lag":
             detail = http.get(url, timeout=60)
             markup = decode_html(detail.body, detail.headers)
@@ -355,7 +365,19 @@ class BayernAdapter(Adapter):
                        headers=response.headers)
 
     def parse(self, capture: Capture, item) -> ParsedDecision:
-        return parse_pdf_decision(capture.body, dict(item), capture.url)
+        item = dict(item)
+        extra = item.get("extra")
+        extra = extra if isinstance(extra, dict) else __import__("json").loads(extra or "{}")
+        if extra.get("route") == by_portal.ROUTE:
+            parsed = by_portal.parse_capture(capture.body, item, item.get("url") or capture.url)
+            if extra.get("capture_origin"):
+                # Re-parsed captures keep their provenance (courts.capture wrote it at ingest).
+                parsed.metadata["capture_origin"] = extra["capture_origin"]
+                parsed.metadata["capture"] = {k: extra[k] for k in (
+                    "captured_at", "captured_at_basis", "ingested_at", "capture_url", "canonical_url", "media_type",
+                    "sha256", "ticket") if k in extra}
+            return parsed
+        return parse_pdf_decision(capture.body, item, capture.url)
 
 
 def adapters() -> dict[str, Adapter]:

@@ -1,0 +1,57 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.bayern-recht-vg-muenchen-m-10-e-25-1990",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "BAYERN.RECHT VG München M 10 E 25.1990 (Beschluss, Tenor + Gründe, 20 Rn)",
+  "origin": "Wayback Machine capture (id_) of https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-12316, 20260316070041",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2025-N-12316.html.gz",
+    "item": {
+      "source_doc_id": "Y-300-Z-BECKRS-B-2025-N-12316",
+      "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-12316",
+      "extra": {
+        "route": "portal_capture"
+      }
+    },
+    "show": [
+      "rn-1"
+    ]
+  },
+  "expected": {
+    "id": "court:vg-muenchen/2025-04-04/M_10_E_25.1990",
+    "court_id": "vg-muenchen",
+    "court_name": "Verwaltungsgericht München",
+    "decision_date": "2025-04-04",
+    "decision_type": "Beschluss",
+    "numbering": "rn",
+    "rn_count": 20,
+    "rn_first": "1",
+    "rn_last": "20",
+    "sections": [
+      {
+        "name": "titel",
+        "authorship": "editorial",
+        "blocks": 1
+      },
+      {
+        "name": "tenor",
+        "authorship": "court",
+        "blocks": 3
+      },
+      {
+        "name": "gruende",
+        "authorship": "court",
+        "blocks": 31
+      }
+    ],
+    "paragraph_text": {
+      "rn-1": {
+        "$contains": "Unterlassung von Presseauskünften"
+      }
+    }
+  },
+  "match": "subset"
+}

@@ -1,0 +1,35 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.parse.bayern-recht-olg-muenchen-19-u-3738-24-images",
+  "module": "courts",
+  "kind": "decision_parse",
+  "description": "BAYERN.RECHT OLG München 19 U 3738/24 e: six image-only blocks (tables printed as images) are listed in metadata.images_omitted, never turned into text; the Rn run 1..94",
+  "origin": "Wayback Machine capture (id_) of https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-15353, 20260421115929",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2025-N-15353.html.gz",
+    "item": {
+      "source_doc_id": "Y-300-Z-BECKRS-B-2025-N-15353",
+      "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-15353",
+      "extra": {
+        "route": "portal_capture"
+      }
+    }
+  },
+  "expected": {
+    "rn_count": 94,
+    "rn_last": "94",
+    "metadata": {
+      "images_omitted": [
+        {},
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    }
+  },
+  "match": "subset"
+}

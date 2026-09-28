@@ -56,3 +56,34 @@ def test_store_mapping_updates_decisions_and_keeps_the_slug(fixture):
     from courts.read import open_db, search
     assert search(open_db(), "Mitteilung", court="court:de:U8572")["total"] == \
         search(open_db(), "Mitteilung", court="bverwg")["total"] > 0
+
+
+def test_ecli_parts_land_and_federal_layouts():
+    from courts.courtmap import ecli_parts
+    land = ecli_parts("ECLI:DE:BAYVGH:2015:1117.12ZB15.1191.0A")
+    assert (land["code"], land["date"], land["docket"]) == ("BAYVGH", "2015-11-17", "12ZB151191")
+    federal = ecli_parts("ECLI:DE:BVerwG:2017:170817U3C18.15.0")
+    assert federal["code"] == "BVerwG" and federal["date"] is None
+    assert ecli_parts("ECLI:EU:C:2019:123") is None and ecli_parts("not an ecli") is None
+
+
+def test_chamber_slugs_count_for_their_court_and_codes_are_never_guessed():
+    import sqlite3
+    from courts.courtmap import derive_ecli_codes, ecli_court_slugs
+    from courts.model import Block, ParsedDecision, Section
+    from courts.store import init_db, store_decision
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    init_db(conn)
+    for n, court in enumerate(["Amtsgericht Gießen"] * 8 + ["Amtsgericht Gießen Einzelrichter"] * 2):
+        store_decision(conn, ParsedDecision(
+            source_id="he", source_doc_id=f"d{n}", source_url=f"https://example.invalid/{n}", court_name=court,
+            decision_date="2020-01-02", case_numbers_raw=f"4{n} C 1/20", case_numbers=[f"4{n} C 1/20"],
+            decision_type="Urteil", ecli=f"ECLI:DE:AGGIESS:2020:0102.4{n}C1.20.00", land="he",
+            sections=[Section("gruende", "court", "fixture", [Block("Text.", "1")])]),
+            content_hash=f"h{n}", capture_path="-", media_type="text/html")
+    conn.execute("INSERT INTO court_map(court_slug, court_id, basis) VALUES('ag-giessen', 'court:de:M1406', 'name_active')")
+    report = derive_ecli_codes(conn)
+    assert report["assigned"]["AGGIESS"]["identity"] == "court:de:M1406" and not report["ambiguous"]
+    assert set(ecli_court_slugs(conn, "aggiess")) == {"ag-giessen", "ag-giessen-einzelrichter"}
+    assert ecli_court_slugs(conn, "VGMUENC") == []
