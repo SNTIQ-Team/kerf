@@ -794,13 +794,15 @@ def _metadata_norm_text(norm: str) -> str:
 
 
 def _procedural_relation(proc: dict, parsed: ParsedDecision) -> Relation:
-    info = resolve_court(proc["court"], default_land=parsed.land)
-    target = synthetic_decision_id(info.court_id, proc["date"], proc["case_number"]) if proc.get("date") and \
-        proc.get("case_number") else None
+    # A Vorinstanz line without a recognisable court (OVG Sachsen PDFs: "Az. … vom …" only) keeps its raw
+    # text; it has no target instead of failing the whole decision.
+    info = resolve_court(proc["court"], default_land=parsed.land) if proc.get("court") else None
+    target = synthetic_decision_id(info.court_id, proc["date"], proc["case_number"]) \
+        if info and proc.get("date") and proc.get("case_number") else None
     return Relation(relation="procedural_reference", target_kind="decision", target_id=target,
                     target_raw=proc["raw"], paragraph_id=None, span_start=None, span_end=None,
                     quoted_context=proc["raw"], confidence=0.9,
-                    detail={"court": proc["court"], "court_id": info.court_id, "date": proc.get("date"),
+                    detail={"court": proc.get("court"), "court_id": info.court_id if info else None, "date": proc.get("date"),
                             "case_number": proc.get("case_number"), "case_key": case_key(proc.get("case_number") or ""),
                             "direction": proc.get("direction", "previous"), "field": proc.get("field")})
 

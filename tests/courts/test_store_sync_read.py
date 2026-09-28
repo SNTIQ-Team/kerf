@@ -570,3 +570,20 @@ def test_two_documents_of_one_portal_with_one_ecli_are_both_kept():
     # Re-storing either keeps its id; an identical re-listing stays a duplicate.
     assert store_decision(conn, doc("NJRE001499463", "Das Ablehnungsgesuch ist unbegründet."), content_hash="b",
                           capture_path="-", media_type="x")[0] == second
+
+
+def test_a_vorinstanz_without_court_is_kept_without_target():
+    """OVG Sachsen: a Vorinstanz line without a recognisable court failed the whole decision (TypeError)."""
+    from courts.model import Block, ParsedDecision, Section
+    from courts.store import connect, init_db, store_decision
+    conn = connect()
+    init_db(conn)
+    parsed = ParsedDecision(source_id="sn", source_doc_id="ovg:1", source_url="https://x",
+                            court_name="Sächsisches Oberverwaltungsgericht", decision_date="2022-01-12",
+                            case_numbers_raw="3 E 80/21", case_numbers=["3 E 80/21"], decision_type="Beschluss",
+                            sections=[Section("gruende", "court", "t", [Block("Die Beschwerde ist unbegründet.", "1")])],
+                            procedural=[{"direction": "previous", "court": None, "date": "2021-11-02",
+                                         "case_number": "6 L 612/21", "raw": "6 L 612/21 vom 2. November 2021"}])
+    decision_id, _ = store_decision(conn, parsed, content_hash="h", capture_path="-", media_type="x")
+    row = conn.execute("SELECT relation, target_id, target_raw FROM relations WHERE decision_id=?", (decision_id,)).fetchone()
+    assert tuple(row) == ("procedural_reference", None, "6 L 612/21 vom 2. November 2021")
