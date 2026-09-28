@@ -47,11 +47,13 @@ def source_lock(source_id: str, home=None):
     """Exclusive per-source lock: two processes on one host would double the request rate."""
     directory = Path(home or data_home()) / "locks"
     directory.mkdir(parents=True, exist_ok=True)
-    with open(directory / f"{source_id}.lock", "w") as handle:
+    with open(directory / f"{source_id}.lock", "a+") as handle:  # no truncation before the lock is held
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise SourceBusy(f"source {source_id!r} is already being synced by another process") from exc
+        handle.seek(0)
+        handle.truncate()
         handle.write(str(os.getpid()))
         handle.flush()
         try:
