@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS http_validators(
   fetched_at TEXT NOT NULL
 );
 DROP VIEW IF EXISTS source_coverage;
-CREATE VIEW source_coverage AS
+CREATE VIEW IF NOT EXISTS source_coverage AS
 SELECT s.source_id, s.label, s.land, s.status, s.status_reason, s.upstream_listed, s.listing_complete,
        s.robots_policy, s.policy_decided_at, s.policy_basis, s.min_interval,
        (SELECT count(*) FROM decisions d WHERE d.source_id = s.source_id) AS decisions,
@@ -271,6 +271,21 @@ SOURCE_COLUMNS_V2 = {
 
 
 def init_db(conn: sqlite3.Connection) -> None:
+    """Create or upgrade the schema; serialised across processes (parallel syncs start together)."""
+    import fcntl
+    path = conn.execute("PRAGMA database_list").fetchone()[2]
+    lock_path = Path(path).with_name(".init.lock") if path else None
+    if lock_path is None:
+        return _init_db(conn)
+    with open(lock_path, "a+") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            _init_db(conn)
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _init_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version not in (0, 1, 2, SCHEMA_VERSION):
         raise RuntimeError(f"database schema v{version} != code schema v{SCHEMA_VERSION}")
