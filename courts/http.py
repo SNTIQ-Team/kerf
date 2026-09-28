@@ -117,11 +117,17 @@ class PoliteHttp:
         parts = urlsplit(url)
         robots_url = f"{parts.scheme}://{parts.netloc}/robots.txt"
         parser = RobotFileParser()
-        self._pace(host)
-        try:
-            response = self.session.get(robots_url, timeout=30, allow_redirects=True)
-            self._count()
-        except requests.RequestException:
+        response = None
+        for attempt in range(3):   # a transient network error must not read as "complete disallow"
+            self._pace(host)
+            try:
+                response = self.session.get(robots_url, timeout=30, allow_redirects=True)
+                self._count()
+                break
+            except requests.RequestException as exc:
+                host.robots_detail = f"{type(exc).__name__}: {str(exc)[:160]}"
+                time.sleep(5 * (attempt + 1))
+        if response is None:
             host.robots, host.robots_state = None, "unreachable"
             return
         body = response.content or b""
@@ -252,7 +258,10 @@ class PoliteHttp:
                         governor.throttled(f"{failure.kind} page (HTTP {raw.status_code})")
                     raise
             if governor is not None:
-                governor.answered(response.elapsed)
+                # Time to the response headers (requests' own measure): the server's latency, not the
+                # body size or this process's thread scheduling.
+                ttfb = getattr(raw, "elapsed", None)
+                governor.answered(ttfb.total_seconds() if ttfb is not None else response.elapsed)
                 if raw.status_code >= 400:
                     governor.failed()
             if raw.status_code >= 400:
