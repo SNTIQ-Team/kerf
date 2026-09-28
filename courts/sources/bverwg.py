@@ -500,8 +500,8 @@ LEGACY_TYPES = {"BESCHLUSS": "Beschluss", "URTEIL": "Urteil", "GERICHTSBESCHEID"
 def is_legacy_page(body: bytes, doc: str) -> bool:
     """The bverwg.de layout before 2017 (``/entscheidungen/entscheidung.php?ent=``), e.g. in Wayback captures."""
     text = body.decode("utf-8", "replace")
-    return 'class="artikel"' in text and f'data-ecli="ECLI:DE:BVerwG:' in text and doc in text \
-        and 'class="ent ' in text
+    return 'class="artikel"' in text and re.search(r'<div class="ent[" ]', text) is not None \
+        and re.search(r"ECLI:DE:BVerwG:\d{4}:" + re.escape(doc), text) is not None
 
 
 def parse_legacy_decision_html(body: bytes, doc: str, source_url: str, headers: dict | None = None) -> ParsedDecision:
@@ -513,6 +513,10 @@ def parse_legacy_decision_html(body: bytes, doc: str, source_url: str, headers: 
     art = soup.find("div", class_="artikel")
     link = art.find(id="ecli") if art is not None else None
     ecli = squash(link.get("data-ecli") or link.get_text()) if link is not None else ""
+    if art is not None and not ecli and art.find("h2") is not None:
+        # 2013-2015 pages: the ECLI is the text of a plain link in the heading (no a#ecli[data-ecli]).
+        found = re.search(r"ECLI:DE:BVerwG:\d{4}:[0-9A-Za-z.]+", art.find("h2").get_text(" "))
+        ecli = found.group(0) if found else ""
     if art is None or not ecli:
         raise UpstreamFailure("unexpected_representation", f"{doc}: not a BVerwG decision page (legacy layout)",
                               url=source_url)
