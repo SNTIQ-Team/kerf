@@ -39,6 +39,7 @@ import sqlite3
 import sys
 import tempfile
 import time
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -200,32 +201,38 @@ def gii_states(act: dict[str, Any], data_dir: Path,
     return states
 
 
+_BUNDLE_TEXTS: dict[int, dict[str, Any]] = {}
+
+
 def bundle_states(bundle: sqlite3.Connection | None, act_id: str
                   ) -> list[StateObs]:
     if bundle is None:
         return []
+    _BUNDLE_TEXTS.clear()   # per act: unique wordings stay in memory once
     states = []
     for row in bundle.execute(
             "SELECT * FROM captures WHERE act_id=? ORDER BY captured_at",
             (act_id,)):
-        capture_id = row["capture_id"]
+        blob = row["norms_blob"]
 
-        def load(capture_id: str = capture_id) -> list[dict[str, Any]]:
-            out = []
-            for norm in bundle.execute(
-                    "SELECT n.ord, t.enbez, t.titel, t.body FROM capture_norms n "
-                    "JOIN capture_texts t USING(text_id) WHERE n.capture_id=? "
-                    "ORDER BY n.ord", (capture_id,)):
-                out.append({"enbez": norm["enbez"], "titel": norm["titel"],
-                            "text": gzip.decompress(norm["body"]).decode()})
-            return out
+        def load(blob: bytes = blob) -> list[dict[str, Any]]:
+            ids = json.loads(zlib.decompress(blob))
+            missing = [i for i in set(ids) if i not in _BUNDLE_TEXTS]
+            for start in range(0, len(missing), 500):
+                chunk = missing[start:start + 500]
+                marks = ",".join("?" * len(chunk))
+                for text in bundle.execute(
+                        f"SELECT text_id, identity, enbez, titel, body FROM "
+                        f"capture_texts WHERE text_id IN ({marks})", chunk):
+                    _BUNDLE_TEXTS[text["text_id"]] = {
+                        "enbez": text["enbez"], "titel": text["titel"],
+                        "text": gzip.decompress(text["body"]).decode(),
+                        "_identity": text["identity"]}
+            return [_BUNDLE_TEXTS[i] for i in ids]
 
         captured = str(row["captured_at"] or "")
-        keys = row.keys()
-        first = str(row["first_captured_at"] if "first_captured_at" in keys
-                    and row["first_captured_at"] else captured)
-        last = str(row["last_captured_at"] if "last_captured_at" in keys
-                   and row["last_captured_at"] else captured)
+        first = str(row["first_captured_at"] or captured)
+        last = str(row["last_captured_at"] or captured)
         states.append(StateObs(
             key=f"{row['source']}:{row['sha256'][:16]}",
             source=row["source"], source_role=row["source_role"],
@@ -240,11 +247,20 @@ def bundle_states(bundle: sqlite3.Connection | None, act_id: str
 # ------------------------------------------------------------- change dates
 
 class ChangeDates:
-    """Date resolutions keyed by (document, article, item[, letter])."""
+    """Evidence-only date resolutions per amendment item.
+
+    Rows come from ``tools/resolve_change_dates.py`` (packed into the bundle
+    by ``tools/history_bundle.py``): one per (document, article, collective
+    Absatz, Nummer, Buchstabe, …) with adopted / promulgated / in_force /
+    applies_from read from the printed BGBl, plus one ``document`` row with
+    the document's adoption and promulgation dates.
+    """
 
     def __init__(self, paths: Iterable[Path]):
-        self.rows: dict[tuple[str, str, str], dict[str, Any]] = {}
+        self.items: dict[tuple[str, str, str, str], list[dict[str, Any]]] = \
+            defaultdict(list)
         self.documents: dict[str, dict[str, Any]] = {}
+        self.count = 0
         for path in paths:
             if not path or not Path(path).is_file():
                 continue
@@ -259,17 +275,63 @@ class ChangeDates:
                         self.documents[doc] = row
                         continue
                     key = (doc, str(row.get("article") or ""),
-                           str(row.get("item_key") or ""))
-                    self.rows[key] = row
+                           str(row.get("absatz") or ""),
+                           str(row.get("nummer") or ""))
+                    # items reference the document's interned payloads
+                    self.items[key].append((
+                        str(row.get("buchstabe") or ""),
+                        str(row.get("ref_para") or ""),
+                        row.get("in_force"), row.get("applies_from"),
+                        row.get("change_type")))
+                    self.count += 1
 
-    def resolve(self, document_id: str, article: str, item_key: str
+    @property
+    def rows(self) -> dict:  # compatibility: number of item rows
+        return self.items
+
+    def resolve(self, document_id: str, article: str, item_key: str, *,
+                absatz: str | None = None, para: str | None = None
                 ) -> dict[str, Any] | None:
-        parts = item_key.split(".") if item_key else []
-        for depth in range(len(parts), -1, -1):
-            key = (document_id, article, ".".join(parts[:depth]))
-            if key in self.rows:
-                return self.rows[key]
-        return None
+        nummer, _, buchstabe = (item_key or "").partition(".")
+        rows = self.items.get((document_id, article, str(absatz or ""),
+                               nummer)) or []
+        if not rows and nummer:
+            rows = self.items.get((document_id, article,
+                                   str(absatz or ""), "")) or []
+        if not rows:
+            return None
+        if buchstabe:
+            narrowed = [r for r in rows if r[0] in {buchstabe, ""}]
+            rows = narrowed or rows
+        if para and len(rows) > 1:
+            targeted = [r for r in rows if r[1] in {str(para), ""}]
+            rows = targeted or rows
+        document = self.documents.get(document_id) or {}
+        variants = document.get("variants") or {}
+        in_forces = [variants.get(str(r[2])) or {} for r in rows]
+        dates = {json.dumps(v.get("date")) for v in in_forces}
+        chosen = {"adopted": document.get("adopted"),
+                  "promulgated": document.get("promulgated"),
+                  "in_force": dict(in_forces[0]),
+                  "applies_from": variants.get(str(rows[0][3])),
+                  "change_type": rows[0][4]}
+        if len(dates) > 1:
+            chosen["in_force"] = {
+                "date": None, "status": "unknown",
+                "reason": "parts_of_this_item_take_effect_on_different_dates",
+                "candidates": sorted({v.get("date") or "unknown"
+                                      for v in in_forces})}
+        in_force = chosen.get("in_force") or {}
+        if in_force.get("date") and in_force.get("alternative_reading"):
+            # "n Monate nach der Verkündung": the day is disputed (§ 188 BGB
+            # vs. same day); never pick one reading silently.
+            chosen["in_force"] = {
+                "date": None, "status": "unknown",
+                "reason": "disputed_period_computation",
+                "clause": in_force.get("clause"),
+                "candidates": [in_force.get("date"),
+                               in_force.get("alternative_reading")]}
+        return chosen
 
 
 def load_bgbl_documents(snapshots: Path | None) -> dict[str, dict[str, Any]]:
@@ -291,12 +353,13 @@ def load_bgbl_documents(snapshots: Path | None) -> dict[str, dict[str, Any]]:
         if not path.is_file():
             continue
         try:
-            rows = list(read_jsonl(path)) if read_jsonl else [
+            rows = read_jsonl(path) if read_jsonl else (
                 json.loads(line) for line in path.read_text().splitlines()
-                if line.strip()]
+                if line.strip())
+            rows = iter(rows)
         except Exception:
             continue  # offloaded/compacted older snapshots: newer ones win
-        for row in rows:
+        for row in _safe_rows(rows):
             doc = str(row.get("document_id") or "")
             if doc:
                 result[doc] = {k: row.get(k) for k in (
@@ -306,6 +369,14 @@ def load_bgbl_documents(snapshots: Path | None) -> dict[str, dict[str, Any]]:
                     "entry_into_force", "dip_entry_into_force", "pdf_object",
                     "sha256", "year")}
     return result
+
+
+def _safe_rows(rows):
+    try:
+        for row in rows:
+            yield row
+    except Exception:  # offloaded/compacted snapshot: newer ones win
+        return
 
 
 def load_bgbl_index(index_dir: Path | None,
@@ -412,7 +483,13 @@ def event_dates(event: dict[str, Any], item_key: str,
     """adopted / promulgated / in_force / applies_from from evidence only."""
     document_id = str(event.get("document_id") or "")
     article = str(event.get("amending_article") or "")
-    resolved = dates.resolve(document_id, article, item_key)
+    command = next((c for c in event.get("commands") or []
+                    if str(c.get("item") or "") == item_key.split(".")[0]),
+                   {})
+    resolved = dates.resolve(
+        document_id, article, item_key,
+        absatz=event.get("collective_subsection"),
+        para=str((command.get("ref") or {}).get("para") or "") or None)
     document = dates.documents.get(document_id) or {}
     meta = bgbl.get(document_id) or {}
     official = meta.get("official_fields") or {}
@@ -833,6 +910,14 @@ def command_reflection(change: dict[str, Any], before: str | None,
     return "mixed" if "reflected" in verdicts else "unknown"
 
 
+def _minus_days(day: str, days: int) -> str:
+    from datetime import timedelta
+    try:
+        return (date.fromisoformat(day) - timedelta(days=days)).isoformat()
+    except ValueError:
+        return day
+
+
 def _replay(previous_row: dict[str, Any], target: Run,
             groups: list[list[dict[str, Any]]], bavarian: bool
             ) -> list[tuple[str, str]] | None:
@@ -966,6 +1051,7 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
         high = run.known_from
         window = {"after": low, "until": high}
         candidates = []
+        lagged: set[str] = set()
         for change in changes:
             if change["change_id"] in used:
                 continue
@@ -978,6 +1064,18 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
                     promulgated <= high and (not low or promulgated > low):
                 candidates.append((change, "promulgated_in_window_date_"
                                            "unknown"))
+        if not any(why == "in_force_in_window" for _c, why in candidates) \
+                and low and high:
+            # GII incorporates amendments with a lag: the last capture that
+            # still shows the old wording can postdate the in-force day.
+            floor = max(previous.known_from or low, _minus_days(low, 180))
+            for change in changes:
+                if change["change_id"] in used:
+                    continue
+                effective = change_effective_date(change)
+                if effective and floor < effective <= low:
+                    candidates.append((change, "in_force_in_window"))
+                    lagged.add(change["change_id"])
         before_text = previous.row.get("text") if previous.row else None
         after_text = run.row.get("text") if run.row else ""
         scored = [(change, why, command_reflection(change, before_text,
@@ -1102,6 +1200,11 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
             "status": ("replay_verified_between_captures"
                        if replayed and len(groups) == 1 else status),
             "window": window, "verification": verification}
+        if any(c["change_id"] in lagged for c in last_group):
+            record["attribution"]["publication_lag"] = True
+            record["attribution"]["note"] = (
+                "in force before the last capture that still showed the old "
+                "wording: the consolidation incorporated it later")
         latest = order[-1] if order and order[-1] else ""
         if latest and record["valid_from"] is None:
             source_change = by_date[latest][0]
@@ -1215,8 +1318,8 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
         stand_by_state[state.seq] = parse_notes(state.stand)
         rank = (TEXT_PRIORITY.get(state.source, 5), state.sort_key)
         for norm_id, row in norm_rows_with_ids(act, rows):
-            identity = norm_identity(row.get("enbez"), row.get("titel"),
-                                     row.get("text"))
+            identity = row.get("_identity") or norm_identity(
+                row.get("enbez"), row.get("titel"), row.get("text"))
             sequences[norm_id].append((state, identity))
             current = best.get(identity)
             if current is None or rank < current[0]:
@@ -1859,7 +1962,7 @@ def main(argv: list[str] | None = None) -> int:
             "as_of": as_of, "totals": totals,
             "bundle": {k: bundle_meta.get(k) for k in (
                 "built_at", "schema", "sha256", "sources")},
-            "change_date_rows": len(dates.rows),
+            "change_date_rows": dates.count,
         })
         store_index_summaries(tmp, as_of)
         os.chmod(tmp, 0o644)
