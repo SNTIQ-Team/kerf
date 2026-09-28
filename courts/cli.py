@@ -67,10 +67,21 @@ def cmd_reparse(args) -> int:
     conn = connect()
     init_db(conn)
     sources = [args.source] if args.source else [r[0] for r in conn.execute("SELECT source_id FROM sources")]
+    ids = set(args.decision) if args.decision else None
+    if args.stale_norm_ids:
+        from .acts import resolver
+        federal = set(resolver().catalog_slugs) | set(resolver()._by_slug)
+        ids = {r[0] for r in conn.execute("SELECT DISTINCT decision_id, target_id FROM relations WHERE "
+                                          "target_kind='norm' AND target_id LIKE 'de/bund/%'")
+               if r[1].split("/")[2] not in federal} | (ids or set())
+    if ids is not None:
+        sources = [r[0] for r in conn.execute(
+            f"SELECT DISTINCT source_id FROM decisions WHERE id IN ({','.join('?' * len(ids))})", sorted(ids))]
     for source_id in sources:
         try:
             with source_lock(source_id):
-                print(json.dumps({"source": source_id, **reparse_source(get_adapter(source_id), conn)}))
+                print(json.dumps({"source": source_id, **reparse_source(get_adapter(source_id), conn,
+                                                                        decision_ids=ids, force=args.force)}))
         except SourceBusy as exc:
             print(json.dumps({"source": source_id, "status": "busy", "detail": str(exc)}))
     return 0
@@ -319,6 +330,10 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_sync)
     p = sub.add_parser("reparse", help="re-parse stored raw captures with the current parser (offline)")
     p.add_argument("--source", help="one source (default: all)")
+    p.add_argument("--decision", action="append", help="only these decision ids (repeatable)")
+    p.add_argument("--stale-norm-ids", action="store_true",
+                   help="only decisions with federal norm ids that the Lexgraph resolver does not know")
+    p.add_argument("--force", action="store_true", help="rewrite even if text and parser version are unchanged")
     p.set_defaults(func=cmd_reparse)
     p = sub.add_parser("migrate-captures", help="move legacy raw/*.gz captures into packs and verify")
     p.add_argument("--delete-legacy", action="store_true", help="delete legacy files after full verification")

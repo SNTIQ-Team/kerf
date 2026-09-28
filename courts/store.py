@@ -472,7 +472,7 @@ def finalise(parsed: ParsedDecision) -> ParsedDecision:
 
 
 def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_hash: str, capture_path: str,
-                   media_type: str, observed_at: str | None = None) -> tuple[str, bool]:
+                   media_type: str, observed_at: str | None = None, force: bool = False) -> tuple[str, bool]:
     """Insert or replace one decision; return (decision_id, changed)."""
     parsed = finalise(parsed)
     decision_id = decision_identity(parsed)
@@ -490,7 +490,7 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
                                   f"{decision_id} already stored from {row['source_id']}:{row['source_doc_id']}",
                                   url=parsed.source_url)
     first_seen = existing[0]["first_seen"] if existing else observed_at
-    if existing and existing[0]["id"] == decision_id and existing[0]["text_hash"] == text_hash \
+    if not force and existing and existing[0]["id"] == decision_id and existing[0]["text_hash"] == text_hash \
             and existing[0]["parser_version"] == PARSER_VERSION:
         conn.execute("UPDATE decisions SET observed_at=?, content_hash=?, capture_path=? WHERE id=?",
                      (observed_at, content_hash, capture_path, decision_id))

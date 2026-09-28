@@ -201,7 +201,8 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                    "; ".join(n for n in (notes, policy_note) if n) or None)
 
 
-def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None) -> dict:
+def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None,
+                   decision_ids: set[str] | None = None, force: bool = False) -> dict:
     """Re-parse stored raw captures with the current parser (no network).
 
     Decisions whose text and parser version are unchanged are left alone; a
@@ -215,6 +216,8 @@ def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None) -> 
                            FROM decisions d JOIN source_items i
                              ON i.source_id = d.source_id AND i.source_doc_id = d.source_doc_id
                            WHERE d.source_id = ?""", (adapter.source_id,)).fetchall()
+    if decision_ids is not None:
+        rows = [r for r in rows if r["id"] in decision_ids]
     for row in rows:
         try:
             body = read_capture(conn, row["content_hash"], row["capture_path"], home)
@@ -224,7 +227,7 @@ def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None) -> 
             parsed = adapter.parse(capture, row)
             decision_id, changed = store_decision(conn, parsed, content_hash=row["content_hash"],
                                                   capture_path=row["capture_path"],
-                                                  media_type=row["media_type"] or "")
+                                                  media_type=row["media_type"] or "", force=force)
             if changed:
                 after_store(conn, decision_id)
             counts["reparsed" if changed else "unchanged"] += 1
