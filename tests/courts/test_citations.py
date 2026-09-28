@@ -132,3 +132,8 @@ def test_database_rejects_parser_legal_effect_relations():
 ])
 def test_norm_identities_in_context(text, land, expected):
     assert [r.target_id for r in extract_norms(text, "p", land=land)] == expected
+
+
+def test_trailing_annotation_is_not_part_of_the_docket():
+    rels = extract_decisions("(BVerfG Beschluss vom 17.12.2014 - 1 BvL 21/12 mwN)", "p", own_court_id="bsg")
+    assert [r.target_id for r in rels] == ["court:bverfg/2014-12-17/1_BvL_21-12"]

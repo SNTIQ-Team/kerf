@@ -412,6 +412,8 @@ def extract_decisions(text: str, paragraph_id: str | None, *, own_court_id: str 
     anchors = sorted(courts + selves)
     for ref in DECISION_REF_RE.finditer(text):
         az = clean_az(ref.group("az")).rstrip(" -–—,.")
+        # Trailing annotations are not part of the docket: "1 BvL 21/12 mwN", "… m.w.N.", "… a.a.O.".
+        az = re.sub(r"\s+(?:m\.?\s?w\.?\s?N|mwN|a\.?\s?a\.?\s?O|juris|zit\.?|ff?)\.?$", "", az).rstrip(" -–—,.")
         if not AZ_SHAPE.search(az) or re.search(r"(?i)\b(juris|rn|rdnr|seite)\b", az):
             continue
         iso = parse_date(ref)
