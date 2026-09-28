@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 from .citations import procedural_clause
 
-CLASSIFIER_VERSION = "courts-polarity-rules/1.3.1"
+CLASSIFIER_VERSION = "courts-polarity-rules/1.3.3"
 ASSESSMENTS = {
     "applies": "positive", "interprets": "neutral", "holds_inapplicable": "negative",
     "rejects_application_of": "negative", "follows": "positive", "departs_from": "negative",
@@ -90,7 +90,9 @@ RULES = [
     Rule("norm.auslegen", "interprets", "norm",
          _r(r"^[^§]{0,60}?\b(?:ist|sind)\s+(?:\w+\s+){0,3}?(?:dahin(?:gehend)?|so)\s+(?:\w+\s+){0,3}?"
             r"(?:auszulegen|zu\s+verstehen)"), "after", 0.75),
-    Rule("norm.auslegung_des", "interprets", "norm", _r(r"\bAuslegung\s+(?:des|der|von)\s*$"), "before", 0.7),
+    # Fresh samples 2026-09-28: 0.73 (other actors' interpretations, "betrifft die Auslegung") - demoted.
+    Rule("norm.auslegung_des", "interprets", "norm", _r(r"\bAuslegung\s+(?:des|der|von)\s*$"), "before", 0.7,
+         demoted=True),
     Rule("norm.im_sinne_wenn", "interprets", "norm", _r(r"^[^.;§]{0,40}?,\s*wenn\b(?!\s+nicht\s+gar)"), "after", 0.6),
     # --- decisions ------------------------------------------------------------------------------
     Rule("decision.im_anschluss_an", "follows", "decision", _r(r"\bim\s+Anschluss\s+an\s*(?:\w+\s+){0,6}$"), "before",
@@ -105,9 +107,10 @@ RULES = [
     Rule("decision.entgegen", "departs_from", "decision",
          _r(r"\bentgegen\s+(?:der|dem|den)\s+(?:[\w-]+\s+){0,3}?(?:Auffassung|Ansicht|Ausf[üu]hrungen|Entscheidung|"
             r"Beschluss|Urteil|Urteilen|Rechtsprechung|Meinung|Beurteilung)\s+(?:des|der|vom)?\s*(?:\w+\s+){0,3}$"),
-         "before", 0.7),
+         "before", 0.7, demoted=True),  # fresh sample 2026-09-28: 0.59 (others acting "entgegen der Rechtsprechung")
+    # Fresh sample 2026-09-28: 0/3 (parties invoking a decision "unter Hinweis auf" / "in Anlehnung an") - demoted.
     Rule("decision.anders_als_meint", "departs_from", "decision",
-         _r(r"\banders\s+als\s+(?:der|die|das)\s+[^,;]{0,80}$"), "before", 0.7),
+         _r(r"\banders\s+als\s+(?:der|die|das)\s+[^,;]{0,80}$"), "before", 0.7, demoted=True),
     Rule("decision.haelt_nicht_fest", "overrules", "decision",
          re.compile(r"\bh[äa]lt\s+an\s+.{0,240}?\bnicht\s+(?:mehr\s+)?fest\b|\bgibt\s+.{0,240}?"
                     r"Rechtsprechung\s+.{0,120}?\bauf\b", re.I | re.S), "clause", 0.75, own_court=True),
@@ -124,11 +127,16 @@ OPEN_FRAME = re.compile(r"\b(?:[Oo]b|[Ss]ollte[n]?|falls|sofern|unabh[äa]ngig\s
 CLAIM_FRAME = re.compile(r"\b(?:ausgef[üu]hrt|vorgetragen|geltend\s+gemacht|ger[üu]gt|r[üu]gt|behauptet|meint|"
                          r"tr[äa]gt\s+vor|vertritt\s+die\s+(?:Auffassung|Ansicht)|beanstandet|"
                          r"aus\s+(?:seiner|ihrer|deren|dessen)\s+Sicht|legt\s+(?:\w+\s+){0,5}dar|darge(?:legt|tan)|"
-                         r"zeigt\s+(?:[\w,]+\s+){0,8}?auf)\b", re.I)
+                         r"zeigt\s+(?:[\w,]+\s+){0,8}?auf|Rechtsauffassung\s+(?:des|der)\s+(?:Kl[äa]ger|Beklagt|Antrag|"
+                         r"Beigeladen|Beschwerdef)\w*|Einwand|Einwendung\w*)\b", re.I)
 NEGATED_FRAME = re.compile(r"\b(?:f[üu]hr(?:t|en)\s+(?:.{0,80}?\s)?nicht\s+dazu|nicht\s+(?:\w+\s+){0,5}verpflichtet|"
                            r"nicht\s+gehindert|nicht\s+signifikant|nicht\s+ersichtlich)\b", re.I | re.S)
 # For every type: "es ist nichts dafür ersichtlich, dass …" negates what follows.
 NOTHING_EVIDENT = re.compile(r"\bnichts\s+(?:\w+\s+){0,2}ersichtlich\b|\bkeine\s+Anhaltspunkte\b", re.I)
+# Konjunktiv I of reported submissions (lower case only: "Stelle", "Folge" are nouns).
+KONJUNKTIV = re.compile(r"\b(?:knüpfe|weiche|verkenne|übersehe|verstoße|verletze|berücksichtige|stelle|lege|beziehe|"
+                        r"kenne|treffe|lasse|halte|stütze|verneine|bejahe|nehme|ziehe|beruhe|betreffe|erfülle|genüge|"
+                        r"enthalte|verlange|fordere|spreche|bezögen|verstieße|läge|hätte|wäre\s+(?:dem|der)\s+Kläger)\b")
 PARTY = (r"(?:Kl[äa]ger\w*|Beklagte\w*|Antragsteller\w*|Antragsgegner\w*|Beigeladene\w*|Beteiligte\w*|"
          r"Beschwerdef[üu]hrer\w*|Rechtsmittelf[üu]hrer\w*|Beh[öo]rde\w*|Beschwerde)")
 COURT_ACTOR = (r"(?:EuGH|EGMR|BVerfG|BGH|BSG|BVerwG|BFH|BAG|OVG|VGH|LSG|OLG|LAG|LG|VG|SG|"
@@ -146,6 +154,8 @@ FACT_COMPARISON = re.compile(r"^anders\s+als\s+(?:etwa\s+|noch\s+|insoweit\s+)?(
                              r"beurteilten|Zeitpunkt|Urteils?|Beschlusses|Beschluss|Entscheidung)\b", re.I)
 
 
+HOLDS_KEY = re.compile(r"keine\s+Anwendung|nicht\s+(?:anwendbar|einschl[äa]gig|anzuwenden)|unanwendbar|unangewendet",
+                       re.I)
 HOLDS_VERB = re.compile(r"\b(?:finde[nt]|ist|sind|war|waren|w[äa]re|kann|k[öo]nnen|bleib\w*|keine\s+Anwendung|"
                         r"nicht\s+(?:anwendbar|einschl[äa]gig|anzuwenden)|unangewendet)\b", re.I)
 
@@ -182,6 +192,32 @@ def _guarded_v13(rule: "Rule", text: str, start: int, end: int, cue_start: int, 
             return True  # a conditional rule statement, not a holding
         if re.match(r"\s*(?:sein\s+)?(?:kann|k[öo]nnte|mag|d[üu]rfte)\b", text[cue_end:cue_end + 20]):
             return True  # "… nicht einschlägig sein kann"
+        if re.search(r"\b(?:einschl[äa]gige[nmrs]?|anwendbare[nmrs]?|ma[ßs]gebliche[nmrs]?)\s*$", before):
+            return True  # "neben dem hier … einschlägigen § 21 Abs. 4 Satz 3 PBefG": that norm applies
+        if re.search(r"\b(?:k[öo]nnte|k[öo]nnten|d[üu]rfte|d[üu]rften|w[üu]rde|w[üu]rden|w[äa]re|w[äa]ren)\b", prefix_text):
+            return True  # hypothetical ("Schließlich könnte … Art. 13 ARB 1/80 erst recht keine Anwendung finden, wenn …")
+        if re.search(r"\b(?:im|in\s+dem|in\s+jenem)\s+(?:dort|damals|damalig\w*|dortig\w*)?\s*(?:entschiedenen\s+)?Fall\b",
+                     prefix_text):
+            return True  # "im dort entschiedenen Fall war § 275 … nicht einschlägig": another case's situation
+        key = HOLDS_KEY.search(cue)
+        head_key = _strip_parens(after_target[: (key.start() + (cue_start - end)) if key else len(after_target)])
+        if ")" in head_key:
+            head_key = head_key[head_key.rindex(")") + 1:]
+        if key and re.search(r",\s", head_key):
+            return True  # a comma between the citation and "keine Anwendung": another subject ("…, der aber keine …")
+        if re.search(r"\b(?:d[üu]rfte|d[üu]rften|k[öo]nnte|k[öo]nnten|m[öo]gen|mag)\b", cue):
+            return True  # tentative ("dürfte nicht einschlägig sein"), typically a reported or open view
+        if re.search(r"\bso\s+(?:der|die|das)\s+" + COURT_ACTOR, clause):
+            return True  # "– so der Bundesgerichtshof –": the cited court's view, reported
+        if re.search(r"(?:\b(?:in|wegen|durch|aufgrund|zufolge|neben|von|gegen[üu]ber|au[ßs]er)\s+(?:der|des|dem)?\s*)$",
+                     before) and not CONTENT_NOUN.search(re.sub(
+                         r"\s*\b(?:in|wegen|durch|aufgrund|zufolge|neben|von|gegen[üu]ber|au[ßs]er)\s+(?:der|des|dem)?\s*$",
+                         " ", before)):
+            return True  # "wegen der fehlenden In-Bezugnahme in § 8a PBefG", "aufgrund der in § 50 VwVfG normierten …"
+        if re.search(r",?\s*(?:und\s+)?(?:auf|f[üu]r|bei)\s+(?:den|die|das|dem|welche[nmrs]?)\s*$", before):
+            return True  # a relative clause about someone else ("…, und auf den Art. 12 StatusVO keine Anwendung findet")
+        if re.match(r"\s*(?:\w+\s+)?\w+(?:ten|tene[nm]?|ierte[nm]?|ene[nm])\s+[A-ZÄÖÜ]\w+", after_target):
+            return True  # "§ 50 VwVfG normierten Regelung": the citation qualifies another noun
         if re.search(r"\b(?:Absatz|Abs\.|Satz|Nr\.|Buchst\.?)\s*\d", cue):
             return True  # another provision is the subject: "nach § 60 Abs. 8 … findet Absatz 1 keine Anwendung"
         closing = after_target.find(")")
@@ -241,6 +277,11 @@ def _guarded_v13(rule: "Rule", text: str, start: int, end: int, cue_start: int, 
             return True  # "anders als der Beklagte meint – … (OVG …)": the citation supports the court
         if re.search(r"\bf[üu]r\s+das\s+\w+recht\b", text[cue_start:end + 80]):
             return True  # a view limited to another field of law: no disagreement
+    if rule.rule_id == "decision.abweichend_von":
+        if re.search(r"\b(?:Fall|F[äa]llen|Sachverhalt\w*|Konstellation\w*|Fallgestaltung)\b", text[cue_start:end + 40]):
+            return True  # "Abweichend von dem … zu entscheidenden Fall hat die Klägerin …": facts, not a departure
+        if KONJUNKTIV.search(clause):
+            return True  # reported speech ("… knüpfe das LSG nicht an …")
     if rule.rule_id == "decision.entgegen":
         if re.search(r"\b" + PARTY, cue) and not re.search(r"\bund\s+(?:des|der|dem)\b", cue):
             return True  # "entgegen der Auffassung des Klägers auch aus EuGH …"
@@ -252,7 +293,9 @@ HYPOTHETICAL = re.compile(r"\b(?:f[äa]nde|f[äa]nden|w[äa]re|w[äa]ren|w[üu]r
 # "X nach/gemäß § N" where X names the norm's own content: the norm is the object, not a source.
 CONTENT_NOUN = re.compile(r"(?:vorbehalt|regelung|privilegierung|voraussetzung(?:en)?|befugnis|anspruch|frist|"
                           r"fristbestimmung|bestimmung|verbot|pflicht|ausnahme|vorschrift|norm|tatbestand|"
-                          r"rechtsfolge|erm[äa]chtigung|zuschlag|leistung|verg[üu]nstigung)\s+$", re.I)
+                          r"rechtsfolge|erm[äa]chtigung|zuschlag|leistung|verg[üu]nstigung|einschr[äa]nkung|"
+                          r"bestimmungen|regelungen|beschr[äa]nkung(?:en)?|grundsatz|fiktion|auslegungsregel|"
+                          r"schulpflicht\s+in|verweisung)\s+$", re.I)
 LOCAL_CLAUSE_SPLIT = re.compile(r",\s*(?:denn|doch|aber|jedoch|sondern)\s|;\s")
 # The cited norm is the source of an exclusion ("nach § 5 Abs. 3 BetrVG … keine Anwendung"), not its object.
 SOURCE_BEFORE = re.compile(r"(?:\b(?:nach|gem[äa][ßs]s?|gem\.|aufgrund|kraft|wegen)|"
@@ -318,6 +361,8 @@ def assess(text: str, span: tuple[int, int], *, target_kind: str, target_id: str
         return proposals
     if detail.get("procedural_basis"):
         return proposals  # cost/enforceability/value/finality provisions: procedural_reference, never applies
+    if target_kind == "norm" and not target_id:
+        return proposals  # an unresolved citation (e.g. a commentary reference "SGB X, § 44 RdNr 38") is not assessed
     other_citations = len(CITATION_TOKEN.findall(before)) + len(CITATION_TOKEN.findall(after))
     for rule in RULES:
         if rule.target_kind != target_kind:
