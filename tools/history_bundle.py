@@ -33,6 +33,7 @@ import os
 import shutil
 import sqlite3
 import sys
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -69,14 +70,11 @@ CREATE TABLE captures(
     warnings_json TEXT NOT NULL, first_captured_at TEXT,
     last_captured_at TEXT, capture_count INTEGER NOT NULL DEFAULT 1,
     captures_json TEXT NOT NULL DEFAULT '[]', layout TEXT,
-    source_identifiers_json TEXT);
+    source_identifiers_json TEXT, norms_blob BLOB NOT NULL);
 CREATE INDEX captures_act ON captures(act_id, captured_at);
 CREATE TABLE capture_texts(
     text_id INTEGER PRIMARY KEY, identity TEXT UNIQUE NOT NULL,
     enbez TEXT, titel TEXT, body BLOB NOT NULL);
-CREATE TABLE capture_norms(
-    capture_id TEXT NOT NULL, ord INTEGER NOT NULL, text_id INTEGER NOT NULL,
-    PRIMARY KEY(capture_id, ord));
 """
 
 
@@ -128,21 +126,8 @@ class CorpusWriter:
         captures = parsed.get("captures") or []
         first = str(parsed.get("first_captured_at") or captured)
         last = str(parsed.get("last_captured_at") or captured)
-        self.db.execute(
-            "INSERT INTO captures VALUES "
-            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (capture_id, act_id, source, role, parsed.get("original_url"),
-             parsed.get("archive_url"), first, sha,
-             _stand_text(parsed.get("stand")),
-             int(bool(parsed.get("complete", True))), parsed.get("parser"),
-             len(norms), json.dumps(parsed.get("warnings") or [],
-                                    ensure_ascii=False),
-             first, last, max(1, len(captures)),
-             json.dumps(captures, ensure_ascii=False)[:20000],
-             parsed.get("layout"),
-             json.dumps(parsed.get("source_identifiers"), ensure_ascii=False)
-             if parsed.get("source_identifiers") else None))
-        for order, norm in enumerate(norms):
+        text_ids = []
+        for norm in norms:
             identity = norm_identity(norm.get("enbez"), norm.get("titel"),
                                      norm.get("text"))
             text_id = self.ids.get(identity)
@@ -156,8 +141,22 @@ class CorpusWriter:
                                    compresslevel=9, mtime=0)))
                 text_id = int(cursor.lastrowid)
                 self.ids[identity] = text_id
-            self.db.execute("INSERT INTO capture_norms VALUES (?,?,?)",
-                            (capture_id, order, text_id))
+            text_ids.append(text_id)
+        blob = zlib.compress(json.dumps(text_ids).encode(), 9)
+        self.db.execute(
+            "INSERT INTO captures VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (capture_id, act_id, source, role, parsed.get("original_url"),
+             parsed.get("archive_url"), first, sha,
+             _stand_text(parsed.get("stand")),
+             int(bool(parsed.get("complete", True))), parsed.get("parser"),
+             len(norms), json.dumps(parsed.get("warnings") or [],
+                                    ensure_ascii=False),
+             first, last, max(1, len(captures)),
+             json.dumps(captures, ensure_ascii=False)[:20000],
+             parsed.get("layout"),
+             json.dumps(parsed.get("source_identifiers"), ensure_ascii=False)
+             if parsed.get("source_identifiers") else None, blob))
         self.captures += 1
         return True
 
@@ -186,6 +185,111 @@ def iter_parsed(archive: Path, sources: Iterable[str] | None = None
                 continue
             parsed.setdefault("source", source_dir.name)
             yield parsed
+
+
+def _slim_date(value: dict | None, *, clause: bool = False) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    keep = ("date", "status", "basis", "reason", "retroactive",
+            "retroactive_phrase", "alternative_reading", "computation_rule",
+            "issue")
+    out = {k: value[k] for k in keep if value.get(k) not in (None, "", [])}
+    if clause and value.get("clause"):
+        out["clause"] = " ".join(str(value["clause"]).split())[:900]
+    evidence = []
+    for item in (value.get("evidence") or [])[:2]:
+        if isinstance(item, dict):
+            evidence.append({k: item.get(k) for k in (
+                "kind", "snippet", "document_id", "text_sha256",
+                "pdf_sha256", "page_index") if item.get(k) is not None})
+    if evidence:
+        out["evidence"] = evidence
+    checks = [{k: c.get(k) for k in ("source", "field", "value", "status")}
+              for c in (value.get("cross_checks") or [])[:3]
+              if isinstance(c, dict)]
+    if checks:
+        out["cross_checks"] = checks
+    dip = value.get("dip_cross_check")
+    if isinstance(dip, dict):
+        out["dip_cross_check"] = {k: dip.get(k) for k in (
+            "status", "dip_date", "printed_date") if dip.get(k) is not None}
+    return out
+
+
+def change_date_records(directory: Path, target: Path) -> int:
+    """resolutions.jsonl + documents.jsonl of tools/resolve_change_dates.py
+    → compact rows.  Adoption/promulgation are per document; the in-force
+    and applies-from results are interned per document (items of one rule
+    share one payload), so the builder holds ~40k items in a few MB."""
+    documents: dict[str, dict] = {}
+    path = directory / "documents.jsonl"
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                row = json.loads(line)
+                documents[str(row.get("document_id"))] = {
+                    "kind": "document", "document_id": row.get("document_id"),
+                    "era": row.get("era"), "title": row.get("title"),
+                    "adopted": _slim_date(row.get("adopted")),
+                    "promulgated": _slim_date(row.get("promulgated")),
+                    "variants": {}}
+    items: list[dict] = []
+    seen: set[tuple] = set()
+    with (directory / "resolutions.jsonl").open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            item = row.get("item") or {}
+            ref = row.get("ref") or {}
+            doc_id = str(row.get("document_id"))
+            key = (doc_id, row.get("amending_article"), item.get("absatz"),
+                   item.get("nummer"), item.get("buchstabe"),
+                   item.get("doppelbuchstabe"), ref.get("para"),
+                   row.get("slug"))
+            if key in seen:
+                continue
+            seen.add(key)
+            document = documents.setdefault(doc_id, {
+                "kind": "document", "document_id": doc_id, "variants": {}})
+            dates = row.get("dates") or {}
+            if not document.get("adopted"):
+                document["adopted"] = _slim_date(dates.get("adopted"))
+            if not document.get("promulgated"):
+                document["promulgated"] = _slim_date(dates.get("promulgated"))
+            refs = {}
+            for field in ("in_force", "applies_from"):
+                payload = _slim_date(dates.get(field), clause=True)
+                blob = json.dumps(payload, ensure_ascii=False,
+                                  sort_keys=True)
+                variants = document["variants"]
+                if blob not in variants:
+                    variants[blob] = str(len(variants))
+                refs[field] = variants[blob]
+            items.append({
+                "kind": "item", "document_id": doc_id,
+                "article": row.get("amending_article"),
+                "slug": row.get("slug"), "absatz": item.get("absatz"),
+                "nummer": item.get("nummer"),
+                "buchstabe": item.get("buchstabe"),
+                "doppelbuchstabe": item.get("doppelbuchstabe"),
+                "ref_para": ref.get("para"),
+                "change_type": row.get("change_type"),
+                "in_force": refs["in_force"],
+                "applies_from": refs["applies_from"]})
+    count = 0
+    with gzip.open(target, "wt", encoding="utf-8", compresslevel=9) as out:
+        for document in documents.values():
+            document["variants"] = {ident: json.loads(blob) for blob, ident
+                                    in document["variants"].items()}
+            out.write(json.dumps(document, ensure_ascii=False,
+                                 sort_keys=True) + "\n")
+            count += 1
+        for item in items:
+            out.write(json.dumps(item, ensure_ascii=False, sort_keys=True)
+                      + "\n")
+            count += 1
+    return count
 
 
 def bavarian_records(directory: Path, target: Path) -> int:
@@ -233,7 +337,10 @@ def export(archive: Path, out: Path, *, change_dates: Path | None = None,
                          ("bavarian.jsonl.gz", bavarian)):
         target = out / name
         if source and Path(source).is_dir():
-            bavarian_records(Path(source), target)
+            if name == "bavarian.jsonl.gz":
+                bavarian_records(Path(source), target)
+            else:
+                change_date_records(Path(source), target)
             files[name] = target
         elif source:
             if str(source).endswith(".gz"):
