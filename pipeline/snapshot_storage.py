@@ -231,6 +231,12 @@ def load_manifest(root: Path) -> dict:
         for field in ("raw_bytes", "gzip_bytes"):
             if type(obj.get(field)) is not int or obj[field] < 0:
                 raise SnapshotArchiveError(f"invalid object {field}")
+        offloaded = obj.get("offloaded")
+        if offloaded is not None and (
+                not isinstance(offloaded, dict)
+                or not isinstance(offloaded.get("receipt"), str)
+                or not isinstance(offloaded.get("at"), str)):
+            raise SnapshotArchiveError("invalid offload record")
     for relative, record in value["files"].items():
         parsed = _snapshot_path(relative)
         if not isinstance(record, dict) or record.get("sha256") not in value["objects"] or \
@@ -289,7 +295,25 @@ def is_snapshot_reference(path: Path) -> bool:
             return stream.read(len(REFERENCE_MAGIC)) == REFERENCE_MAGIC
 
 
+def _object_present(root: Path, obj: dict) -> bool:
+    try:
+        _regular_stat(root / STORE_NAME / obj["path"])
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _is_offloaded(root: Path, obj: dict) -> bool:
+    """Bytes live only in the archive worker archive (a receipt proved it)."""
+    return bool(obj.get("offloaded")) and not _object_present(root, obj)
+
+
 def _verified_object(root: Path, digest: str, obj: dict) -> bytes:
+    if _is_offloaded(root, obj):
+        raise SnapshotArchiveError(
+            f"archived bytes {digest} were offloaded to the archive store "
+            f"archive (receipt {obj['offloaded']['receipt']}); restore the "
+            "object from ~/.local/share/sntiq-legal/lexgraph-archive to read it")
     compressed, _ = _read_regular(root / STORE_NAME / obj["path"])
     if len(compressed) != obj["gzip_bytes"] or _sha(compressed) != obj["gzip_sha256"]:
         raise SnapshotArchiveError(f"compressed object integrity mismatch: {digest}")
@@ -377,13 +401,20 @@ def verify_archive(root: Path) -> dict:
     root = _absolute(root)
     manifest = load_manifest(root)
     _verify_reference_coverage(root, manifest)
+    offloaded = 0
     for digest, obj in manifest["objects"].items():
+        if _is_offloaded(root, obj):
+            offloaded += 1
+            continue
         _verified_object(root, digest, obj)
     for relative, record in manifest["files"].items():
         _file_state(root, relative, record, manifest["objects"][record["sha256"]])
     return {"verified_files": len(manifest["files"]),
-            "verified_objects": len(manifest["objects"]),
-            "archive_object_bytes": sum(obj["gzip_bytes"] for obj in manifest["objects"].values())}
+            "verified_objects": len(manifest["objects"]) - offloaded,
+            "offloaded_objects": offloaded,
+            "archive_object_bytes": sum(
+                obj["gzip_bytes"] for obj in manifest["objects"].values()
+                if not _is_offloaded(root, obj))}
 
 
 def _walk_files(root: Path):
@@ -500,7 +531,8 @@ def restore_snapshots(root: Path, *, min_free_bytes: int = DEFAULT_MIN_FREE_BYTE
         manifest = load_manifest(root)
         _verify_reference_coverage(root, manifest)
         for digest, obj in manifest["objects"].items():
-            _verified_object(root, digest, obj)
+            if not _is_offloaded(root, obj):
+                _verified_object(root, digest, obj)
         restored = _restore_files(root, manifest, sorted(manifest["files"]),
                                   min_free_bytes, dry_run=dry_run)
     return {"dry_run": dry_run, "restored_files": 0 if dry_run else restored,
@@ -551,6 +583,14 @@ def _compact(root: Path, keep: int, dry_run: bool, budget: int,
         if relative in manifest["files"] and \
                 manifest["files"][relative]["sha256"] != digest:
             raise SnapshotArchiveError(f"archived source changed during planning: {relative}")
+        if digest in updated["objects"] and \
+                _is_offloaded(root, updated["objects"][digest]):
+            # Identical bytes were offloaded earlier; this raw copy is local,
+            # so store the object again instead of referencing absent bytes.
+            obj = dict(updated["objects"][digest])
+            obj.pop("offloaded", None)
+            updated["objects"][digest] = obj
+            new_objects.setdefault(digest, relative)
         if digest not in updated["objects"]:
             compressed = _gzip(raw)
             obj = {"path": _object_path(digest), "raw_bytes": len(raw),
@@ -567,12 +607,36 @@ def _compact(root: Path, keep: int, dry_run: bool, budget: int,
     object_dir = root / STORE_NAME / "objects"
     existing_bytes = sum(info.st_size for _, info in _walk_files(object_dir)) \
         if object_dir.exists() else 0
-    new_bytes = sum(updated["objects"][digest]["gzip_bytes"] for digest in new_objects)
-    if new_bytes > budget or existing_bytes + new_bytes > archive_budget:
-        raise SnapshotArchiveError(
-            f"archive budget exceeded: {new_bytes} new bytes, "
-            f"{existing_bytes + new_bytes} total bytes; new-object budget {budget}, "
-            f"cumulative budget {archive_budget}")
+    # Within the budgets, compact the oldest snapshots first and defer the
+    # rest: an archive at its cap is a scheduling state (the archive worker has
+    # not yet receipted older objects), not an error.  Deferred files simply
+    # stay raw until a later run.
+    new_bytes, deferred_digests = 0, set()
+    for digest, relative in sorted(
+            new_objects.items(),
+            key=lambda item: (_snapshot_path(item[1]).parts[1], item[1])):
+        size = updated["objects"][digest]["gzip_bytes"]
+        if new_bytes + size <= budget and \
+                existing_bytes + new_bytes + size <= archive_budget:
+            new_bytes += size
+        else:
+            deferred_digests.add(digest)
+    deferred_files = []
+    if deferred_digests:
+        for relative in list(prepared):
+            digest = updated["files"][relative]["sha256"]
+            if digest in deferred_digests:
+                deferred_files.append(relative)
+                prepared.pop(relative)
+                if relative not in manifest["files"]:
+                    updated["files"].pop(relative)
+        for digest in deferred_digests:
+            new_objects.pop(digest)
+            if digest in manifest["objects"]:
+                updated["objects"][digest] = copy.deepcopy(
+                    manifest["objects"][digest])
+            else:
+                updated["objects"].pop(digest)
     manifest_bytes = _json_bytes(updated)
     reference_bytes = sum(len(REFERENCE_MAGIC) + len(_json_bytes(_reference(
         relative, updated["files"][relative],
@@ -586,6 +650,10 @@ def _compact(root: Path, keep: int, dry_run: bool, budget: int,
         "candidate_raw_bytes": sum(info.st_size for info in prepared.values()),
         "new_object_bytes": new_bytes, "total_archive_object_bytes": existing_bytes + new_bytes,
         "compacted_files": 0, "already_compacted_files": already,
+        "deferred_files": len(deferred_files),
+        "deferred_reason": ("archive budget reached; waiting for archive "
+                            "receipts to offload older objects"
+                            if deferred_files else None),
         "restored_recent_files": 0, "recent_references_to_restore": len(recent_refs),
         "retained_snapshots": retained, "excluded_files": len(exclusions),
         "excluded_bytes": sum(row["bytes"] for row in exclusions), "exclusions": exclusions,
@@ -599,7 +667,8 @@ def _compact(root: Path, keep: int, dry_run: bool, budget: int,
         _write_object(root, digest, updated["objects"][digest], _gzip(raw))
     # Verify the entire batch and its raw inodes before publishing any reference.
     for digest, obj in updated["objects"].items():
-        _verified_object(root, digest, obj)
+        if not _is_offloaded(root, obj):
+            _verified_object(root, digest, obj)
     for relative, original in prepared.items():
         if _identity(_regular_stat(root / relative)) != _identity(original):
             raise SnapshotArchiveError(f"source changed before archive publication: {relative}")
@@ -613,3 +682,42 @@ def _compact(root: Path, keep: int, dry_run: bool, budget: int,
         result["compacted_files"] += 1
     verify_archive(root)
     return result
+
+
+def offload_objects(root: Path, receipts: dict[str, str], *, at: str,
+                    dry_run: bool = True) -> dict:
+    """Mark receipted objects offloaded, then delete their local bytes.
+
+    ``receipts`` maps object digest -> receipt id.  The caller has already
+    proven that the archive worker holds each compressed object with exactly
+    the manifest's ``gzip_sha256``.  The manifest is written first, so an
+    interrupted run leaves "offloaded but still present" objects, which
+    remain fully readable.
+    """
+    root = _absolute(root)
+    with nullcontext() if dry_run else _archive_lock(root):
+        manifest = load_manifest(root)
+        updated = copy.deepcopy(manifest)
+        chosen, freed = [], 0
+        for digest, receipt in sorted(receipts.items()):
+            obj = updated["objects"].get(digest)
+            if obj is None or not _object_present(root, obj):
+                continue
+            compressed, _ = _read_regular(root / STORE_NAME / obj["path"])
+            if _sha(compressed) != obj["gzip_sha256"]:
+                raise SnapshotArchiveError(
+                    f"object differs from its manifest; not offloading: {digest}")
+            obj["offloaded"] = {"receipt": receipt, "at": at}
+            chosen.append(digest)
+            freed += len(compressed)
+        result = {"dry_run": dry_run, "offloaded_objects": len(chosen),
+                  "freed_bytes": freed}
+        if dry_run or not chosen:
+            return result
+        _atomic_write(root / STORE_NAME / "manifest.json", _json_bytes(updated),
+                      create_parent=True)
+        for digest in chosen:
+            path = root / STORE_NAME / updated["objects"][digest]["path"]
+            path.unlink()
+        verify_archive(root)
+        return result

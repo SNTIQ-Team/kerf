@@ -17,7 +17,9 @@ except ImportError:
     from snapshot_storage import open_snapshot_text
 
 ROOT = Path(__file__).resolve().parent.parent
-SNAPSHOTS = ROOT / "data" / "snapshots"
+# LEXGRAPH_SNAPSHOTS lets archive worker tools (deploy/legacy-rebuild-push.sh)
+# read the pulled VPS snapshots instead of this checkout's own.
+SNAPSHOTS = Path(os.environ.get("LEXGRAPH_SNAPSHOTS") or ROOT / "data" / "snapshots")
 
 
 def snapshot_dir(source: str, day: str | None = None) -> Path:

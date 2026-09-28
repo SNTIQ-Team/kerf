@@ -36,6 +36,10 @@ from backfill_bgbl_history import (
     parse_retrospective_article_sections,
 )
 from common import ROOT
+from archive_receipts import (
+    ArchiveReceiptError, attested_rows, parser_identity, receipted_hashes,
+    row_digest,
+)
 from fetch_bgbl_documents import SourceIntegrityError, extract_pdf_text
 from fetch_dip import BASE as DIP_BASE, PUBLIC_KEY
 
@@ -154,10 +158,16 @@ class BoundedHttp:
 class LegacyArchive:
     """Content addressed objects and one checkpoint under a cumulative cap."""
 
-    def __init__(self, root: Path = ARCHIVE_ROOT, *, max_bytes: int = ARCHIVE_LIMIT,
+    def __init__(self, root: Path = ARCHIVE_ROOT, *,
+                 max_bytes: int | None = ARCHIVE_LIMIT,
                  min_free_bytes: int = 128 * MIB, accounting_roots=()):
-        if not 0 < max_bytes <= ARCHIVE_LIMIT or min_free_bytes < 0:
+        # ``max_bytes=None`` is the archive worker archive: the cumulative cap
+        # protects the serving host and has no meaning on the archive's home.
+        if max_bytes is not None and not 0 < max_bytes <= ARCHIVE_LIMIT or \
+                min_free_bytes < 0:
             raise ValueError("invalid archive limits")
+        if max_bytes is None and Path(root).absolute().is_relative_to("/srv"):
+            raise ValueError("an uncapped legacy archive is archive-only")
         self.root = Path(root).absolute()
         self.max_bytes = max_bytes
         self.min_free_bytes = min_free_bytes
@@ -182,7 +192,8 @@ class LegacyArchive:
         return total
 
     def reserve(self, size: int) -> None:
-        if size < 0 or self.size_bytes() + size > self.max_bytes:
+        if size < 0 or (self.max_bytes is not None and
+                        self.size_bytes() + size > self.max_bytes):
             raise BudgetExceeded("cumulative source archive budget reached")
         if shutil.disk_usage(self.root).free < size + self.min_free_bytes:
             raise BudgetExceeded("disk free-space guard reached")
@@ -225,6 +236,16 @@ class LegacyArchive:
     def put(self, folder: str, payload: bytes, suffix: str) -> str:
         return self.write(f"{folder}/{_digest(payload)}{suffix}", payload,
                           immutable=True)
+
+    def offloaded(self, relative: str, digest: str) -> bool:
+        """True when the file is absent here but a archive worker receipt holds
+        exactly these bytes (see pipeline/archive_receipts.py)."""
+        if self.path(relative).exists():
+            return False
+        key = f"{self.root.name}/{Path(relative).as_posix()}"
+        offload_root = Path(os.environ.get(
+            "LEXGRAPH_OFFLOAD_ROOT", self.root.parent / "archive-offload"))
+        return digest in receipted_hashes(offload_root).get(key, set())
 
     def read(self, relative: str, digest: str) -> bytes:
         if not re.fullmatch(r"[0-9a-f]{64}", str(digest or "")):
@@ -511,6 +532,27 @@ def legacy_exact_target(section: dict, act: dict) -> bool:
                for form in legal_name_forms(alias))
 
 
+def _verified_pinned(document: dict, archive: LegacyArchive) -> dict:
+    """Verify the pinned evidence and that each source object is either
+    present with its exact hash or receipted by the archive store.
+
+    Used by the VPS capture-only mode: full text verification and candidate
+    derivation happen by the archive worker, which holds every source byte.
+    """
+    evidence = archive.read(document["legacy_document_object"],
+                            document["legacy_document_sha256"])
+    pinned = json.loads(evidence)
+    expected = {key: value for key, value in document.items()
+                if key not in {"legacy_document_object", "legacy_document_sha256"}}
+    if pinned != expected:
+        raise SourceIntegrityError("legacy document differs from pinned evidence")
+    for obj, digest in ((pinned["pdf_object"], pinned["sha256"]),
+                        (pinned["text_object"], pinned["text_sha256"])):
+        if not archive.offloaded(obj, digest):
+            archive.read(obj, digest)
+    return pinned
+
+
 def _verified_document(document: dict, archive: LegacyArchive) -> tuple[dict, str]:
     evidence = archive.read(document["legacy_document_object"],
                             document["legacy_document_sha256"])
@@ -557,7 +599,47 @@ def build_legacy_inventory(documents: list[dict], archive: LegacyArchive) -> lis
     return sorted(inventory, key=lambda row: (row["publication_date"], row["id"]))
 
 
+def latest_legacy_snapshot(root: Path | None = None) -> Path | None:
+    root = Path(root or SNAPSHOT_ROOT)
+    days = sorted(path for path in Path(root).iterdir()
+                  if path.is_dir() and not path.name.startswith(".")) \
+        if Path(root).is_dir() else []
+    return days[-1] if days else None
+
+
+def attestation_notice(root: Path | None = None) -> str | None:
+    """One line on which parser produced the attested rows, if any."""
+    latest = latest_legacy_snapshot(root)
+    if latest is None or not (latest / "attestation.json").is_file():
+        return None
+    try:
+        _rows, summary = attested_rows(latest)
+    except (ArchiveReceiptError, OSError, ValueError) as exc:
+        return f"legacy attestation in {latest.name} is not valid: {exc}"
+    current = parser_identity(ROOT)["sha256"]
+    attested = (summary.get("parser") or {}).get("sha256")
+    if attested == current:
+        return (f"legacy candidates {latest.name}: archive worker attestation, "
+                f"parser {current[:12]}")
+    return (f"legacy candidates {latest.name}: attested by parser "
+            f"{str(attested)[:12]}, deployed parser {current[:12]}; run "
+            "deploy/legacy-rebuild-push.sh on the archive worker to rebuild")
+
+
 def validate_legacy_candidate(candidate: dict, *, archive: LegacyArchive | None = None) -> None:
+    # Production path: the archive worker re-verified every source and signed
+    # the exact candidate rows of the latest snapshot (archive_receipts).
+    latest = latest_legacy_snapshot()
+    if latest is not None and (latest / "attestation.json").is_file():
+        try:
+            rows, _summary = attested_rows(latest)
+        except (ArchiveReceiptError, OSError, ValueError) as exc:
+            raise SourceIntegrityError(
+                f"legacy attestation failed verification: {exc}") from exc
+        if row_digest(candidate) in rows:
+            return
+        raise SourceIntegrityError(
+            "legacy candidate is not in the archive worker attestation")
     archive = archive or LegacyArchive()
     try:
         evidence = archive.read(candidate["legacy_document_object"],
@@ -573,14 +655,18 @@ def validate_legacy_candidate(candidate: dict, *, archive: LegacyArchive | None 
 
 
 def capture_selected(selected: list[dict], state: dict, archive: LegacyArchive,
-                     http: BoundedHttp, *, limit: int, retry_failures: bool = False):
+                     http: BoundedHttp, *, limit: int, retry_failures: bool = False,
+                     capture_only: bool = False):
     stats = {"captured": 0, "reused": 0, "failed": 0, "skipped_failures": 0}
     attempted = 0
     for candidate in selected:
         key = candidate["document_id"]
         if key in state["documents"]:
             previous = state["documents"][key]
-            _verified_document(previous, archive)
+            if capture_only:
+                _verified_pinned(previous, archive)
+            else:
+                _verified_document(previous, archive)
             if any(previous.get(field) != candidate.get(field) for field in
                    ("publication_date", "execution_date", "official_pdf_url", "issue")):
                 raise SourceIntegrityError("resumed official document identity changed")
@@ -623,7 +709,8 @@ def capture_selected(selected: list[dict], state: dict, archive: LegacyArchive,
 def _publish(archive: LegacyArchive, state: dict, *, start: str, end: str,
              selected: list[dict], procedures: list[dict], http: BoundedHttp,
              stats: dict, stopped: str | None,
-             selection_conflicts: dict | None = None) -> dict:
+             selection_conflicts: dict | None = None,
+             snapshot_root: Path = SNAPSHOT_ROOT) -> dict:
     selection_conflicts = selection_conflicts or {}
     # Keep immutable evidence in the checkpoint, but do not publish an identity
     # contradicted by the discovery inputs for this run.
@@ -667,7 +754,7 @@ def _publish(archive: LegacyArchive, state: dict, *, start: str, end: str,
                "coverage_complete": False,
                "coverage_note": "Exact DIP descriptors plus final BGBl article matching; "
                                 "unmatched, undownloaded, scanned and unresolved records remain gaps."}
-    out = SNAPSHOT_ROOT / date.today().isoformat()
+    out = Path(snapshot_root) / datetime.now(timezone.utc).date().isoformat()
     payloads = {"documents.jsonl": b"".join(_json_bytes(row) for row in documents),
                 "candidates.jsonl": b"".join(_json_bytes(row) for row in candidates),
                 "summary.json": _json_bytes(summary)}
@@ -702,7 +789,17 @@ def main() -> int:
     parser.add_argument("--retry-failures", action="store_true")
     parser.add_argument("--inventory-only", action="store_true")
     parser.add_argument("--rebuild", action="store_true", help="offline verification and rebuild")
+    parser.add_argument("--capture-only", action="store_true",
+                        help="VPS mode: discover and capture new sources, keep the "
+                             "checkpoint, but do not publish candidates (the "
+                             "archive worker rebuilds and attests them)")
+    parser.add_argument("--archive-root", type=Path, default=ARCHIVE_ROOT,
+                        help="legacy source store (archive worker: the pulled archive)")
+    parser.add_argument("--snapshot-root", type=Path, default=SNAPSHOT_ROOT,
+                        help="where the rebuilt candidate snapshot is written")
     args = parser.parse_args()
+    if args.capture_only and (args.rebuild or args.inventory_only):
+        parser.error("--capture-only cannot be combined with --rebuild/--inventory-only")
     try:
         if not "1949-01-01" <= _day(args.start) <= _day(args.end) < "2023-01-01":
             raise ValueError("legacy dates must be within 1949-2022")
@@ -711,9 +808,12 @@ def main() -> int:
         periods = args.wahlperiode or list(range(16, 21))
         if any(not 1 <= wp <= 20 for wp in periods):
             raise ValueError("legacy electoral periods must be between 1 and 20")
-        archive = LegacyArchive(max_bytes=int(args.max_archive_mib * MIB),
+        # --max-archive-mib 0: the uncapped archive worker archive.
+        archive = LegacyArchive(args.archive_root,
+                                max_bytes=(None if args.max_archive_mib == 0
+                                           else int(args.max_archive_mib * MIB)),
                                 min_free_bytes=int(args.min_free_mib * MIB),
-                                accounting_roots=(SNAPSHOT_ROOT,))
+                                accounting_roots=(args.snapshot_root,))
         http = BoundedHttp(max_requests=args.max_requests,
                            max_bytes=int(args.max_download_mib * MIB), delay=args.delay)
     except ValueError as exc:
@@ -739,7 +839,8 @@ def main() -> int:
             print(f"Selected {len(selected)} official pre-2023 documents", flush=True)
             if not args.inventory_only:
                 _, stats = capture_selected(selected, state, archive, http,
-                                             limit=args.limit, retry_failures=args.retry_failures)
+                                             limit=args.limit, retry_failures=args.retry_failures,
+                                             capture_only=args.capture_only)
     except BudgetExceeded as exc:
         stopped = str(exc)
         print(f"Checkpoint retained: {stopped}", flush=True)
@@ -749,10 +850,19 @@ def main() -> int:
         selected = select_legacy_documents(procedures, load_curated_acts(),
                                             args.start, args.end,
                                             conflicts=selection_conflicts)
+    if args.capture_only:
+        print(json.dumps({"mode": "capture_only", "capture_this_run": stats,
+                          "stopped": stopped,
+                          "captured_documents": len(state["documents"]),
+                          "archive_bytes": archive.size_bytes(),
+                          "publication": "archive worker rebuild + attestation"},
+                         ensure_ascii=False, sort_keys=True))
+        return 0
     summary = _publish(archive, state, start=args.start, end=args.end,
                        selected=selected, procedures=procedures, http=http,
                        stats=stats, stopped=stopped,
-                       selection_conflicts=selection_conflicts)
+                       selection_conflicts=selection_conflicts,
+                       snapshot_root=args.snapshot_root)
     print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 
