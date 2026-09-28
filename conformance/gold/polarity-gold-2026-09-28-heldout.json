@@ -5,7 +5,8 @@
  "sample": "held-out: rules courts-polarity-rules/1.2.0 run over random relations of the live corpus (seed 20260929), paragraphs of the first gold file excluded, cost/procedural norms excluded (procedural_reference since parser 1.5.0), negative types overweighted",
  "label_semantics": {
   "correct": "the proposed assessment is what the court's own text says about the cited target",
-  "correct_reading": "what the relation should be instead"
+  "correct_reading": "what the relation should be instead",
+  "holds_inapplicable": "the court states as its own legal proposition (also general, conditional, or restating a statutory exclusion) that the cited norm does not apply; not: views of parties or other courts, possibilities (kann/dürfte), questions, norms that ground another norm's inapplicability"
  },
  "items": [
   {
@@ -1490,9 +1491,9 @@
    "clause": "Wenn sich allerdings der Arbeitslose zusammenhängend länger als sechs Wochen außerhalb des zeit- und ortsnahen Bereiches aufhalten will, finden gemäß § 3 Abs. 4 EAO die Regelungen in § 3 Abs. 1 und 2 EAO keine Anwendung (zum eindeutigen Wortlaut siehe Sächsisches LSG, Beschluss vom 10. März 2022 – L 3 AS 1157/21 B ER –, Rn. 35, juris).",
    "paragraph_id": "ECLI:DE:LSGBEBB:2022:0609.L14AL102.19.00#rn-39",
    "decision_id": "ECLI:DE:LSGBEBB:2022:0609.L14AL102.19.00",
-   "correct": false,
-   "correct_reading": "mentions",
-   "note": "conditional rule statement (Wenn …, finden … keine Anwendung)",
+   "correct": true,
+   "correct_reading": "holds_inapplicable",
+   "note": "conditional legal statement by the court (restating § 3 Abs. 4 EAO): counts as holding, like the BAG § 326 BGB conformance case",
    "span": [
     768,
     788
