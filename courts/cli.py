@@ -222,9 +222,11 @@ def cmd_verify(args) -> int:
     if not args.offline:
         ignored = {urlsplit(a.base_url).netloc for a in registry().values()
                    if a.robots_policy == "ignore_by_operator_decision"}
-        http = PoliteHttp(min_interval=2.0, ignore_robots_hosts=ignored)
-    print(json.dumps(verify_sample(conn, sample=args.sample, http=http, source=args.source, seed=args.seed),
-                     indent=2))
+        # Slow on purpose: the same hosts may be serving a running sync (combined rate stays ~1 req/s).
+        http = PoliteHttp(min_interval=args.interval, ignore_robots_hosts=ignored)
+    kinds = set(args.kinds.split(",")) if args.kinds else None
+    print(json.dumps(verify_sample(conn, sample=args.sample, http=http, source=args.source, seed=args.seed,
+                                   kinds=kinds, reuse_run=args.rerun), indent=2))
     return 0
 
 
@@ -366,6 +368,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--source")
     p.add_argument("--seed", type=int)
     p.add_argument("--offline", action="store_true", help="only pairs whose second capture is already packed")
+    p.add_argument("--kinds", help="comma list of pair kinds: capture, nrwe-pdf, rii-xml (default: all)")
+    p.add_argument("--rerun", type=int, help="re-check exactly the pairs of an earlier run (offline)")
+    p.add_argument("--interval", type=float, default=8.0, help="seconds between requests per host (default 8)")
     p.set_defaults(func=cmd_verify)
     p = sub.add_parser("check-norm-ids", help="every relation norm id must be canonical for Lexgraph's resolver")
     p.set_defaults(func=cmd_check_norm_ids)
