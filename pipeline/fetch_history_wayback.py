@@ -23,7 +23,9 @@ Capture timestamps are *capture* dates (``known_at``), never legal dates.
 
 Politeness: at most one request per ``--delay`` seconds (default 2.5, never
 below 2.0) to archive.org, exponential back-off on 429/5xx/connection errors,
-and the run stops after ``--max-consecutive-failures`` failures in a row.
+and the run stops after ``--max-consecutive-failures`` failed requests in a
+row (default 7: one broken capture costs 3 attempts and is skipped, an outage
+stops the run within three captures).
 Runs are bounded by ``--max-requests`` and ``--max-bytes`` and resume from
 the ledger.
 
@@ -162,7 +164,7 @@ class PoliteClient:
 
     def __init__(self, delay: float = 2.5, max_requests: int = 1000,
                  max_bytes: int = 2 * 1024 ** 3,
-                 max_consecutive_failures: int = 4,
+                 max_consecutive_failures: int = 7,
                  session: requests.Session | None = None,
                  sleep=time.sleep, clock=time.monotonic):
         self.delay = max(MIN_DELAY, float(delay))
@@ -512,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--delay", type=float, default=2.5)
     ap.add_argument("--max-requests", type=int, default=2000)
     ap.add_argument("--max-bytes", type=parse_size, default="3G")
-    ap.add_argument("--max-consecutive-failures", type=int, default=4)
+    ap.add_argument("--max-consecutive-failures", type=int, default=7)
     ap.add_argument("--retry-errors", type=int, default=3,
                     help="skip captures that already failed this many times")
     ap.add_argument("--cdx-max-age-days", type=float, default=7.0)

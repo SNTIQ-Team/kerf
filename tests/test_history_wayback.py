@@ -16,8 +16,13 @@ Fixtures (tests/fixtures/history/) are real bytes:
   with ``<br>``),
 * ``neuris-aufenthg-2026-07-29-2026-08-10-excerpt.zip`` - NeuRIS expression
   trimmed to §§ 1, 23, 62d plus its Anlage,
-* ``expected_gii_xml_norms.json`` - the XML-derived Lexgraph daily-state
-  texts (``fetch_gii.parse_law``) for the 2026 fixtures.
+* ``gii-bgb-20120729…``, ``gii-zpo-20121014…``, ``gii-bgb-20160423…``,
+  ``gii-bgb-20220101…`` - Wayback excerpts with GII placeholder designators
+  and an Ident-class table of contents, ``gii-zpo-20061018053022-…`` - a
+  legacy page with a designator-less heading,
+* ``expected_gii_xml_norms.json`` - XML-derived texts
+  (``fetch_gii.parse_law``): Lexgraph daily states for the 2026 fixtures,
+  archived xml.zip captures of the same weeks for the older ones.
 """
 from __future__ import annotations
 
@@ -131,10 +136,15 @@ def test_xml_zip_parse_is_fetch_gii_parse_law():
     "gii-sgb_2-20260710123039-jnnorm-2022.html.gz",
     "gii-bgb-live20260928-jnnorm-2022.html.gz",
     "gii-zpo-live20260928-jnnorm-2022.html.gz",
+    # older pages against the archived xml.zip of the same weeks
+    "gii-bgb-20120729-jnnorm-2008.html.gz",
+    "gii-zpo-20121014-jnnorm-2008.html.gz",
+    "gii-bgb-20160423-jnnorm-2008.html.gz",
+    "gii-bgb-20220101-jnnorm-2008.html.gz",
 ])
-def test_jnnorm_2022_matches_xml_derived_daily_state(fixture):
+def test_html_matches_xml_derived_texts(fixture):
     rec = gp.parse_gii_html(html(fixture))
-    assert rec["layout"] == "jnnorm-2022" and rec["complete"]
+    assert rec["layout"].startswith("jnnorm") and rec["complete"]
     expected = EXPECTED[fixture]["norms"]
     assert ids(rec["norms"]) == ids(expected)
     # beyond identity, the text differs at most by whitespace
@@ -160,11 +170,42 @@ def test_jnnorm_2022_special_cases():
     assert "titel_cut_at_child_element" in zpo["§ 799a"]["flags"]
 
 
+def test_placeholder_designators_follow_the_xml():
+    """GII XML writes "(XXXX)" designators the HTML never shows."""
+    bgb16 = by_enbez(gp.parse_gii_html(html("gii-bgb-20160423-jnnorm-2008.html.gz")))
+    # no designator span, the range in the title: XML enbez "(XXXX)"
+    assert bgb16["(XXXX)"]["titel"] == "§§ 2354 bis 2359"
+    assert "(XXXX) §§ 114, 115" in bgb16            # comma ranges too
+    zpo12 = by_enbez(gp.parse_gii_html(html("gii-zpo-20121014-jnnorm-2008.html.gz")))
+    assert zpo12["(XXXX) § 802l"]["titel"] == "(zukünftig in Kraft)"
+    bgb22 = by_enbez(gp.parse_gii_html(html("gii-bgb-20220101-jnnorm-2008.html.gz")))
+    # blank-padded " (zukünftig in Kraft) " is generated, XML titel empty
+    assert bgb22["(XXXX) §§ 707a bis 707c"]["titel"] == ""
+    bgb12 = by_enbez(gp.parse_gii_html(html("gii-bgb-20120729-jnnorm-2008.html.gz")))
+    assert bgb12["Inhaltsübersicht"]["text"] == ""   # Ident-class <TOC>
+
+
+def test_legacy_heading_without_designator_is_skipped():
+    rec = gp.parse_gii_html(html("gii-zpo-20061018053022-juris-table.html.gz"))
+    assert rec["layout"] == "juris-table-2006" and rec["complete"]
+    assert [n["enbez"] for n in rec["norms"]] == \
+        ["§ 1", "§ 2", "(XXXX) §§ 195a bis 213a"]
+    assert rec["warnings"] == [
+        "heading without designator skipped: Zivilprozessordnung"]
+    assert [e["type"] for e in rec["stand"]["entries"]] == ["Neuf", "Stand"]
+
+
 def test_truncated_or_foreign_pages_are_incomplete():
     page = html("gii-asylblg-20121227221957-jnnorm-2008.html.gz")
+    full = gp.parse_gii_html(page)
     cut = gp.parse_gii_html(page[: len(page) * 2 // 3])
     assert cut["complete"] is False
     assert any("truncated" in w for w in cut["warnings"])
+    # the norm cut mid-text is dropped; everything kept is a real version
+    assert 0 < cut["norm_count"] < full["norm_count"]
+    assert set(ids(cut["norms"])) <= set(ids(full["norms"]))
+    assert cut["truncated_after"] == cut["norms"][-1]["enbez"]
+    assert any("dropped" in w for w in cut["warnings"])
     other = gp.parse_gii_html(b"<html><body><p>Wartungsarbeiten</p></body></html>")
     assert other["complete"] is False and other["norms"] == []
     assert "unrecognised page layout" in other["warnings"]
