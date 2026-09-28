@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS amtsgraph_courts(
 CREATE TABLE IF NOT EXISTS court_map(
   court_slug TEXT PRIMARY KEY,
   court_id TEXT,
-  basis TEXT NOT NULL CHECK(basis IN ('ecli_code','name_active','name_dissolved','ambiguous','unmapped')),
+  basis TEXT NOT NULL CHECK(basis IN ('ecli_code','name_active','name_dissolved','seat_in_land','ambiguous',
+                                      'unmapped')),
   candidates TEXT NOT NULL DEFAULT '[]',
   snapshot_id TEXT
 );
@@ -97,11 +98,44 @@ def build_map(records: list[dict]) -> dict[str, dict]:
     return mapping
 
 
+TYPE_KIND = {"vg": "verwaltungsgericht", "ovg": "oberverwaltungsgericht", "vgh": "oberverwaltungsgericht",
+             "sg": "sozialgericht", "lsg": "landessozialgericht", "ag": "amtsgericht", "lg": "landgericht",
+             "olg": "oberlandesgericht", "arbg": "arbeitsgericht", "lag": "landesarbeitsgericht", "fg": "finanzgericht",
+             "verfgh": "verfassungsgericht", "oblg": "oberstes_landesgericht", "bg": "berufsgericht",
+             "dg": "dienstgericht"}
+
+
+def seat_in_land(slug: str, court_type: str | None, land: str | None, records: list[dict]) -> str | None:
+    """Fallback for seat spellings ("Neustadt (Weinstraße)" vs "Neustadt an der Weinstraße", "VG des
+    Saarlandes" vs "VG Saarlouis"): same court type and Land, and either the only such court in the Land or
+    the same first seat word.  Anything else stays unmapped."""
+    kind = TYPE_KIND.get(court_type or "")
+    ags = {v: k for k, v in AGS_LAND.items()}.get(land or "")
+    if not kind or not ags:
+        return None
+    pool = [r for r in records if r.get("kind") == kind and r.get("land_code") == ags and r.get("status") == "active"
+            and r.get("unit_type") in (None, "court") and not NOT_A_BENCH.search(r.get("official_name") or "")]
+    if len(pool) == 1:
+        return pool[0]["court_id"]
+    seat = slug.split("-", 1)[1].split("-")[0] if "-" in slug else ""
+    hits = [r for r in pool if seat and resolve(r.get("official_name") or "", default_land=land).court_id
+            .split("-", 1)[-1].split("-")[0] == seat]
+    return hits[0]["court_id"] if len(hits) == 1 else None
+
+
 def store_mapping(conn: sqlite3.Connection, payload: dict) -> dict:
     records, snapshot = records_from_payload(payload)
     if not records:
         raise ValueError("Amtsgraph court mapping without records")
     mapping = build_map(records)
+    for slug, court_type, land in conn.execute(
+            "SELECT court_slug, court_type, land FROM decisions GROUP BY court_slug").fetchall():
+        if slug not in mapping:
+            found = seat_in_land(slug, court_type, land, records)
+            if found:
+                mapping[slug] = {"court_id": found, "basis": "seat_in_land", "candidates": []}
+    conn.execute("DROP TABLE IF EXISTS court_map")   # derived table: rebuilt with the current CHECK list
+    conn.executescript(SCHEMA)
     conn.execute("BEGIN IMMEDIATE")
     conn.execute("DELETE FROM amtsgraph_courts")
     conn.executemany("""INSERT INTO amtsgraph_courts VALUES(?,?,?,?,?,?,?,?,?,?,?,

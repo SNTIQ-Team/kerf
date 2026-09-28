@@ -128,7 +128,7 @@ Columns: `id` PK, `target` (decision id, or paragraph id `<decision>#rn-10`), `k
 
 ### Court identity (`amtsgraph_courts`, `court_map`)
 - `amtsgraph_courts`: a copy of Amtsgraph `/v1/courts/mapping` with `court_id` PK, `official_name`, `xjustiz_id`, `ecli_court_code`, `kind`, `land_code` (AGS), `status`, `unit_type`, `parent_court_id`, `aliases` (JSON), `snapshot_id`, `fetched_at`.
-- `court_map`: `court_slug` PK, `court_id` (NULL if unmapped or ambiguous), `basis` ∈ `ecli_code, name_active, name_dissolved, ambiguous, unmapped`, `candidates` (JSON), `snapshot_id`. Names are matched through the canonical `courts.courtids.resolve`. An ambiguous name, e.g. "Amtsgericht Fürth" (BY and HE), is settled per decision by its Land, never by guessing.
+- `court_map`: `court_slug` PK, `court_id` (NULL if unmapped or ambiguous), `basis` ∈ `ecli_code, name_active, name_dissolved, seat_in_land, ambiguous, unmapped` (`seat_in_land`: same court type and Land, with the only such court in the Land or the same first seat word, e.g. "VG Neustadt (Weinstraße)" → "Verwaltungsgericht Neustadt an der Weinstraße"), `candidates` (JSON), `snapshot_id`. Names are matched through the canonical `courts.courtids.resolve`. An ambiguous name, e.g. "Amtsgericht Fürth" (BY and HE), is settled per decision by its Land, never by guessing.
 - CLI: `python -m courts courts-map [--file payload.json]`.
 
 ### Sync bookkeeping
