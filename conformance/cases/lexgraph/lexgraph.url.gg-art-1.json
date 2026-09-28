@@ -1,0 +1,52 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.url.gg-art-1",
+  "module": "lexgraph",
+  "kind": "norm_url",
+  "description": "GG Art. 1 resolves through the captured official GII table of contents to .../gg/art_1.html. A URL is never built from a number: the GG has no '§ 1', so para/1 is norm_not_in_toc (never __1.html).",
+  "origin": "PRIMA audit finding g (GII per-norm URLs from the official TOC); spec: Operating principles 2 (GG Art. 1 URL); tests/test_evidence_contract.py",
+  "status": "active",
+  "input": {
+    "toc_html": "tests/fixtures/gii_toc/gg_index.html",
+    "slug": "gg",
+    "queries": [
+      {
+        "unit": "art",
+        "number": "1"
+      },
+      {
+        "unit": "para",
+        "number": "1"
+      },
+      {
+        "unit": "art",
+        "number": "143h"
+      }
+    ]
+  },
+  "expected": {
+    "results": [
+      {
+        "key": "art/1",
+        "url": "https://www.gesetze-im-internet.de/gg/art_1.html",
+        "status": "resolved"
+      },
+      {
+        "key": "para/1",
+        "url": null,
+        "status": "norm_not_in_toc"
+      },
+      {
+        "key": "art/143h",
+        "url": "https://www.gesetze-im-internet.de/gg/art_143h.html",
+        "status": "resolved"
+      }
+    ],
+    "toc_norms": {
+      "art/1": "art_1.html",
+      "art/143h": "art_143h.html",
+      "text/praambel": "pr_ambel.html"
+    }
+  },
+  "match": "subset"
+}

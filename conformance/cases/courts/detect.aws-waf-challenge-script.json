@@ -1,0 +1,17 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.detect.aws-waf-challenge-script",
+  "module": "courts",
+  "kind": "page_classification",
+  "description": "AWS WAF JavaScript challenge body (gokuProps + token.awswaf.com challenge.js); same fixture as the MCP's Node suite",
+  "origin": "paper §6.5; shared with plugins/sntiq-legal/tests/conformance.test.mjs (aws-waf)",
+  "status": "active",
+  "input": {
+    "fixture": "conformance/fixtures/pages/aws-waf-challenge-script.html",
+    "status": 200
+  },
+  "expected": {
+    "kind": "challenge"
+  },
+  "match": "subset"
+}

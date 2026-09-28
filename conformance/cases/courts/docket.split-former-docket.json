@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.docket.split-former-docket",
+  "module": "courts",
+  "kind": "case_numbers",
+  "description": "combined docket '19 U 104/90    (vormals: 19 U 147/86)'",
+  "origin": "spec Identity/Decision; NRWE/BAG captures",
+  "status": "active",
+  "input": {
+    "raw": "19 U 104/90    (vormals: 19 U 147/86)"
+  },
+  "expected": {
+    "case_numbers": [
+      "19 U 104/90",
+      "19 U 147/86"
+    ]
+  },
+  "match": "subset"
+}

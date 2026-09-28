@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.negated-positive-cue",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: negated-positive-cue",
+  "origin": "negative control",
+  "status": "active",
+  "input": {
+    "text": "Der Senat entscheidet nicht unter Anwendung des § 75 VwGO.",
+    "own_court_id": "bverwg",
+    "jurisdiction": "verwaltung",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": []
+  },
+  "match": "subset"
+}

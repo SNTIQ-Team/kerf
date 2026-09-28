@@ -1,0 +1,25 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.docket.split-eight-dockets",
+  "module": "courts",
+  "kind": "case_numbers",
+  "description": "combined docket 'L 3 R 485/25 B, L 3 R 486/25 B, L 3 R 499/25 B, L 3 R 500/25 B, L 3 R 501/25 B, L 3 R 502/25 B, L 3 R 503/25 B und L 3 R 504/25 B'",
+  "origin": "spec Identity/Decision; NRWE/BAG captures",
+  "status": "active",
+  "input": {
+    "raw": "L 3 R 485/25 B, L 3 R 486/25 B, L 3 R 499/25 B, L 3 R 500/25 B, L 3 R 501/25 B, L 3 R 502/25 B, L 3 R 503/25 B und L 3 R 504/25 B"
+  },
+  "expected": {
+    "case_numbers": [
+      "L 3 R 485/25 B",
+      "L 3 R 486/25 B",
+      "L 3 R 499/25 B",
+      "L 3 R 500/25 B",
+      "L 3 R 501/25 B",
+      "L 3 R 502/25 B",
+      "L 3 R 503/25 B",
+      "L 3 R 504/25 B"
+    ]
+  },
+  "match": "subset"
+}

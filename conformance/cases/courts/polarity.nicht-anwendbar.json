@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.nicht-anwendbar",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: nicht-anwendbar",
+  "origin": "BAG 4 AZR 254/23 Rn 12",
+  "status": "active",
+  "input": {
+    "text": "§ 9 Abs. 5 ArbGG ist auf die Berufungsbegründungsfrist nicht anwendbar.",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "holds_inapplicable|de/bund/arbgg/para/9/abs/5"
+      ]
+    }
+  },
+  "match": "subset"
+}

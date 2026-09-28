@@ -70,13 +70,16 @@ class PoliteHttp:
 
     def __init__(self, *, min_interval: float = MIN_INTERVAL_SECONDS,
                  timeout: float = 60.0, retries: int = 2,
-                 respect_robots: bool = True, session: requests.Session | None = None):
+                 respect_robots: bool = True, session: requests.Session | None = None,
+                 ignore_robots_hosts: set[str] | frozenset[str] = frozenset()):
         if min_interval < 1.0:
             raise ValueError("politeness floor is 1 request per second per host")
         self.min_interval = min_interval
         self.timeout = timeout
         self.retries = retries
         self.respect_robots = respect_robots
+        # Hosts whose robots.txt is not applied by recorded operator decision (sources.robots_policy).
+        self.ignore_robots_hosts = {h.lower() for h in ignore_robots_hosts}
         self.session = session or requests.Session()
         self.session.headers.update({
             "User-Agent": USER_AGENT,
@@ -132,7 +135,7 @@ class PoliteHttp:
         return self._host(url).interval
 
     def check_robots(self, url: str) -> None:
-        if not self.respect_robots:
+        if not self.respect_robots or urlsplit(url).netloc.lower() in self.ignore_robots_hosts:
             return
         host = self._host(url)
         with host.lock:
@@ -178,6 +181,10 @@ class PoliteHttp:
                                 not_modified=raw.status_code == 304)
             if response.not_modified:
                 return response
+            if detect and response.headers.get("x-amzn-waf-action"):
+                # AWS WAF challenge (any status, often 202 with an empty body): never retried.
+                raise UpstreamFailure("challenge", f"AWS WAF action {response.headers['x-amzn-waf-action']!r}",
+                                      url=url, status=raw.status_code)
             if raw.status_code in (429, 500, 502, 503, 504):
                 if detect and looks_like_html(response.body):
                     # A challenge or login wall served with 429/503 is never retried.
@@ -201,7 +208,7 @@ class PoliteHttp:
             if detect:
                 # A challenge served with 403 is a challenge, not an ordinary HTTP error.
                 ensure_not_blocked(response.body, url=url, status=raw.status_code,
-                                   content_type=response.content_type)
+                                   content_type=response.content_type, headers=response.headers)
             if raw.status_code >= 400:
                 raise UpstreamFailure("http_error", f"HTTP {raw.status_code}", url=url,
                                       status=raw.status_code)

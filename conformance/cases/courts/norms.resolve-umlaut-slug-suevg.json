@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.norms.resolve-umlaut-slug-suevg",
+  "module": "courts",
+  "kind": "act_resolution",
+  "description": "canonical act resolution: SÜG (no land)",
+  "origin": "operating principle 1 (Lexgraph resolver)",
+  "status": "active",
+  "input": {
+    "abbreviation": "SÜG",
+    "land": null
+  },
+  "expected": {
+    "prefix": "de/bund/s_g",
+    "basis": "gii_catalog",
+    "in_corpus": false
+  },
+  "match": "subset"
+}

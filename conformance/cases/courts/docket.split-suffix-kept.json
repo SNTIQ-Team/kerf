@@ -1,0 +1,18 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.docket.split-suffix-kept",
+  "module": "courts",
+  "kind": "case_numbers",
+  "description": "combined docket '8 AZR 194/25 (F)'",
+  "origin": "spec Identity/Decision; NRWE/BAG captures",
+  "status": "active",
+  "input": {
+    "raw": "8 AZR 194/25 (F)"
+  },
+  "expected": {
+    "case_numbers": [
+      "8 AZR 194/25 (F)"
+    ]
+  },
+  "match": "subset"
+}

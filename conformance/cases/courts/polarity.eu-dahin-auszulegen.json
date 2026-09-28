@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.eu-dahin-auszulegen",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: eu-dahin-auszulegen",
+  "origin": "BAG 8 AZR 139/24 Rn 22",
+  "status": "active",
+  "input": {
+    "text": "Art. 25 Abs. 1 der Verordnung (EU) Nr. 1215/2012 ist dahin auszulegen, dass eine Gerichtsstandsvereinbarung wirksam ist.",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "interprets|eu/32012R1215/art/25/abs/1"
+      ]
+    }
+  },
+  "match": "subset"
+}

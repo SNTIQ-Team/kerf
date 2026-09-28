@@ -1,0 +1,31 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.pagebreak.bayverfgh-15-vii-25-rn2",
+  "module": "courts",
+  "kind": "quote_to_paragraph",
+  "description": "BayVerfGH Vf. 15-VII-25: the last line of Rn 2 is on the next PDF page; the page break neither creates nor ends a Rn",
+  "origin": "spec Identity/Paragraph (page breaks never create a Rn)",
+  "status": "active",
+  "input": {
+    "adapter": "by",
+    "fixture": "tests/courts/fixtures/by/verfgh_15-vii-25_entscheidung.pdf",
+    "url": "https://www.bayern.verfassungsgerichtshof.de/media/images/bayverfgh/15-vii-25_entscheidung.pdf",
+    "item": {
+      "source_doc_id": "verfgh:/media/images/bayverfgh/15-vii-25_entscheidung.pdf",
+      "listed_date": "2026-07-31",
+      "listed_case_numbers": null,
+      "extra": {
+        "route": "verfgh",
+        "court_name": "Bayerischer Verfassungsgerichtshof",
+        "title": "Popularklage"
+      }
+    },
+    "quote": "Voraussetzung ist, dass der Wald bereits am 16. November 2022 bestanden hat"
+  },
+  "expected": {
+    "paragraph_ids": [
+      "rn-2"
+    ]
+  },
+  "match": "subset"
+}

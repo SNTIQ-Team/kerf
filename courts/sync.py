@@ -33,6 +33,14 @@ def log(message: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
 
 
+def after_store(conn: sqlite3.Connection, decision_id: str) -> None:
+    """Separate stages after parsing: rule-based relation assessments, then ledger corrections."""
+    from .ledger import apply_corrections
+    from .polarity import assess_decision
+    assess_decision(conn, decision_id)
+    apply_corrections(conn, decision_id)
+
+
 def _result(counts: dict, status: str, run_id: int, http: PoliteHttp, requests_before: int) -> dict:
     counts["requests"] = http.requests_made - requests_before
     return counts | {"status": status, "run_id": run_id}
@@ -117,8 +125,11 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                 content_hash, relpath = write_capture(capture.body, adapter.source_id, capture.extension, home,
                                                       conn=conn)
                 parsed = adapter.parse(capture, item)
-                _, changed = store_decision(conn, parsed, content_hash=content_hash, capture_path=relpath,
-                                            media_type=capture.media_type, observed_at=utcnow())
+                decision_id, changed = store_decision(conn, parsed, content_hash=content_hash,
+                                                      capture_path=relpath, media_type=capture.media_type,
+                                                      observed_at=utcnow())
+                if changed:
+                    after_store(conn, decision_id)
                 counts["stored" if changed else "unchanged"] += 1
                 consecutive_blocking = 0
             except UpstreamFailure as failure:
@@ -127,9 +138,10 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                     # e.g. RII and the court's own site: not a failure; the capture stays in the pack.
                     counts["duplicates"] = counts.get("duplicates", 0) + 1
                     conn.execute("""UPDATE source_items SET state='skipped', attempts=attempts+1, last_attempt=?,
-                                    failure_kind='duplicate_identity', failure_detail=? WHERE source_id=? AND
-                                    source_doc_id=?""", (utcnow(), failure.detail[:500], adapter.source_id,
-                                                         item["source_doc_id"]))
+                                    failure_kind='duplicate_identity', failure_detail=?, content_hash=?
+                                    WHERE source_id=? AND source_doc_id=?""",
+                                 (utcnow(), failure.detail[:500], content_hash, adapter.source_id,
+                                  item["source_doc_id"]))  # the capture stays usable for verification
                     consecutive_blocking = 0
                     continue
                 counts["failed"] += 1
@@ -210,8 +222,11 @@ def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None) -> 
             extension = ext_row[0] if ext_row else row["capture_path"].rsplit(".", 2)[-2]
             capture = Capture(body, row["source_url"], row["media_type"] or "", extension)
             parsed = adapter.parse(capture, row)
-            _, changed = store_decision(conn, parsed, content_hash=row["content_hash"],
-                                        capture_path=row["capture_path"], media_type=row["media_type"] or "")
+            decision_id, changed = store_decision(conn, parsed, content_hash=row["content_hash"],
+                                                  capture_path=row["capture_path"],
+                                                  media_type=row["media_type"] or "")
+            if changed:
+                after_store(conn, decision_id)
             counts["reparsed" if changed else "unchanged"] += 1
         except UpstreamFailure as failure:
             counts["failed"] += 1

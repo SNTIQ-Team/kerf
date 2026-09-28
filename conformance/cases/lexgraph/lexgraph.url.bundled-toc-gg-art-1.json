@@ -1,0 +1,38 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.url.bundled-toc-gg-art-1",
+  "module": "lexgraph",
+  "kind": "norm_url",
+  "description": "The TOC bundled with Lexgraph (api/data/gii_toc.json, used when the data plane has none) also maps GG Art. 1 to art_1.html and has no para/1 for the GG.",
+  "origin": "PRIMA audit finding g; spec: Operating principles 2 (GG Art. 1 URL); tests/test_evidence_contract.py::test_bundled_toc_covers_the_deep_corpus",
+  "status": "active",
+  "input": {
+    "toc_json": "api/data/gii_toc.json",
+    "slug": "gg",
+    "queries": [
+      {
+        "unit": "art",
+        "number": "1"
+      },
+      {
+        "unit": "para",
+        "number": "1"
+      }
+    ]
+  },
+  "expected": {
+    "results": [
+      {
+        "key": "art/1",
+        "url": "https://www.gesetze-im-internet.de/gg/art_1.html",
+        "status": "resolved"
+      },
+      {
+        "key": "para/1",
+        "url": null,
+        "status": "norm_not_in_toc"
+      }
+    ]
+  },
+  "match": "subset"
+}

@@ -1,0 +1,33 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.sgg-84-in-wehrdienst-decision",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "BVerwG 1 WNB 11.25 (Wehrdienstsenat) reports the BSG's reading of § 84 Abs. 1 Satz 1 SGG: mentions only, no applies; 'weicht … nicht … ab' is not departs_from",
+  "origin": "spec Operating principles 2 (§ 84 SGG in a non-SGG decision = mentions only); RII jb-WBRE202600301 Rn 11",
+  "status": "active",
+  "input": {
+    "text": "Diese Rechtsprechung weicht entgegen der Auffassung des Antragstellers auch nicht von der des Bundessozialgerichts ab. Das von ihm angeführte Urteil des Bundessozialgerichts vom 27. September 2023 - B 7 AS 10/22 R - bezieht sich auf eine Rechtsbehelfsbelehrung über die Einlegung eines Widerspruchs im behördlichen Verfahren. Die Notwendigkeit einer Belehrung auch über die Möglichkeit einer elektronischen Einlegung wird damit begründet, dass § 84 Abs. 1 Satz 1 SGG für das Widerspruchsverfahren die elektronische Form nach § 36a SGB I als eigenständige Form neben der Schriftform und der Einlegung zur Niederschrift aufführe. Auch § 36a Abs. 2 Satz 1 SGB I stelle auf die \"Ersetzung\" der Schriftform durch die elektronische Form ab. Weil damit eine Form an die Stelle der anderen trete, werde deutlich, dass beide Formen selbständig seien. Das schließe es aus, die elektronische Form nach § 36a Abs. 2 SGB I lediglich als Unterfall der Schriftform anzusehen (BSG Urteil vom 27. September 2023 - B 7 AS 10/22 R - juris Rn. 19).",
+    "own_court_id": "bverwg",
+    "jurisdiction": "verwaltung",
+    "land": "de"
+  },
+  "expected": {
+    "relations": {
+      "$contains": [
+        {
+          "relation": "mentions",
+          "target_id": "de/bund/sgg/para/84/abs/1/satz/1"
+        }
+      ]
+    },
+    "assessment_keys": {
+      "$excludes": [
+        "applies|de/bund/sgg/para/84/abs/1/satz/1",
+        "interprets|de/bund/sgg/para/84/abs/1/satz/1",
+        "departs_from|court:bsg/2023-09-27/B_7_AS_10-22_R"
+      ]
+    }
+  },
+  "match": "subset"
+}

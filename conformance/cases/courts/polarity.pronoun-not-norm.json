@@ -1,0 +1,19 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.pronoun-not-norm",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: pronoun-not-norm",
+  "origin": "pattern of BAG 3 AZR 65/24 Rn 13 (the claim is interpreted, not the norm)",
+  "status": "active",
+  "input": {
+    "text": "Sie ist dahin auszulegen, dass die Klägerin eine Berücksichtigung nach § 2 Abs. 1 BEEG begehrt.",
+    "own_court_id": "bag",
+    "jurisdiction": "arbeit",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": []
+  },
+  "match": "subset"
+}

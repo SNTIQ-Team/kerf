@@ -1,0 +1,31 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.url.no-toc-no-url",
+  "module": "lexgraph",
+  "kind": "norm_url",
+  "description": "Without a captured TOC the per-norm URL is unavailable (status toc_unavailable, url null), not guessed from the number; only the act URL is given.",
+  "origin": "PRIMA audit finding g; paper §7.3 (unavailable is not an empty or guessed result); tests/test_evidence_contract.py",
+  "status": "active",
+  "input": {
+    "toc_html": null,
+    "slug": "gg",
+    "queries": [
+      {
+        "unit": "art",
+        "number": "1"
+      }
+    ]
+  },
+  "expected": {
+    "results": [
+      {
+        "key": "art/1",
+        "url": null,
+        "act_url": "https://www.gesetze-im-internet.de/gg/",
+        "status": "toc_unavailable"
+      }
+    ],
+    "toc_norms": null
+  },
+  "match": "subset"
+}

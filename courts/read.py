@@ -267,8 +267,20 @@ def context_for(conn, r) -> str:
     return " ".join(text[max(0, r["span_start"] - CONTEXT_WIDTH):r["span_end"] + CONTEXT_WIDTH].split())
 
 
+def assessments_for(conn, r) -> list[dict]:
+    """Classifier proposals and user decisions for one parser relation (polarity always explicit)."""
+    rows = conn.execute("""SELECT assessment, polarity, cue, rule_id, derived_by, legal_effect_verified, status,
+                                  confidence, classifier_version
+                           FROM relation_assessments
+                           WHERE (relation_id = ?) OR (relation_id IS NULL AND paragraph_id IS ? AND target_id IS ?)
+                           ORDER BY derived_by DESC, confidence DESC""",
+                        (r["id"], r["paragraph_id"], r["target_id"])).fetchall()
+    return [dict(x, legal_effect_verified=bool(x["legal_effect_verified"])) for x in rows]
+
+
 def relation_row(r, conn=None) -> dict:
     return {"relation": r["relation"], "target_kind": r["target_kind"], "target_id": r["target_id"],
+            "assessments": assessments_for(conn, r) if conn is not None else [],
             "target_decision_id": r["target_decision_id"], "target_raw": r["target_raw"],
             "origin": r["origin"], "source_id": r["decision_id"],
             "evidence": {"paragraph_id": r["paragraph_id"],
@@ -294,7 +306,7 @@ def get_paragraph(conn: sqlite3.Connection, paragraph_id: str) -> dict:
 
 
 def citing_decisions(conn: sqlite3.Connection, target: str, *, relation: str | None = None,
-                     limit: int = 20, offset: int = 0) -> dict:
+                     assessment: str | None = None, limit: int = 20, offset: int = 0) -> dict:
     """Decisions whose text relates to a norm (prefix match on the identity) or a decision."""
     if relation is not None and relation not in {"mentions", "quotes", "procedural_reference"}:
         return {"status": "invalid_argument", "warnings": ["unknown relation"]}
@@ -307,13 +319,24 @@ def citing_decisions(conn: sqlite3.Connection, target: str, *, relation: str | N
     if relation:
         cond += " AND r.relation = ?"
         params.append(relation)
+    if assessment:
+        from .polarity import ASSESSMENTS
+        if assessment not in ASSESSMENTS:
+            return {"status": "invalid_argument", "warnings": [f"assessment must be one of {sorted(ASSESSMENTS)}"]}
+        cond += (" AND EXISTS (SELECT 1 FROM relation_assessments a WHERE a.assessment = ? AND a.status <> 'rejected'"
+                 " AND (a.relation_id = r.id OR (a.relation_id IS NULL AND a.paragraph_id IS r.paragraph_id"
+                 " AND a.target_id IS r.target_id)))")
+        params.append(assessment)
     total = conn.execute(f"SELECT count(*) FROM relations r WHERE {cond}", params).fetchone()[0]
     rows = conn.execute(f"SELECT r.* FROM relations r JOIN decisions d ON d.id = r.decision_id WHERE {cond} "
                         "ORDER BY d.decision_date DESC, r.id LIMIT ? OFFSET ?", (*params, limit, offset)).fetchall()
     return {"status": "ok", "target": target,
             "relation_types_included": [relation] if relation else ["mentions", "quotes", "procedural_reference"],
-            "note": "parser relations only (derived_by=parser, legal_effect_verified=false); "
-                    "they record that a decision mentions/quotes a target, not that it applies it",
+            "assessment_filter": assessment,
+            "note": "parser relations (mentions/quotes/procedural_reference) record that a decision cites a target, "
+                    "not that it applies it; each carries its rule/user assessments with explicit polarity "
+                    "(negative ones such as holds_inapplicable, rejects_application_of, distinguishes, "
+                    "departs_from must never be presented as support)",
             "total": total, "relations": [relation_row(r, conn) for r in rows]}
 
 

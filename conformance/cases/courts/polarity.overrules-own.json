@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.overrules-own",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: overrules-own",
+  "origin": "cue list (hält nicht mehr fest)",
+  "status": "active",
+  "input": {
+    "text": "Der Senat hält an seiner Rechtsprechung (Senatsurteil vom 17. März 2016 - B 4 AS 18/15 R -) nicht mehr fest.",
+    "own_court_id": "bsg",
+    "jurisdiction": "sozial",
+    "land": "de"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "overrules|court:bsg/2016-03-17/B_4_AS_18-15_R"
+      ]
+    }
+  },
+  "match": "subset"
+}
