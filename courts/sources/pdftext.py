@@ -20,6 +20,7 @@ from ..errors import UpstreamFailure
 from ..model import Block
 
 RN_LINE = re.compile(r"^(\d{1,3})\s{2,}(\S.*)$")
+MARGIN_NUMBER = re.compile(r"^( *)(\d{1,3})( {2,})(?=\S)")
 PAGE_MARKER = re.compile(r"^\s*(?:-\s*\d{1,3}\s*-|Seite\s+\d+(?:\s+von\s+\d+)?|\d{1,3}\s*/\s*\d{1,3})\s*$")
 RULE = re.compile(r"^\s*[-_=]{10,}\s*$")
 # Only at the top or bottom edge of a page: a bare page number ("2") or "Seite 2/7".
@@ -70,6 +71,32 @@ def join_lines(lines: list[str]) -> str:
     return out
 
 
+def align_margin_numbers(text: str) -> tuple[str, int]:
+    """Move right-aligned margin numbers to column 0.
+
+    pdftotext -layout right-aligns the Randnummern column: on a page that also
+    holds "10", Rn 9 is printed as " 9   Text", which pdftext.RN_LINE (number at
+    column 0) does not accept, and the Rn sequence would stop there.  A number
+    with one or two leading spaces is moved only when its text starts in the same
+    column as the text of a column-0 margin number on the same page; only
+    whitespace changes, the sequence check in layout_blocks still applies.
+    """
+    pages = text.split("\f")
+    moved = 0
+    for index, page in enumerate(pages):
+        lines = page.split("\n")
+        columns = {m.end() for m in map(MARGIN_NUMBER.match, lines) if m and not m.group(1)}
+        if not columns:
+            continue
+        for i, line in enumerate(lines):
+            m = MARGIN_NUMBER.match(line)
+            if m and 1 <= len(m.group(1)) <= 2 and m.end() in columns:
+                lines[i] = m.group(2) + " " * (len(m.group(1)) + len(m.group(3))) + line[m.end():]
+                moved += 1
+        pages[index] = "\n".join(lines)
+    return "\f".join(pages), moved
+
+
 def layout_blocks(text: str, *, running_headers: set[str] = frozenset(),
                   headings: dict[str, str] | None = None, detect_rn: bool = True) -> list[Block]:
     """Blocks with explicit Rn labels, heading blocks and page-break markers."""
@@ -88,6 +115,8 @@ def layout_blocks(text: str, *, running_headers: set[str] = frozenset(),
             blocks.append(Block(text=joined, label=label, locator=locator))
         current, label = [], None
 
+    if detect_rn:
+        text, _ = align_margin_numbers(text)
     pages = text.split("\f")
     for page_no, page in enumerate(pages, 1):
         lines = page.splitlines()

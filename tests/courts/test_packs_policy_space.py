@@ -133,7 +133,7 @@ def test_v1_database_is_upgraded_in_place(isolated_corpus):
 
 # --- operator robots policy -----------------------------------------------------------------
 
-IGNORED = {"rii", "bw", "be", "hh", "mv", "rp", "sl", "st", "sh", "th", "he"}
+IGNORED = {"rii", "bw", "be", "hh", "mv", "rp", "sl", "st", "sh", "th", "he", "sn"}
 
 
 def test_operator_decision_sources_are_flagged():
@@ -146,7 +146,7 @@ def test_operator_decision_sources_are_flagged():
         assert http.respect_robots is False and http.min_interval >= 1.0
     for source_id in ("nrw", "bverwg", "bsg", "bag", "bverfg", "bb", "ni", "hb", "by"):
         assert adapters[source_id].robots_policy == "respect" and http_for(adapters[source_id]).respect_robots
-    for source_id in ("bverwg", "bsg", "bverfg", "hb", "by"):
+    for source_id in ("bverwg", "bsg", "bverfg", "hb", "by", "sn"):
         assert 2.0 <= adapters[source_id].min_interval <= 5.0   # small court sites
 
 
