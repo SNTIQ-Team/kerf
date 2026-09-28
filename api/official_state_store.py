@@ -1,4 +1,4 @@
-"""Read-only resolver for published content-addressed federal states.
+"""Read-only resolver for published content-addressed official states.
 
 The pipeline hashes the canonical, uncompressed JSON bytes and publishes the
 same bytes as deterministic gzip objects.  The API verifies that digest again
@@ -76,7 +76,11 @@ def load_observed_state(data_dir: Path, act: dict[str, Any],
     if observation is None:
         return None
     digest = observation["state_sha256"]
-    path = (data_dir / "federal_states" / "objects" / "sha256"
+    store = observation.get("source_store") or "federal_states"
+    providers = {"federal_states": "GII", "bavarian_states": "BAYERN.RECHT"}
+    if not isinstance(store, str) or store not in providers or (observation.get("source") or "GII") != providers[store]:
+        raise OfficialStateError("unapproved or inconsistent official source store")
+    path = (data_dir / store / "objects" / "sha256"
             / digest[:2] / f"{digest}.json.gz")
     if not path.is_file():
         raise OfficialStateError(
@@ -93,9 +97,17 @@ def load_observed_state(data_dir: Path, act: dict[str, Any],
     if expected_count is not None and len(state["norms"]) != int(expected_count):
         raise OfficialStateError(
             f"official state object {digest} has an unexpected norm count")
+    # Provenance can describe the CAS body, never replace its verified text,
+    # heading, or identity with unhashed observation metadata.
+    metadata_keys = {
+        "observed_at", "date", "state_sha256", "state_digest", "norm_count",
+        "builddate", "source", "source_store", "source_url", "original_url",
+        "archive_url", "archive_timestamp", "captured_at", "source_html_sha256",
+        "date_basis", "verification", "retrieved_at",
+    }
     return {
         **state,
-        **observation,
+        **{key: value for key, value in observation.items() if key in metadata_keys},
         "source": observation.get("source") or "GII",
         "date_basis": observation.get("date_basis")
         or "retrieval_observation_not_effective_date",

@@ -2,12 +2,19 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 import unicodedata
 from datetime import date
 from pathlib import Path
 
 import requests
+
+try:
+    from .snapshot_storage import open_snapshot_text
+except ImportError:
+    from snapshot_storage import open_snapshot_text
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOTS = ROOT / "data" / "snapshots"
@@ -28,16 +35,27 @@ def latest_snapshot(source: str) -> Path | None:
 
 
 def write_jsonl(path: Path, rows) -> int:
+    path = Path(path)
     n = 0
-    with open(path, "w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            n += 1
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp",
+                                     dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                n += 1
+            f.flush()
+            os.fchmod(f.fileno(), path.stat().st_mode & 0o777
+                      if path.is_file() else 0o644)
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
     return n
 
 
 def read_jsonl(path: Path):
-    with open(path, encoding="utf-8") as f:
+    with open_snapshot_text(path) as f:
         for line in f:
             line = line.strip()
             if line:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import copy
 import sys
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from api.retrospective_store import (  # noqa: E402
     validate_manifest,
 )
 from official_states import archive_gii_states  # noqa: E402
+from official_states import store_state_object  # noqa: E402
+from api.official_state_store import load_state_digest  # noqa: E402
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -163,6 +166,75 @@ def test_diff_add_replace_and_norm_filter(tmp_path: Path):
     assert len(section["changes"]) == 1
     assert section["changes"][0]["old"] == "alt"
     assert section["changes"][0]["new"] == "neu"
+
+
+@pytest.mark.parametrize("reverse,operation", [(False, "add"), (True, "remove")])
+def test_norm_filtered_diff_includes_one_sided_lifecycle(tmp_path: Path, reverse, operation):
+    raw, store, _old, _new = _fixture(tmp_path)
+    dates = ["2024-06-01", "2025-06-01"]
+    if reverse:
+        dates.reverse()
+    result = diff_intervals(validate_manifest(raw), "fed_demog", *dates,
+                            store=store, norm="§ 2")
+    assert len(result["changes"]) == 1
+    change = result["changes"][0]
+    assert change["operation"] == operation
+    assert change["old" if not reverse else "new"] is None
+    assert change["new" if not reverse else "old"] == "zweiter Text"
+
+
+def test_norm_filtered_diff_rejects_absence_from_both_states(tmp_path: Path):
+    raw, store, _old, _new = _fixture(tmp_path)
+    with pytest.raises(RetrospectiveNotFound):
+        diff_intervals(validate_manifest(raw), "fed_demog", "2024-06-01",
+                       "2025-06-01", store=store, norm="§ 999")
+
+
+def _duplicate_fixture(tmp_path: Path, *, both_changed=False):
+    raw, store, old, new = _fixture(tmp_path)
+    for digest in (old, new):
+        state = copy.deepcopy(load_state_digest(store, digest))
+        state["norms"].append({"enbez": "§ 1", "titel": "Other chapter",
+                               "text": "stable" if not both_changed else
+                               "other old" if digest == old else "other new",
+                               "glied": "Teil 2"})
+        state["norm_count"] = len(state["norms"])
+        replacement, metadata = store_state_object(store, state)
+        raw["objects"][replacement] = metadata
+        for row in raw["acts"]["fed_demog"]["intervals"]:
+            for field in ("state_sha256", "previous_state_sha256"):
+                if row.get(field) == digest:
+                    row[field] = replacement
+    return validate_manifest(raw), store
+
+
+def test_whole_act_diff_handles_duplicate_labels_without_changing_unchanged_rows(tmp_path):
+    manifest, store = _duplicate_fixture(tmp_path)
+    result = diff_intervals(manifest, "fed_demog", "2024-06-01", "2025-06-01", store)
+    assert [(r["operation"], r["enbez"], r["old"], r["new"])
+            for r in result["changes"]] == [
+                ("replace", "§ 1", "alt", "neu"),
+                ("add", "§ 2", None, "zweiter Text"),
+            ]
+
+
+def test_norm_diff_is_not_blocked_by_unrelated_duplicate_labels(tmp_path):
+    manifest, store = _duplicate_fixture(tmp_path)
+    result = diff_intervals(manifest, "fed_demog", "2024-06-01", "2025-06-01", store, norm="§ 2")
+    assert [r["enbez"] for r in result["changes"]] == ["§ 2"]
+    with pytest.raises(RetrospectiveNotFound):
+        diff_intervals(manifest, "fed_demog", "2024-06-01", "2025-06-01", store, norm="§ 1")
+
+
+def test_ambiguous_duplicate_changes_do_not_invent_old_new_pairings(tmp_path):
+    manifest, store = _duplicate_fixture(tmp_path, both_changed=True)
+    result = diff_intervals(manifest, "fed_demog", "2024-06-01", "2025-06-01", store)
+    repeated = [r for r in result["changes"] if r["enbez"] == "§ 1"]
+    assert [(r["operation"], r["old"], r["new"]) for r in repeated] == [
+        ("remove", "alt", None), ("remove", "other old", None),
+        ("add", None, "neu"), ("add", None, "other new"),
+    ]
+    assert all(r["ambiguous_identity"] is True for r in repeated)
 
 
 def test_official_retroactive_date_is_preserved_not_rejected(tmp_path: Path):

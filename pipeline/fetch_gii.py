@@ -24,8 +24,11 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
+from datetime import date
 
-from common import Http, snapshot_dir, write_jsonl
+from common import ROOT, Http, snapshot_dir, write_jsonl
+from gii_import_cache import GiiImportCache, ImportBudgetExceeded
+from reader_source_cache import reader_act_id, save_reader_source
 
 TOC_URL = "https://www.gesetze-im-internet.de/gii-toc.xml"
 
@@ -81,6 +84,25 @@ PRACTICE_EXPANSION_2026_07 = {
 }
 
 CORPUS |= PRACTICE_EXPANSION_2026_07
+
+# Exact GII catalogue identifiers checked on 2026-09-21. Keep complementary
+# social-benefit regulations alongside transport, consumer and commercial law.
+PRACTICE_EXPANSION_2026_09 = {
+    "hgb", "gmbhg", "aktg", "umwg_1995", "uwg_2004", "vvg_2008",
+    "pflvg", "kredwg", "uklag", "prodhaftg", "tkg_2021", "ddg",
+    "zvg", "bzrg", "jgg", "stgbeg", "stpoeg", "gvgeg", "rdg",
+    "erbstg_1974", "ustg_1980", "ustdv_1980", "invstg_2018", "fvg_1971",
+    "solzg_1995", "gewstg", "kstg_1977", "grstg_1973", "bewg", "zag_2018",
+    "stvg", "stvo_2013", "fev_2010", "stvzo_2012", "fzv_2023",
+    "eeg_2014", "enwg_2005", "heizkostenv", "geg", "bbaug", "baunvo",
+    "bimschg", "whg_2009", "bnatschg_2009", "krwg", "ifsg", "amg_1976",
+    "mpdg", "pflbg", "b_o", "btmg_1981", "kcang", "sozsichabkg_ukr",
+    "hwo", "gewo", "ihkg", "gastg", "vbvg_2023", "ndav", "nav",
+    "avbwasserv", "avbfernw_rmev", "fernusg", "vsbg", "lpartg",
+    "advermig_1976", "prostschg", "schwbawv", "schwbwo", "versmedv",
+    "bkv", "rvo", "bshg_76dv", "bshg_88abs2dv_1988", "geschgehg",
+}
+CORPUS |= PRACTICE_EXPANSION_2026_09
 
 
 def strip_tags(el: ET.Element) -> str:
@@ -177,11 +199,30 @@ def require_complete_corpus(wanted: set[str], links: dict[str, str]) -> None:
             + ", ".join(missing))
 
 
+def bounded_zip_bytes(chunks, limit: int = 32 * 1024**2) -> bytearray:
+    # Official packages may include large image annexes (AufenthV ~19 MiB).
+    payload = bytearray()
+    for chunk in chunks:
+        if len(payload) + len(chunk) > limit:
+            raise ValueError("GII ZIP exceeds per-law download limit")
+        payload.extend(chunk)
+    return payload
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slugs", help="comma list; default: practice corpus")
+    ap.add_argument("--budget-mib", type=int, default=100,
+                    help="cumulative compressed checkpoint budget (default 100 MiB)")
+    ap.add_argument("--min-free-mib", type=int, default=1024)
     args = ap.parse_args()
+    if args.budget_mib < 1 or args.min_free_mib < 0:
+        ap.error("invalid import storage budget")
     wanted = set(args.slugs.split(",")) if args.slugs else set(CORPUS)
+    day = date.today().isoformat()
+    cache = GiiImportCache(ROOT / "data" / "gii_import_cache",
+                           max_bytes=args.budget_mib * 1024**2,
+                           min_free_bytes=args.min_free_mib * 1024**2)
 
     http = Http(delay=0.4)
     print("[toc] fetching index …")
@@ -201,16 +242,33 @@ def main() -> int:
 
     acts, norms = [], []
     for slug in sorted(wanted & links.keys()):
-        r = http.get(links[slug], timeout=90)
-        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
-            xml_name = next(n for n in z.namelist() if n.endswith(".xml"))
-            act, ns = parse_law(z.read(xml_name), slug)
+        checkpoint = cache.get(slug, day)
+        if checkpoint is None:
+            # Keep transport and expansion bounded before materialising XML.
+            with http.get(links[slug], timeout=90, stream=True) as response:
+                response.raise_for_status()
+                payload = bounded_zip_bytes(response.iter_content(64 * 1024))
+            with zipfile.ZipFile(io.BytesIO(payload)) as z:
+                xml = next(item for item in z.infolist() if item.filename.endswith(".xml"))
+                if xml.file_size > 64 * 1024**2:
+                    raise ValueError(f"GII XML exceeds per-law limit: {slug}")
+                xml_bytes = z.read(xml)
+                act, ns = parse_law(xml_bytes, slug)
+            try:
+                cache.put(slug, day, act, ns)
+            except ImportBudgetExceeded as exc:
+                print(f"[paused] {exc}", file=sys.stderr)
+                return 2
+            save_reader_source(ROOT / "data" / "reader-source",
+                               reader_act_id("fed", act["jurabk"]), xml_bytes)
+        else:
+            act, ns = checkpoint
         acts.append(act)
         norms.extend(ns)
         print(f"  {act['jurabk'] or slug:>16}  {act['norm_count']:4} §§  "
               f"build {act['builddate'][:8]}")
 
-    out = snapshot_dir("gii")
+    out = snapshot_dir("gii", day)
     write_jsonl(out / "catalog.jsonl", catalog)
     write_jsonl(out / "acts.jsonl", acts)
     write_jsonl(out / "norms.jsonl", norms)

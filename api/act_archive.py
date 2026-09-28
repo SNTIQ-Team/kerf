@@ -34,6 +34,8 @@ from datetime import date, datetime
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
+from api.markdown_layout import ParagraphLayouts, apply_paragraph_layout
+
 
 class ArchiveRequestError(ValueError):
     """A caller supplied a date or norm that cannot be resolved."""
@@ -385,7 +387,7 @@ def build_archive_index(act: dict[str, Any], *, fallback_head: Any = None
         day = observation["observed_at"]
         entry = dates.setdefault(day, {
             "date": day,
-            "label": "Official GII state observed",
+            "label": f"Official {observation.get('source') or 'GII'} state observed",
             "has_changes": False,
             "exact": True,
             "partial": False,
@@ -396,6 +398,9 @@ def build_archive_index(act: dict[str, Any], *, fallback_head: Any = None
             or "retrieval_observation_not_effective_date",
             "state_digest": observation["state_sha256"],
             "source_url": observation.get("source_url"),
+            "source": observation.get("source") or "GII",
+            "archive_url": observation.get("archive_url"),
+            "archive_timestamp": observation.get("archive_timestamp"),
             "builddate": observation.get("builddate"),
             "verification": observation.get("verification") or "exact",
             "exact": True,
@@ -612,6 +617,20 @@ def _yaml_string(value: Any) -> str:
     return json.dumps(str(value or ""), ensure_ascii=False)
 
 
+def _markdown_literal(text: str) -> str:
+    """Represent canonical plain source text without interpreting Markdown.
+
+    Chemical formulae contain [groups](substituents); legal forms use angle
+    brackets and asterisks. These are source characters, not authored links,
+    HTML, emphasis, headings, or list syntax.
+    """
+    escaped = re.sub(r"([\\`*_{}\[\]<>&|~#+])", r"\\\1", text)
+    escaped = re.sub(r"(?m)^([ \t]{0,3})([-=])", r"\1\\\2", escaped)
+    escaped = re.sub(r"(?m)^([ \t]{0,3}\d{1,9})([.)])(?=\s)",
+                     r"\1\\\2", escaped)
+    return escaped
+
+
 def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
               target: str, head_date: str, norm_ref: _NormRef | None,
               exact: bool, complete: bool, source_exact: bool,
@@ -619,7 +638,8 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
               gaps: list[dict[str, Any]],
               state_meta: dict[str, Any] | None = None,
               legal_meta: dict[str, Any] | None = None,
-              retrospective_meta: dict[str, Any] | None = None) -> str:
+              retrospective_meta: dict[str, Any] | None = None,
+              paragraph_layouts: ParagraphLayouts | None = None) -> str:
     status = archive_status
     scope = norm_ref.label if norm_ref is not None else "entire act"
     lines = [
@@ -636,8 +656,11 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         "verified_reconstruction: "
         f"{str(verified_reconstruction).lower()}",
         f"scope: {_yaml_string(scope)}",
+        "norm_body_format: escaped_plain_text",
         f"coverage_gaps: {len(gaps)}",
     ]
+    if paragraph_layouts is not None:
+        lines.append("paragraph_layout: separated")
     if retrospective_meta:
         lines.extend([
             f"as_of: {_yaml_string(retrospective_meta.get('as_of'))}",
@@ -660,6 +683,8 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
             f"date_basis: {_yaml_string(state_meta.get('date_basis'))}",
             f"source: {_yaml_string(state_meta.get('source') or 'GII')}",
             f"source_url: {_yaml_string(state_meta.get('source_url'))}",
+            f"archive_url: {_yaml_string(state_meta.get('archive_url'))}",
+            f"archive_timestamp: {_yaml_string(state_meta.get('archive_timestamp'))}",
             f"source_build: {_yaml_string(state_meta.get('builddate'))}",
             f"state_sha256: {_yaml_string(state_meta.get('state_sha256'))}",
         ])
@@ -672,6 +697,26 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
             f"verification: {_yaml_string(legal_meta.get('verification'))}",
             f"review_id: {_yaml_string(legal_meta.get('review_id'))}",
             f"source_url: {_yaml_string(legal_meta.get('source_url') or legal_meta.get('url'))}",
+        ])
+    elif target == head_date:
+        # The current consolidation is a source snapshot too: keep where and
+        # from which build it came, so the Markdown stays self-describing
+        # after it leaves the API (paper §7.4).
+        bavarian = str(act.get("juris") or "") == "DE-BY"
+        lines.extend([
+            "date_basis: \"current_consolidation_retrieval_not_effective_date\"",
+            f"source: {_yaml_string('BAYERN.RECHT' if bavarian else 'GII')}",
+            f"source_url: {_yaml_string(act.get('source_url') or act.get('permalink'))}",
+            f"source_build: {_yaml_string(act.get('build'))}",
+            f"observed_at: {_yaml_string(head_date)}",
+            f"stand: {_yaml_string(' '.join(str(act.get('stand') or '').split())[:600])}",
+        ])
+    else:
+        # A conservative reconstruction starts from the current snapshot;
+        # name that base instead of implying a capture for the target date.
+        lines.extend([
+            f"reconstructed_from: {_yaml_string(head_date)}",
+            f"reconstruction_base_url: {_yaml_string(act.get('source_url') or act.get('permalink'))}",
         ])
     lines.extend(["---", ""])
     title = str(act.get("title") or act.get("jurabk") or act.get("id") or "Act")
@@ -708,8 +753,8 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
                 lines.append(f"> - {label}")
     elif state_meta:
         lines.append(
-            "> This complete parsed state was observed in the official GII "
-            f"source on **{target}**. The date is a retrieval observation, "
+            f"> This complete parsed state was observed in the official {state_meta.get('source') or 'GII'} "
+            f"source on **{target}**. The date is a source/archive observation, "
             "not an inferred legal effective date.")
     elif legal_meta:
         lines.append(
@@ -744,7 +789,10 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
     for norm in selected:
         label = str(norm.get("enbez") or "").strip()
         norm_title = str(norm.get("titel") or "").strip()
-        body = str(norm.get("text") or "").strip()
+        body = str(norm.get("text") or "")
+        if paragraph_layouts is not None:
+            body = apply_paragraph_layout(label, body, paragraph_layouts)
+        body = body.strip()
         if not label and not norm_title and not body:
             continue
         heading = label or norm_title or "Untitled norm"
@@ -752,7 +800,8 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
             heading = f"{label} — {norm_title}"
         lines.append(f"## {heading}")
         lines.append("")
-        lines.append(body or "_Kein Normtext im konsolidierten Quellsnapshot._")
+        lines.append(_markdown_literal(body) if body else
+                     "_Kein Normtext im konsolidierten Quellsnapshot._")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -763,6 +812,7 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
                              observed_state: dict[str, Any] | None = None,
                              retrospective_state: dict[str, Any] | None = None,
                              retrospective_interval: dict[str, Any] | None = None,
+                             paragraph_layouts: ParagraphLayouts | None = None,
                              ) -> dict[str, Any]:
     """Resolve an arbitrary date and render the full act or one norm."""
     head_date = head_date_for(act, fallback_head)
@@ -822,8 +872,13 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
              or _parse_date(row.get("date"))) == target
     ]
     legal_meta = legal_candidates[0] if len(legal_candidates) == 1 else None
-    norm_ref = (_resolve_norm(current_norms, norm,
-                              _historical_designators(act))
+    # A complete selected state is its own norm inventory. Legacy amendment
+    # labels may support best-effort reconstruction, but cannot make a missing
+    # provision in an exact source snapshot look like an exact empty result.
+    historical_labels = (_historical_designators(act)
+                         if state_meta is None and retrospective_meta is None
+                         else ())
+    norm_ref = (_resolve_norm(current_norms, norm, historical_labels)
                 if norm is not None else None)
     if retrospective_meta is not None:
         norms = copy.deepcopy(current_norms)
@@ -863,15 +918,21 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
     archive_status = ("verified_reconstruction"
                       if verified_reconstruction else
                       "exact" if source_exact else "partial")
+    selected_state = retrospective_state if retrospective_state is not None else observed_state
+    selected_title = (selected_state or {}).get("title")
+    rendered_act = ({**act, "title": selected_title}
+                    if isinstance(selected_title, str) and selected_title.strip()
+                    else act)
     markdown = _markdown(
-        act, norms, target=target, head_date=head_date, norm_ref=norm_ref,
+        rendered_act, norms, target=target, head_date=head_date, norm_ref=norm_ref,
         exact=exact, complete=complete, source_exact=source_exact,
         verified_reconstruction=verified_reconstruction,
         archive_status=archive_status, gaps=gaps,
         state_meta=state_meta, legal_meta=legal_meta,
-        retrospective_meta=retrospective_meta)
+        retrospective_meta=retrospective_meta, paragraph_layouts=paragraph_layouts)
     result = {
         "act_id": act.get("id"),
+        "title": rendered_act.get("title"),
         "requested_at": target,
         "resolved_at": target,
         "head_date": head_date,
@@ -905,6 +966,8 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
             "state_sha256": state_meta.get("state_sha256"),
             "source": state_meta.get("source") or "GII",
             "source_url": state_meta.get("source_url"),
+            "archive_url": state_meta.get("archive_url"),
+            "archive_timestamp": state_meta.get("archive_timestamp"),
             "builddate": state_meta.get("builddate"),
         })
     elif legal_meta:

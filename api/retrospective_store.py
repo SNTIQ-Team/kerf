@@ -735,26 +735,44 @@ def _norm_token(value: Any) -> tuple[str | None, str]:
 
 
 def _select_norms(state: dict[str, Any], norm: str | None
-                  ) -> dict[tuple[str | None, str], dict[str, Any]]:
-    rows: dict[tuple[str | None, str], dict[str, Any]] = {}
+                  ) -> dict[tuple[str | None, str], list[dict[str, Any]]]:
+    rows: dict[tuple[str | None, str], list[dict[str, Any]]] = {}
     for raw in state.get("norms") or []:
         if not isinstance(raw, dict):
             continue
         key = _norm_token(raw.get("enbez"))
-        if key in rows:
-            raise RetrospectiveIntegrityError(
-                f"duplicate norm designator in state: {raw.get('enbez')}")
-        rows[key] = raw
+        rows.setdefault(key, []).append(raw)
     if norm is None:
         return rows
     requested = _norm_token(norm)
     matches = {key: row for key, row in rows.items()
                if key == requested or (
                    requested[0] is None and key[1] == requested[1])}
-    if len(matches) != 1:
+    if sum(len(group) for group in matches.values()) > 1:
         raise RetrospectiveNotFound(
-            f"norm {norm!r} is missing or ambiguous in the selected state")
+            f"norm {norm!r} is ambiguous in the selected state")
     return matches
+
+
+def _changed_norm_pairs(before: list[dict], after: list[dict]):
+    # Repeated labels are valid in whole acts (e.g. EGBGB). Match unchanged
+    # complete rows first, independently of order. Only a unique remaining
+    # old/new pair supports a replacement; otherwise keep the two sides
+    # separate and explicitly disclose the unresolved record identity.
+    remaining_after = list(after)
+    remaining_before = []
+    for row in before:
+        try:
+            matching = remaining_after.index(row)
+        except ValueError:
+            remaining_before.append(row)
+        else:
+            remaining_after.pop(matching)
+    if len(remaining_before) == len(remaining_after) == 1:
+        return [(remaining_before[0], remaining_after[0], False)]
+    ambiguous = bool(remaining_before and remaining_after)
+    return ([(row, None, ambiguous) for row in remaining_before]
+            + [(None, row, ambiguous) for row in remaining_after])
 
 
 def _norm_digest(row: dict[str, Any] | None) -> str | None:
@@ -774,25 +792,29 @@ def diff_intervals(manifest: dict[str, Any], act_id: str,
     right_state = load_interval_state(right, store)
     before = _select_norms(left_state, norm)
     after = _select_norms(right_state, norm)
+    if norm is not None and not before and not after:
+        raise RetrospectiveNotFound(
+            f"norm {norm!r} is absent from both selected states")
     changes = []
     for key in sorted(set(before) | set(after), key=lambda item: (
             item[0] or "", item[1])):
-        old = before.get(key)
-        new = after.get(key)
-        old_digest = _norm_digest(old)
-        new_digest = _norm_digest(new)
-        if old_digest == new_digest:
-            continue
-        operation = "add" if old is None else "remove" if new is None else "replace"
-        changes.append({
-            "operation": operation,
-            "enbez": (new or old or {}).get("enbez"),
-            "title": (new or old or {}).get("titel"),
-            "old": (old or {}).get("text") if old is not None else None,
-            "new": (new or {}).get("text") if new is not None else None,
-            "old_sha256": old_digest,
-            "new_sha256": new_digest,
-        })
+        for old, new, ambiguous in _changed_norm_pairs(
+                before.get(key, []), after.get(key, [])):
+            operation = "add" if old is None else "remove" if new is None else "replace"
+            changes.append({
+                "operation": operation,
+                "enbez": (new or old or {}).get("enbez"),
+                "title": (new or old or {}).get("titel"),
+                "old": (old or {}).get("text") if old is not None else None,
+                "new": (new or {}).get("text") if new is not None else None,
+                "old_title": (old or {}).get("titel"),
+                "new_title": (new or {}).get("titel"),
+                "old_glied": (old or {}).get("glied"),
+                "new_glied": (new or {}).get("glied"),
+                "old_sha256": _norm_digest(old),
+                "new_sha256": _norm_digest(new),
+                **({"ambiguous_identity": True} if ambiguous else {}),
+            })
     gaps = _dedupe([*(left.get("gaps") or []), *(right.get("gaps") or [])])
     complete = (left.get("text_status") in {
                     "official_exact", "derived_verified"}

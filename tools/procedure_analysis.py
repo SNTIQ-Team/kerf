@@ -37,48 +37,67 @@ def _urls(*values: object) -> list[str]:
     return result
 
 
+from analysis_messages import german as _de, localized as _loc, message as M  # noqa: E402,E501
+
+
+def _texts(target: dict, field: str, value: object) -> None:
+    """Write the flat German field and, when present, its localized twin.
+
+    The flat field keeps its exact previous shape so nothing downstream
+    breaks; `<field>_i18n` is additive and the frontend prefers it.
+    """
+    target[field] = _de(value)
+    localized = _loc(value)
+    if localized is not None:
+        target[f"{field}_i18n"] = localized
+
+
 def _check(check_id: str, kind: str, label: str, status: str,
            detail: str, *sources: object) -> dict:
-    return {
+    row = {
         "id": check_id,
         "kind": kind,
-        "label": label,
         "status": status,
-        "detail": detail,
         "source_urls": _urls(*sources),
     }
+    _texts(row, "label", label)
+    _texts(row, "detail", detail)
+    return row
 
 
 def _factor(kind: str, label: str, detail: str, *sources: object) -> dict:
-    return {
+    row = {
         "kind": kind,
-        "label": label,
-        "detail": detail,
         "source_urls": _urls(*sources),
     }
+    _texts(row, "label", label)
+    _texts(row, "detail", detail)
+    return row
 
 
 def _fact(fact_id: str, kind: str, statement: str, status: str,
           *sources: object) -> dict:
-    return {
+    row = {
         "id": fact_id,
         "kind": kind,
-        "statement": statement,
         "status": status,
         "source_urls": _urls(*sources),
     }
+    _texts(row, "statement", statement)
+    return row
 
 
 def _inference(inference_id: str, kind: str, statement: str,
                confidence: str, basis: list[str], *sources: object) -> dict:
-    return {
+    row = {
         "id": inference_id,
         "kind": kind,
-        "statement": statement,
         "confidence": confidence,
         "basis": basis,
         "source_urls": _urls(*sources),
     }
+    _texts(row, "statement", statement)
+    return row
 
 
 def _forecast(outcome: str, band: str, _minimum: int, _maximum: int,
@@ -94,21 +113,23 @@ def _forecast(outcome: str, band: str, _minimum: int, _maximum: int,
             "maximum": None,
         },
         "confidence": confidence,
-        "summary": summary,
+        **({"summary": _de(summary)}
+           | ({"summary_i18n": _loc(summary)} if _loc(summary) else {})),
         "not_a_fact": True,
     }
 
 
 def _milestone(kind: str, label: str, description: str, status: str,
                conditions: list[str], *sources: object) -> dict:
-    return {
+    row = {
         "kind": kind,
-        "label": label,
-        "description": description,
         "status": status,
         "conditions": conditions,
         "source_urls": _urls(*sources),
     }
+    _texts(row, "label", label)
+    _texts(row, "description", description)
+    return row
 
 
 def _chronology(row: dict, history: list[dict], fate: dict | None) -> list[dict]:
@@ -205,12 +226,10 @@ def _source_analysis(row: dict, config: dict) -> tuple[list[dict], list[dict]]:
     stale = bool(row.get("source_stale"))
     facts = [_fact(
         "official_status", "official_observation",
-        (f"Amtlicher Status: {row.get('status')}; Stadium: {row.get('stage')}."
+        (M("fact.status.observed", status=row.get("status"),
+           stage=row.get("stage"))
          if not missing and not stale else
-         "Die jüngste EUR-Lex-Abfrage ist fehlgeschlagen; angezeigt wird die letzte bestätigte amtliche Beobachtung."
-         if stale else
-         "Der Eintrag fehlt im jüngsten amtlichen Snapshot; der vorherige "
-         "Status wird nicht als aktuelle Beobachtung ausgegeben."),
+         M("fact.status.stale") if stale else M("fact.status.missing")),
         "unverified" if missing or stale else "verified", url)]
     # An Official Journal publication is evidence in its own right, from a
     # separate official source (CELLAR). A procedure page that failed to load
@@ -224,26 +243,38 @@ def _source_analysis(row: dict, config: dict) -> tuple[list[dict], list[dict]]:
         provenance = str(record.get("source") or "").strip()
         facts.append(_fact(
             f"official_journal:{celex}", "official_publication",
-            "Im Amtsblatt der EU veröffentlicht: "
-            f"{celex}{f' ({citation})' if citation else ''}."
-            + (f" Quelle: {provenance}." if provenance else ""),
+            M("fact.oj.published", celex=celex,
+              citation=citation or "—", source=provenance or "—"),
             "verified", record.get("url"), record.get("eli")))
+        # Publication and entry into force are different facts, and the card
+        # said nothing about the second — so an act in force since 2026-08-05
+        # read as unsettled, with only the editorial Article-2 review shown.
+        since = str(record.get("in_force_since") or "")
+        if record.get("in_force") and since:
+            staggered = [d for d in (record.get("in_force_dates") or [])
+                         if d and d != since]
+            facts.append(_fact(
+                f"in_force:{celex}", "legal_effect",
+                M("fact.inforce.staggered", since=since, celex=celex,
+                  dates=", ".join(staggered), source=provenance or "—")
+                if staggered else
+                M("fact.inforce", since=since, celex=celex,
+                  source=provenance or "—"),
+                "verified", record.get("url"), record.get("eli")))
     checks = [_check(
-        "official_source_available", "source", "Amtliche Quelle verfügbar",
+        "official_source_available", "source",
+        M("check.sourceAvailable.label"),
         "failed" if missing else "pending" if stale else "passed",
-        ("Der beobachtete Vorgang fehlt derzeit in der amtlichen Quelle."
-         if missing else
-         "Die letzte bestätigte Beobachtung wird mit einer Stale-Warnung weitergeführt."
-         if stale else
-         "Status und Stadium stammen aus dem jüngsten amtlichen Snapshot."),
+        (M("check.sourceAvailable.missing") if missing else
+         M("check.sourceAvailable.stale") if stale else
+         M("check.sourceAvailable.ok")),
         url)]
     scope_source = config.get("scope_source")
     checks.append(_check(
-        "scope_source_linked", "source", "Quelle für den beschriebenen Regelungsumfang",
+        "scope_source_linked", "source", M("check.scopeSource.label"),
         "passed" if scope_source else "pending",
-        ("Der beschriebene Entwurfsumfang ist mit einer amtlichen Vorlage verknüpft."
-         if scope_source else
-         "Für die Inhaltsbeschreibung ist noch keine gesonderte amtliche Vorlage verknüpft."),
+        (M("check.scopeSource.linked") if scope_source else
+         M("check.scopeSource.missing")),
         scope_source))
     return facts, checks
 
@@ -334,8 +365,8 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
     warnings = ["Der Prognosekorridor ist eine regelbasierte Einschätzung und kein amtlicher Verfahrensstatus."]
     if row.get("source_stale"):
         factors.append(_factor(
-            "uncertainty", "EUR-Lex-Abfrage vorübergehend fehlgeschlagen",
-            "Die Prognose nutzt die letzte bestätigte amtliche Beobachtung und wird nach einer erfolgreichen Abfrage neu bewertet.",
+            "uncertainty", M("check.eurlexQueryFailed.label"),
+            M("check.eurlexQueryFailed.detail"),
             official_url))
         warnings.append(str(row.get("retrieval_warning") or
                             "Die aktuelle EUR-Lex-Beobachtung ist als veraltet markiert."))
@@ -357,29 +388,30 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
                 config.get("council_register_url")))
     if status.casefold() == "ongoing" or not adopted:
         factors.append(_factor(
-            "uncertainty", "Vorgang noch offen",
-            "EUR-Lex weist noch keinen angenommenen finalen Rechtsakt mit CELEX aus.",
+            "uncertainty", M("inference.stillOpen"),
+            M("inference.stillOpen"),
             official_url))
     if not journal:
         factors.append(_factor(
-            "uncertainty", "Keine Amtsblattfundstelle",
-            "Ohne Amtsblattfundstelle ist weder Veröffentlichung noch Inkrafttreten belegt.",
+            "uncertainty", M("check.ojPublication.label"),
+            M("factor.noOjCitation"),
             official_url))
     if review_passed and row.get("terminal"):
         forecast = _forecast(
             "final_text_validated", "completed", 100, 100, "high",
             "Der angenommene Text wurde veröffentlicht und der überwachte Artikel 2 gegen den Vorschlag geprüft.")
         next_milestone = _milestone(
-            "monitoring_complete", "Überwachung abgeschlossen",
-            "Keine weitere häufige Abfrage; der validierte Abschluss bleibt archiviert.",
+            "monitoring_complete", M("inference.monitoringComplete"),
+            M("factor.archived"),
             "completed", [], official_url)
     elif row.get("awaiting_final_review") or journal:
         forecast = _forecast(
             "final_text_review_pending", "high", 95, 100, "high",
-            "Der Rechtsakt ist veröffentlicht; offen ist die inhaltliche Gegenprüfung des endgültigen Artikels 2.")
+            M("inference.published.pendingReview"))
         next_milestone = _milestone(
-            "final_text_review", "Endfassung gegenprüfen",
-            "Artikel 2 des veröffentlichten Rechtsakts wird mit COM(2026) 345 verglichen.",
+            "final_text_review", M("milestone.finalTextReview.label"),
+            M("milestone.finalTextReview.detail",
+              proposal=config.get("celex_proposal") or "COM(2026) 345"),
             "pending", ["finalen CELEX erfassen", "Artikel 2 vergleichen",
                         "Abweichungen dokumentieren"], proposal_url, official_url)
     elif adopted:
@@ -387,8 +419,8 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
             "official_journal_publication_likely", "high", 85, 98, "medium",
             "Eine formelle Annahme ist erfasst; als Nächstes werden Amtsblattfundstelle und Endfassung erwartet.")
         next_milestone = _milestone(
-            "official_journal_publication", "Veröffentlichung im Amtsblatt",
-            "Die Fundstelle und der finale CELEX müssen erfasst werden.", "expected",
+            "official_journal_publication", M("check.ojPublication.label"),
+            M("check.ojPublication.pending"), "expected",
             ["Amtsblattfundstelle veröffentlichen"], official_url)
     elif political_agreement:
         forecast = _forecast(
@@ -424,7 +456,8 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
             "expected", ["neuen Ratsstand veröffentlichen"], official_url)
     inferences = [_inference(
         "stage_based_eu_forecast", "procedural_forecast",
-        forecast["summary"], forecast["confidence"],
+        {"text": forecast["summary_i18n"]} if forecast.get("summary_i18n")
+        else forecast["summary"], forecast["confidence"],
         ["latest_official_stage", "council_communication_presence",
          "adopted_celex_presence", "official_journal_presence",
          "final_text_review_state"],
@@ -783,6 +816,8 @@ def analyse_procedure(row: dict, config: dict, history: list[dict],
         "as_of": as_of or row.get("last_checked"),
         "method": "deterministic_official_evidence",
         "summary": forecast["summary"],
+        **({"summary_i18n": forecast["summary_i18n"]}
+           if forecast.get("summary_i18n") else {}),
         "facts": facts,
         "inferences": inferences,
         "forecast": forecast,

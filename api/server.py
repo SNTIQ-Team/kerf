@@ -38,7 +38,11 @@ SERVICE_INDEX = {
         "/procedures/watched", "/amendment-fates", "/federal-history",
         "/official-states", "/verified-reconstructions",
         "/official-transition-reviews",
-        "/search", "/digest",
+        "/search", "/digest", "/capabilities",
+        "/acts/{id}/markdown.json",
+        "/norms/resolve", "/norms/{id}/log", "/norms/{id}/at",
+        "/norms/{id}/diff", "/norms/{id}/blame", "/norms/{id}/materials",
+        "/materials", "/materials/fragments/{fragment_id}",
     ],
 }
 
@@ -62,6 +66,7 @@ server.add_middleware(
     expose_headers=[
         "Content-Disposition",
         "X-Lexgraph-Snapshot",
+        "X-Lexgraph-Ignored-Arguments",
         "X-Lexgraph-Source-Sha256",
         "X-Lexgraph-Requested-Date",
         "X-Lexgraph-Resolved-Date",
@@ -167,7 +172,13 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="official-states">/official-states</a></td><td class="what">exact GII retrieval observations + immutable state hashes</td></tr>
     <tr><td class="ep"><a href="verified-reconstructions">/verified-reconstructions</a></td><td class="what">complete replay-verified derived states (never source-exact)</td></tr>
     <tr><td class="ep"><a href="official-transition-reviews">/official-transition-reviews</a></td><td class="what">legal dates accepted by final BGBl + DIP review</td></tr>
-    <tr><td class="ep"><a href="search?q=Ukraine">/search?q=</a></td><td class="what">ranked full-text search across acts + current norms</td></tr>
+    <tr><td class="ep"><a href="search?q=Ukraine">/search?q=</a></td><td class="what">ranked full-text search across acts + current norms (current text only)</td></tr>
+    <tr><td class="ep"><a href="norms/de/bund/asylvfg_1992/para/29a/log">/norms/{id}/log</a></td><td class="what">one norm's versions with amendment and commencement evidence</td></tr>
+    <tr><td class="ep"><a href="norms/de/bund/asylvfg_1992/para/29a/at?date=2026-09-28">/norms/{id}/at?date=</a></td><td class="what">the version valid on a date — or a typed "unresolved"</td></tr>
+    <tr><td class="ep"><a href="norms/de/bund/asylvfg_1992/para/29a/diff?from=2026-07-06&amp;to=head">/norms/{id}/diff</a></td><td class="what">sentence-aware diff with Absatz/Satz/Nummer locators</td></tr>
+    <tr><td class="ep"><a href="norms/de/bund/asylvfg_1992/para/29a/blame">/norms/{id}/blame</a></td><td class="what">per sentence: the version and amendment that introduced it</td></tr>
+    <tr><td class="ep"><a href="materials?drucksache=19/13824&amp;role=gegenaeusserung_bundesregierung">/materials</a></td><td class="what">role-typed legislative material fragments (explains vs. mentions)</td></tr>
+    <tr><td class="ep"><a href="capabilities">/capabilities</a></td><td class="what">machine-readable scope, temporal capabilities and statuses</td></tr>
     <tr><td class="ep"><a href="digest">/digest</a></td><td class="what">LLM digest of legislative activity (experimental)</td></tr>
   </table>
   <footer>

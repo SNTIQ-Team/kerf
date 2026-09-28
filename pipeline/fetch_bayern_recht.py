@@ -45,7 +45,8 @@ import zipfile
 
 from bs4 import BeautifulSoup
 
-from common import Http, snapshot_dir, write_jsonl
+from common import ROOT, Http, snapshot_dir, write_jsonl
+from reader_source_cache import reader_act_id, save_reader_source
 
 BASE = "https://www.gesetze-bayern.de"
 FFN_URL = BASE + "/Content/Document/ffn"
@@ -305,7 +306,10 @@ def main() -> int:
             r.raise_for_status()
             with zipfile.ZipFile(io.BytesIO(r.content)) as z:
                 name = next(n for n in z.namelist() if n.endswith(".xml"))
-                act, ns, xv, refs = parse_act_xml(z.read(name), key, abbr)
+                xml_bytes = z.read(name)
+                act, ns, xv, refs = parse_act_xml(xml_bytes, key, abbr)
+                save_reader_source(ROOT / "data" / "reader-source",
+                                   reader_act_id("by", act["jurabk"]), xml_bytes)
         except Exception as exc:            # noqa: BLE001 — count & go on
             failed.append(abbr)
             print(f"[err] {abbr} ({key}): {exc}")

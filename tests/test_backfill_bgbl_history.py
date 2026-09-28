@@ -38,6 +38,22 @@ def test_short_title_aliases_are_exact_not_abbreviation_fuzzy() -> None:
     assert "aufenthg 2004" not in aliases
 
 
+def test_former_asylum_title_resolves_without_matching_different_laws() -> None:
+    act = {"slug": "asylvfg_1992", "jurabk": "AsylG", "long_title": "Asylgesetz"}
+    procedure = {"deskriptor": [{"typ": "Rechtsmaterialien", "name": "Asylverfahrensgesetz"}]}
+    matches = descriptor_matches(procedure, [act])
+    assert len(matches) == 1
+    assert matches[0]["slug"] == "asylvfg_1992"
+    assert exact_final_text_match({
+        "heading": "Änderung des Asylverfahrensgesetzes",
+        "text": "Artikel 1\nÄnderung des Asylverfahrensgesetzes\nDas Asylverfahrensgesetz wird geändert.",
+    }, matches[0]) == "asylverfahrensgesetz"
+    assert descriptor_matches({"deskriptor": [
+        {"typ": "Rechtsmaterialien", "name": "Asylverfahrensbeschleunigungsgesetz"},
+        {"typ": "Rechtsmaterialien", "name": "Asylbewerberleistungsgesetz"},
+    ]}, [act]) == []
+
+
 def test_descriptor_match_requires_exact_legal_material_name() -> None:
     procedure = {
         "deskriptor": [

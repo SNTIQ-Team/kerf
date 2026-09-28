@@ -21,6 +21,7 @@ Outputs:
     web/data/retrospective_history.sqlite  portable relational history
     web/data/citations.json   citation metadata/counts (no row payload)
     web/data/citations.sqlite exact current statutory citations + backlinks
+    web/data/reader/<id>.json hash-verified official reader structure
     web/data/search.sqlite     ranked full-text index (acts + current norms)
     web/data/hierarchy.json    competence-aware legal layers (no geometry)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
@@ -42,6 +43,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
+from tools.reader_blocks import refresh_cached_sidecars  # noqa: E402
+from tools.archived_reader_store import publish_archived_readers  # noqa: E402
+from tools.bavarian_states import publish_states as publish_bavarian_states  # noqa: E402
+from legacy_bgbl_history import load_reviewed_candidates  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
 from tools.decision_passages import build_index as build_decision_passages
 from api.search_engine import build_search_database       # noqa: E402
@@ -316,20 +321,57 @@ def month_str(ord_: int) -> str:
 
 
 # ------------------------------------------------------------------ feed
+def bgbl_publication_dates() -> dict[str, str]:
+    """``<year>/<issue>`` → official publication date of captured BGBl I.
+
+    Only integrity-checked final BGBl captures supply a promulgation date.
+    """
+    dates: dict[str, str] = {}
+    for source in ("bgbl_documents", "bgbl_history_backfill"):
+        for row in load(source, "documents.jsonl"):
+            year, issue = row.get("year"), row.get("issue")
+            published = row.get("publication_date")
+            if year and issue and published and \
+                    re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(published)):
+                dates.setdefault(f"{year}/{issue}", str(published))
+    return dates
+
+
 def build_feed() -> list[dict]:
     rows: list[dict] = []
 
-    def add(time, juris, source, kind, title, url=None, badge=None):
+    def add(time, juris, source, kind, title, url=None, badge=None,
+            time_basis=None):
         if not time:
             return
-        rows.append({"time": str(time)[:10], "juris": juris,
-                     "source": source, "kind": kind,
-                     "title": (title or "")[:160], "url": url,
-                     "badge": badge})
+        row = {"time": str(time)[:10], "juris": juris,
+               "source": source, "kind": kind,
+               "title": (title or "")[:160], "url": url,
+               "badge": badge}
+        if time_basis:
+            row["time_basis"] = time_basis
+        rows.append(row)
 
+    # The GII Aktualitätendienst RSS dates each item with the day the feed
+    # listed it, not the promulgation date, and lists one item per act, so
+    # an issue with two acts appeared twice under the same citation.  Use the
+    # captured final BGBl publication date where one exists; otherwise say
+    # that the date is the update service's.
+    published_on = bgbl_publication_dates()
     for e in load("bgbl_events", "events.jsonl"):
-        add(e.get("time"), "DE", "BGBl", "verkündet",
-            e.get("bgbl_citation") or e.get("title"), e.get("eli"))
+        citation = e.get("bgbl_citation")
+        act_title = e.get("title") if e.get("title") != citation else None
+        label = " — ".join(part for part in (citation, act_title) if part)
+        match = re.search(r"/eli/bund/bgbl[_-]1/(\d{4})/(\d+)",
+                          str(e.get("eli") or ""), re.I)
+        published = published_on.get(f"{match.group(1)}/{match.group(2)}") \
+            if match else None
+        if published:
+            add(published, "DE", "BGBl", "verkündet", label, e.get("eli"),
+                time_basis="official_publication_date")
+        else:
+            add(e.get("time"), "DE", "BGBl", "gemeldet", label, e.get("eli"),
+                time_basis="gii_update_service_item_date")
     for e in load("gvbl_events", "events.jsonl"):
         add(e.get("time"), "DE-BY", e.get("gazette", "GVBl"), "verkündet",
             e.get("title"), e.get("permalink"), e.get("authenticity"))
@@ -365,6 +407,12 @@ def build_feed() -> list[dict]:
             "Entscheidung",
             (d.get("az") or "") + " — " + (d.get("title") or ""),
             d.get("url"))
+    unique: dict[tuple, dict] = {}
+    for row in rows:
+        key = (row["time"], row["juris"], row["source"], row["kind"],
+               row["title"], row["url"])
+        unique.setdefault(key, row)
+    rows = list(unique.values())
     rows.sort(key=lambda r: r["time"], reverse=True)
     # court decisions are high-value — never let the 600-row cap
     # crowd them out: seat decisions first, fill the rest with the newest
@@ -448,6 +496,8 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     for a in load("gii", "acts.jsonl"):
         jb = a["jurabk"]
         aid = "fed_" + slug(jb)
+        source_url = (f"https://www.gesetze-im-internet.de/{a['slug']}/"
+                      if re.fullmatch(r"[a-z0-9][a-z0-9_-]*", str(a.get("slug") or "")) else None)
         pats = [p for p in patches if p["target_act"] == jb]
         ids = {v["act_id"] for v in buz_v if v["jurabk"] == jb}
         versions = []
@@ -483,6 +533,7 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
         _tmp = temporal(versions, upcoming, patch_rows)
         decs = _act_decisions(decisions, aid)
         idx.append({"id": aid, "jurabk": jb, "juris": "DE",
+                    "source_url": source_url,
                     "title": a.get("long_title") or jb,
                     "norms": a.get("norm_count"),
                     "build": a.get("builddate", "")[:8],
@@ -492,6 +543,7 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
                     "decisions": len(decs)})
         details[aid] = {
             "id": aid, "jurabk": jb, "juris": "DE",
+            "source_url": source_url,
             "title": a.get("long_title"), "stand": a.get("stand"),
             "build": a.get("builddate", "")[:8],
             "norm_count": a.get("norm_count"),
@@ -1292,8 +1344,11 @@ def build_git(official_transitions: list[dict] | None = None,
             "lane": 1,
             "type": "commit",
             "actor": "BGBl / Lexgraph",
-            "msg": ("Amtliche Änderung wirksam · "
+            "msg": (("Amtliche Änderung wird wirksam · "
+                     if str(review["effective_at"]) > TODAY else
+                     "Amtliche Änderung wirksam · ") +
                     f"{review.get('jurabk') or review.get('act') or ''}"),
+            "future": str(review["effective_at"]) > TODAY,
             "acts": [review.get("jurabk") or review.get("act")],
             "paras": paras[:20],
             "refs": refs,
@@ -1352,9 +1407,14 @@ def build_git(official_transitions: list[dict] | None = None,
             "lane": 1,
             "type": "commit",
             "actor": "BGBl / Lexgraph",
-            "msg": (("Amtliche Änderung wirksam" if effective else
+            # An effective date in the future is a scheduled change, not
+            # an effective one.
+            "msg": (("Amtliche Änderung wird wirksam"
+                     if effective and str(effective) > TODAY else
+                     "Amtliche Änderung wirksam" if effective else
                      "Amtliche Änderung veröffentlicht") +
                     (f" · {jurabk}" if jurabk else "")),
+            "future": bool(effective and str(effective) > TODAY),
             "acts": [jurabk] if jurabk else [],
             "paras": list(event.get("affected_norms") or [])[:20],
             "refs": refs,
@@ -1553,10 +1613,26 @@ def _join_transition_reviews(transitions: list[dict],
     return out
 
 
+def attach_bavarian_observations(details: dict, manifest: dict) -> None:
+    """Attach verified archive observations without changing current act text."""
+    grouped: dict[str, list[dict]] = {}
+    for observation in manifest.get("observations") or []:
+        act_id = observation["act_id"]
+        act = details.get(act_id)
+        if act is None or act.get("juris") != "DE-BY" or act.get("jurabk") != observation["jurabk"]:
+            raise ValueError(f"Bavarian archive identity not in current corpus: {act_id}")
+        grouped.setdefault(act_id, []).append(observation)
+    for act_id, observations in grouped.items():
+        details[act_id]["official_states"] = sorted(observations, key=lambda row: row["observed_at"])
+
+
 def main() -> int:
     (WEB / "acts").mkdir(parents=True, exist_ok=True)
     built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     official_states, official_transitions = publish_official_federal_states()
+    bavarian_states = publish_bavarian_states(ROOT / "data" / "bavarian_states", WEB / "bavarian_states")
+    archived_reader_report = publish_archived_readers(ROOT / "data" / "reader-history", WEB / "reader-history")
+    print("archived reader structure:", json.dumps(archived_reader_report, ensure_ascii=False))
     bgbl_documents = load("bgbl_documents", "documents.jsonl")
     transition_reviews = review_transitions(
         official_transitions, bgbl_documents)
@@ -1570,9 +1646,15 @@ def main() -> int:
         official_states.get("observations") or [],
         official_state_objects,
         transition_reviews,
+        include_norm_intervals=False,
     )
     retrospective_candidates = load(
         "bgbl_history_backfill", "candidates.jsonl")
+    retrospective_candidates.extend(load(
+        "bgbl_legacy_history_backfill", "candidates.jsonl"))
+    # Publication-year inventory alone misses laws effective in January but
+    # published the preceding December. Keep independently reviewed captures.
+    retrospective_candidates.extend(load_reviewed_candidates())
     verified_reconstructions = build_verified_reconstructions(
         built_at=built_at)
     derived_states = verified_reconstructions.get("state_objects") or {}
@@ -1615,6 +1697,10 @@ def main() -> int:
     }
     feed = build_feed()
     wiki_idx, details = build_wiki()
+    reader_refresh = refresh_cached_sidecars(
+        details.values(), WEB / "reader", ROOT / "data" / "reader-source",
+        previous_directory=ROOT / "data" / "reader")
+    print("reader structure:", json.dumps(reader_refresh, ensure_ascii=False))
     citation_snapshots = {}
     for juris, family in (("DE", "gii"), ("DE-BY", "bayern_recht")):
         snapshot = latest_snapshot(family)
@@ -1622,7 +1708,8 @@ def main() -> int:
             citation_snapshots[juris] = snapshot.name
     citation_index = build_citation_index(
         details.values(), built_at=built_at,
-        source_snapshots=citation_snapshots)
+        source_snapshots=citation_snapshots,
+        reader_directory=WEB / "reader")
     write_citation_database(WEB / "citations.sqlite", citation_index)
     citations = citation_manifest(citation_index)
     # The manifest is deliberately tiny and the detailed rows now live in
@@ -1666,6 +1753,7 @@ def main() -> int:
         gii_snapshot.name if gii_snapshot else built_at[:10],
         exact_events=exact_state_events,
     )
+    attach_bavarian_observations(details, bavarian_states)
     observations_by_act: dict[str, list[dict]] = {}
     for observation in official_states.get("observations") or []:
         observations_by_act.setdefault(
@@ -1795,6 +1883,8 @@ def main() -> int:
         "official_federal_transitions": official_states[
             "total_transitions"],
         "official_federal_legal_reviews": len(transition_reviews),
+        "official_bavarian_observations": bavarian_states["total_observations"],
+        "official_bavarian_states": bavarian_states["total_states"],
         "retrospective_history": retrospective["counts"],
         "verified_reconstructions": len(
             verified_reconstructions.get("reconstructions") or []),
@@ -1831,6 +1921,7 @@ def main() -> int:
         "amendment_fates.json": dump("amendment_fates.json", amendment_fates),
         "verified_federal_events.json": dump(
             "verified_federal_events.json", federal_history),
+        "official_bavarian_states.json": dump("official_bavarian_states.json", bavarian_states),
         "official_federal_states.json": dump(
             "official_federal_states.json", official_states),
         "official_transition_reviews.json": dump(

@@ -159,8 +159,11 @@ def _normalise_observations(
         if digest not in states:
             raise RetrospectiveHistoryError(
                 f"observation references missing state {digest}")
-        state = validated_states.setdefault(
-            digest, _validate_state(digest, states[digest]))
+        # setdefault evaluates its default eagerly. Repeated daily captures
+        # must not JSON-copy and re-hash the same immutable state each time.
+        if digest not in validated_states:
+            validated_states[digest] = _validate_state(digest, states[digest])
+        state = validated_states[digest]
         if state["id"] != row["act_id"] or \
                 state["jurabk"] != row["jurabk"] or \
                 state["norm_count"] != row["norm_count"]:
@@ -635,12 +638,17 @@ def materialize_history(
         observations: Iterable[dict[str, Any]],
         states: Mapping[str, Any],
         accepted_reviews: Iterable[dict[str, Any]],
+        *, include_norm_intervals: bool = True,
         ) -> dict[str, Any]:
     """Build a deterministic, JSON-serializable bitemporal manifest.
 
     ``states`` maps official uncompressed canonical state SHA-256 digests to
     the corresponding complete state objects.  Bodies are verified while
     building but are not copied into the result.
+
+    Public export does not consume ``norm_intervals``. It can skip that
+    expansion, which otherwise multiplies every norm by every daily knowledge
+    observation. The default retains the complete internal manifest contract.
     """
     normal_observations, valid_states = _normalise_observations(
         observations, states)
@@ -666,7 +674,8 @@ def materialize_history(
             "observations": copy.deepcopy(act_observations),
             "accepted_transitions": copy.deepcopy(act_reviews),
             "intervals": intervals,
-            "norm_intervals": _norm_intervals(intervals, valid_states),
+            "norm_intervals": (_norm_intervals(intervals, valid_states)
+                               if include_norm_intervals else []),
             "gaps": _gaps_for_act(
                 act_id, act_observations, boundary_reviews),
             "coverage": {
@@ -709,6 +718,8 @@ def materialize_history(
         },
         "acts": acts,
     }
+    if not include_norm_intervals:
+        result["norm_intervals_materialized"] = False
     # Enforce the public promise that the materialized object is plain JSON.
     canonical_json_bytes(result)
     return result
@@ -1080,6 +1091,24 @@ def _public_interval(row: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _public_event(candidate: Mapping[str, Any]) -> dict[str, Any]:
+    legacy_review = candidate.get("source") == "official_bgbl_legacy_review"
+    legacy_inventory = candidate.get("source") == "gii+dip+bgbl.de"
+    if legacy_review:
+        from pipeline.legacy_bgbl_history import validate_reviewed_candidate
+
+        try:
+            validate_reviewed_candidate(dict(candidate))
+        except ValueError as exc:
+            raise RetrospectiveHistoryError(str(exc)) from exc
+    if legacy_inventory:
+        from pipeline.backfill_legacy_bgbl_history import (
+            SourceIntegrityError, validate_legacy_candidate,
+        )
+
+        try:
+            validate_legacy_candidate(dict(candidate))
+        except (ValueError, SourceIntegrityError) as exc:
+            raise RetrospectiveHistoryError(str(exc)) from exc
     published = _iso_day(
         candidate.get("publication_date"), "publication_date")
     effective = _iso_day(
@@ -1094,7 +1123,7 @@ def _public_event(candidate: Mapping[str, Any]) -> dict[str, Any]:
             "BGBl inventory row must remain candidate-only")
     for field in ("official_html_url", "official_pdf_url"):
         url = str(candidate.get(field) or "")
-        if not url.startswith("https://www.recht.bund.de/"):
+        if not (legacy_review or legacy_inventory) and not url.startswith("https://www.recht.bund.de/"):
             raise RetrospectiveHistoryError(
                 f"BGBl inventory has invalid {field}")
     gaps = []
@@ -1117,7 +1146,8 @@ def _public_event(candidate: Mapping[str, Any]) -> dict[str, Any]:
         "ingested_at": ingested,
         "retroactive": bool(effective and effective < published),
         "date_status": ("official_verified" if effective else "unknown"),
-        "date_basis": ("official_dip_article_commencement_clause"
+        "date_basis": (candidate.get("effective_date_basis") if legacy_review else
+                       "official_dip_article_commencement_clause"
                        if effective else str(candidate.get(
                            "effective_date_status") or "unknown")),
         "text_status": "event_only",
@@ -1146,13 +1176,20 @@ def _public_event(candidate: Mapping[str, Any]) -> dict[str, Any]:
             "url": candidate.get("official_pdf_url"),
             "document": candidate.get("document_id"),
             "sha256": candidate.get("pdf_sha256"),
-        }, {
-            "source": "DIP",
-            "url": ("https://dip.bundestag.de/vorgang/" +
-                    str(candidate.get("procedure_id") or "")),
-            "procedure": candidate.get("procedure_id"),
         }],
     }
+    if legacy_review and candidate.get("commencement_evidence"):
+        event["commencement_evidence"] = copy.deepcopy(candidate["commencement_evidence"])
+    if legacy_inventory:
+        for field in ("integrity_basis", "publisher_checksum_available", "fundstelle",
+                      "publication_page", "publication_issue"):
+            event[field] = copy.deepcopy(candidate[field])
+    if candidate.get("procedure_id"):
+        event["evidence"].append({
+            "source": "DIP",
+            "url": "https://dip.bundestag.de/vorgang/" + str(candidate["procedure_id"]),
+            "procedure": candidate["procedure_id"],
+        })
     return event
 
 
@@ -1165,7 +1202,7 @@ def build_public_manifest(
     """Materialize the API/HF manifest with RFC3339 knowledge assertions.
 
     The strict internal history proves state/review chains.  This public layer
-    adds the independently captured 2023+ BGBl event inventory and transaction
+    adds the independently captured BGBl event inventory and transaction
     timestamps.  A rerun preserves unchanged ``knowledge_from`` values and
     closes replaced assertions at the new ``built_at`` timestamp.
     """
