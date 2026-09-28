@@ -116,7 +116,7 @@ if materials_router is not None:
 # envelope (they read parameters dynamically, so declared FastAPI parameters
 # are not the whole contract).
 _SELF_VALIDATING_PREFIXES = ("/norms/", "/materials")
-_SELF_VALIDATING_PATHS = re.compile(r"/acts/[a-z0-9_]+/changes")
+_SELF_VALIDATING_PATHS = re.compile(r"/acts/[a-z0-9_]+/(?:changes|versions)")
 # Transport-only cache keys that deployed clients append (``?t=<ms>``,
 # ``/digest?d=<day>``).  They never select content; they are accepted but
 # disclosed in X-Lexgraph-Ignored-Arguments instead of being silently dropped.

@@ -368,3 +368,18 @@ def test_gii_notes_link_to_the_norms_change():
                    "text_incorporated": True,
                    "documentation_complete": False,
                    "text": pending["text"]}
+
+
+def test_act_versions_list_consolidations_with_sources(built):
+    client = _client(built)
+    body = client.get("/acts/fed_asylvfg_1992/versions").json()
+    assert body["status"] == "ok" and body["total"] == 4
+    oldest = body["evidence"][-1]
+    assert oldest["source"] == "wayback_gii"
+    assert oldest["source_role"] == "archived_capture"
+    assert oldest["known_from"] == "2023-06-01"
+    assert oldest["act_stand_note"]["last_amended_by_text"] == \
+        "Art. 1 G v. 21.12.2022 I 2817"
+    only = client.get("/acts/fed_asylvfg_1992/versions?source=gii_daily"
+                      ).json()
+    assert {row["source"] for row in only["evidence"]} == {"gii_daily"}

@@ -64,6 +64,7 @@ _ALLOWED = {
     "materials": {"relation"},
     "changes": {"date", "limit", "offset", "state"},
     "act_changes": {"date", "limit", "offset", "state", "norm"},
+    "act_versions": {"limit", "offset", "source"},
 }
 CHANGE_STATES = {"in_force", "pending", "incorporated_date_unknown",
                  "date_unknown", "not_yet_promulgated"}
@@ -459,6 +460,61 @@ def create_router(data_dir: Callable[[], Path],
                                               "norm_versions")},
                 change_summary=_stored_act_summary(lh, act_id, on))
         return run("act_changes", request, act_id, handler)
+
+    @router.get("/acts/{act_id}/versions")
+    def act_versions(act_id: str, request: Request):
+        """Consolidated versions of a whole act as the sources showed them."""
+        def handler():
+            params = request.query_params
+            limit = _int(params.get("limit"), 200, 0, 1000)
+            offset = _int(params.get("offset"), 0, 0, 100000)
+            source = params.get("source")
+            lh = history()
+            if not re.fullmatch(r"[a-z0-9_]+", act_id or ""):
+                raise EnvelopeError("invalid_argument", "invalid act id")
+            if lh is None or not lh.covers(act_id):
+                raise EnvelopeError(
+                    "not_in_corpus", f"no version history for {act_id}")
+            rows = []
+            for state in reversed(lh.states(act_id)):
+                if source and state["source"] != source:
+                    continue
+                notes = state.get("notes") or {}
+                rows.append({
+                    "seq": state["seq"], "state": state["state_key"],
+                    "source": state["source"],
+                    "source_role": state["source_role"],
+                    "known_from": state["known_from"],
+                    "known_until": state["known_until"],
+                    "url": state["url"], "archive_url": state["archive_url"],
+                    "sha256": state["sha256"],
+                    "complete": bool(state["complete"]),
+                    "valid_from": state["valid_from"],
+                    "valid_from_status": state["valid_from_status"],
+                    "valid_until_exclusive": state["valid_until"],
+                    "act_stand_note": notes.get("act_stand_note"),
+                    "documentation_notes": notes.get("documentation_notes")
+                    or [],
+                    "date_axes_note": (
+                        "known_* is when the source showed this "
+                        "consolidation (capture/retrieval), never a legal "
+                        "date; valid_* only where verified"),
+                })
+            info = lh.acts().get(act_id) or {}
+            return envelope(
+                operation="law_act_versions", total=len(rows),
+                searched=[{"source": "law_history", "status": "ok",
+                           "count": len(rows)}],
+                applied_constraints={"act_id": act_id,
+                                     "source": source or "all",
+                                     "order": "newest_first"},
+                evidence=rows[offset:offset + limit] if limit else [],
+                offset=offset, limit=limit,
+                act={k: info.get(k) for k in (
+                    "act_id", "jurabk", "title", "states", "states_by_source",
+                    "earliest_text", "latest_text", "norms",
+                    "norm_versions")})
+        return run("act_versions", request, act_id, handler)
 
     @router.get("/norms/{norm_id:path}/materials")
     def norm_materials(norm_id: str, request: Request):
