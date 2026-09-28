@@ -276,15 +276,17 @@ def load_bgbl_documents(snapshots: Path | None) -> dict[str, dict[str, Any]]:
     """Latest metadata row per BGBl document (2023+ recht.bund.de)."""
     if snapshots is None:
         return {}
-    root = snapshots / "bgbl_documents"
     result: dict[str, dict[str, Any]] = {}
-    if not root.is_dir():
-        return result
     try:
         from common import read_jsonl  # resolves compacted snapshot refs
     except Exception:  # pragma: no cover - pipeline not importable
         read_jsonl = None
-    for day in sorted(p for p in root.iterdir() if p.is_dir()):
+    days = []
+    for source in ("bgbl_history_backfill", "bgbl_documents"):
+        root = snapshots / source
+        if root.is_dir():
+            days.extend(sorted(p for p in root.iterdir() if p.is_dir()))
+    for day in days:
         path = day / "documents.jsonl"
         if not path.is_file():
             continue
@@ -304,6 +306,28 @@ def load_bgbl_documents(snapshots: Path | None) -> dict[str, dict[str, Any]]:
                     "entry_into_force", "dip_entry_into_force", "pdf_object",
                     "sha256", "year")}
     return result
+
+
+def load_bgbl_index(index_dir: Path | None,
+                    into: dict[str, dict[str, Any]]) -> int:
+    """Official recht.bund.de metadata of every indexed BGBl I issue."""
+    if index_dir is None or not index_dir.is_dir():
+        return 0
+    added = 0
+    for path in sorted(index_dir.glob("bgbl1-*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            doc = str(row.get("document_id") or "")
+            if row.get("status") != "ok" or not doc or doc in into:
+                continue
+            into[doc] = {k: row.get(k) for k in (
+                "document_id", "title", "execution_date", "publication_date",
+                "official_fields", "official_html_url", "official_pdf_url",
+                "eli")}
+            added += 1
+    return added
 
 
 def gazette(document_id: str | None) -> dict[str, Any] | None:
@@ -1479,6 +1503,9 @@ def main(argv: list[str] | None = None) -> int:
                         default=ROOT / "data" / "snapshots")
     parser.add_argument("--change-dates", type=Path, action="append",
                         default=[])
+    parser.add_argument("--bgbl-index", type=Path,
+                        default=ROOT / "data" / "bgbl_documents" / "index",
+                        help="recht.bund.de issue index (official metadata)")
     parser.add_argument("--acts", default="",
                         help="comma-separated act ids (default: all)")
     parser.add_argument("--as-of", default=None)
@@ -1511,6 +1538,7 @@ def main(argv: list[str] | None = None) -> int:
     dates = ChangeDates(date_paths)
     bgbl = load_bgbl_documents(args.documents if args.documents and
                                args.documents.is_dir() else None)
+    load_bgbl_index(args.bgbl_index, bgbl)
     wanted = {a for a in args.acts.split(",") if a}
     act_files = sorted((data_dir / "acts").glob("*.json"))
     tmp = Path(tempfile.mkstemp(prefix=".law_history-", suffix=".sqlite",
