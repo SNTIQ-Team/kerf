@@ -344,3 +344,27 @@ def test_law_git_commits_are_dated_by_in_force(built, tmp_path):
     assert "Adopted (Ausfertigung): unknown" in body
     text = (repo / "de/bund/asylvfg_1992/para/29a.md").read_text()
     assert "source_role:" in text and "in_force:" in text
+
+
+def test_gii_notes_link_to_the_norms_change():
+    change = {"change_id": "c1", "norm_label": "§ 7b",
+              "amending_act": {"document_id": "bgbl-1-2026-107",
+                               "article": "1", "citation": "Art. 1 …"},
+              "dates": {"in_force": {"date": "2026-07-01",
+                                     "status": "official"},
+                        "promulgated": {"date": "2026-04-22"}}}
+    notes = parse_notes(SGB2_STAND)
+    summary = summarize([change], scope="norm", subject="n", as_of=
+                        "2026-09-28", stand_notes=notes,
+                        notes_observed_at="2026-09-28")
+    linked = {n["kind"]: n for n in summary["documentation_notes"]}
+    pending = linked["textually_incorporated_documentation_pending"]
+    assert pending["applies_to_subject"] is True
+    assert pending["change_id"] == "c1"
+    assert linked["indirect_change_incorporated"]["applies_to_subject"] is \
+        False
+    doc = summary["last_change"]["gii_documentation"]
+    assert doc == {"kind": "textually_incorporated_documentation_pending",
+                   "text_incorporated": True,
+                   "documentation_complete": False,
+                   "text": pending["text"]}
