@@ -965,8 +965,8 @@ def select_version(versions: list[NormVersion], on: str,
                 attribution = (state.amendment or {}).get("attribution") or {}
                 # a start attributed only by the capture bracket (no quoted
                 # wording confirmed) is evidence of the date, not of the text
-                weak = attribution.get("verification") == \
-                    "bracketed_by_captures"
+                weak = attribution.get("verification") in {
+                    "bracketed_by_captures", "replay_unverified"}
                 resolution = {
                     "official_verified": "verified_interval",
                     "official_archived_version_date":
@@ -975,6 +975,10 @@ def select_version(versions: list[NormVersion], on: str,
                 extra = {"attribution": attribution} if attribution else {}
                 if weak:
                     extra["note"] = (
+                        "future wording reconstructed from the promulgated "
+                        "amendment; no official consolidation shows it yet"
+                        if attribution.get("verification") ==
+                        "replay_unverified" else
                         "the legal start comes from the in-force date of the "
                         "only amendment between two captures; its wording was "
                         "not confirmed in the text")

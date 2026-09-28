@@ -647,6 +647,8 @@ def plan_act_history(lh: Any, act_id: str, toc: dict[str, Any] | None
             group = groups.setdefault(key, {"files": {}, "changes": {},
                                             "labels": [], "roles": set(),
                                             "attribution": set()})
+            if (version.record or {}).get("future"):
+                group["future"] = True
             group["files"][_path(norm_id)] = _history_front_matter(
                 act, prefix, norm_id, version, change, toc)
             group["labels"].append(version.enbez or norm_id)
@@ -686,6 +688,8 @@ def plan_act_history(lh: Any, act_id: str, toc: dict[str, Any] | None
             amending = lead.get("amending_act") or {}
             what = amending.get("citation") or amending.get("document_id")
             subject = f"{jurabk}: {what} — in Kraft {day}"
+            if group.get("future"):
+                subject += " (künftige Fassung, rekonstruiert)"
         elif basis == "in_force":
             subject = f"{jurabk}: version in force {day} (verified interval)"
         else:
@@ -710,6 +714,10 @@ def plan_act_history(lh: Any, act_id: str, toc: dict[str, Any] | None
         if basis == "observed_at":
             body.append("Author date: first capture/retrieval that showed "
                         "these wordings — NOT a legal effective date.")
+        if group.get("future"):
+            body.append("Not yet in force: the wording is derived by "
+                        "replaying the promulgated commands on the latest "
+                        "official text; no official consolidation shows it.")
         if group["attribution"]:
             body.append("Attribution: " + ", ".join(sorted(
                 group["attribution"])))

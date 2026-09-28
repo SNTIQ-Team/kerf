@@ -856,6 +856,79 @@ def _replay(previous_row: dict[str, Any], target: Run,
     return steps
 
 
+def _future_versions(entries: list[dict[str, Any]],
+                     changes: list[dict[str, Any]], used: set[str],
+                     findings: list[dict[str, Any]], norm_id: str,
+                     as_of: str, bavarian: bool) -> list[dict[str, Any]]:
+    """Versions of promulgated, not yet effective amendments (unverified).
+
+    The official consolidation only ever shows the text in force; the text
+    an amendment will produce is derived by replaying its promulgated
+    commands on the latest captured wording.  No source can confirm it yet,
+    so it is labelled ``reconstruction`` with verification
+    ``replay_unverified`` and is never used to answer a past date.
+    """
+    from api.command_replay import ReplayUnsupported, apply_change
+    if not entries or entries[-1].get("run") is None:
+        return []
+    pending = [c for c in changes if c["change_id"] not in used and
+               (change_effective_date(c) or "") > as_of and
+               not c.get("text_effect")]
+    if not pending:
+        return []
+    by_date: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for change in pending:
+        by_date[change_effective_date(change)].append(change)
+    base = entries[-1]["row"] or {}
+    titel = str(base.get("titel") or "")
+    text = str(base.get("text") or "")
+    out: list[dict[str, Any]] = []
+    for day in sorted(by_date):
+        group = sorted(by_date[day], key=lambda c: (
+            str(c["amending_act"].get("document_id")),
+            str(c["amending_act"].get("article"))))
+        try:
+            for change in group:
+                titel, text = apply_change(titel, text,
+                                           change.get("commands") or [],
+                                           bavarian=bavarian)
+        except ReplayUnsupported as exc:
+            findings.append({
+                "kind": "future_version_not_reconstructed",
+                "norm_id": norm_id, "in_force": day,
+                "changes": [c["change_id"] for c in group],
+                "reason": str(exc)[:200]})
+            break
+        lead = group[0]
+        in_force = lead["dates"]["in_force"]
+        amending = lead["amending_act"]
+        label = amending.get("citation") or amending.get("document_id")
+        out.append({
+            "run": None,
+            "row": {"enbez": base.get("enbez"), "titel": titel,
+                    "text": text},
+            "record": {
+                "valid_from": day,
+                "valid_from_status": in_force.get("status"),
+                "valid_from_basis": (
+                    f"in force date of {label} ({in_force.get('basis')}); "
+                    "future wording derived by replaying the promulgated "
+                    "commands on the latest captured text"),
+                "change_ids": [c["change_id"] for c in group],
+                "attribution": {
+                    "status": "future_version_reconstructed",
+                    "verification": "replay_unverified",
+                    "note": ("not yet in force: no official consolidation "
+                             "shows this wording; it can change before "
+                             "the in-force date")},
+            },
+            "effects": [(c, "replay_unverified") for c in group],
+            "reconstruction": True,
+            "future": True,
+        })
+    return out
+
+
 def attribute(runs: list[Run], changes: list[dict[str, Any]],
               findings: list[dict[str, Any]], norm_id: str,
               as_of: str) -> list[dict[str, Any]]:
@@ -1044,6 +1117,8 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
                     + ("; replaying the official commands reproduces it"
                        if replayed else "")))
         entries.append(entry)
+    entries.extend(_future_versions(entries, changes, used, findings,
+                                    norm_id, as_of, bavarian))
     for position, entry in enumerate(entries[:-1]):
         following = entries[position + 1]["record"]
         if following.get("valid_from"):
@@ -1189,11 +1264,18 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
                                  "known_until": None},
                     "completeness": {
                         "status": "reconstructed",
-                        "reason": "derived from the previous captured text "
-                                  "and the official amendment commands; "
-                                  "verified against the next capture"},
-                    "verification": {"cross_source": "replay_verified",
+                        "reason": ("future wording derived from the latest "
+                                   "captured text and the promulgated "
+                                   "commands; not yet verifiable"
+                                   if entry.get("future") else
+                                   "derived from the previous captured text "
+                                   "and the official amendment commands; "
+                                   "verified against the next capture")},
+                    "verification": {"cross_source": (
+                        "replay_unverified" if entry.get("future") else
+                        "replay_verified"),
                                      "sources": ["reconstruction"]},
+                    "future": bool(entry.get("future")),
                     "first_state": None, "last_state": None,
                     "state_count": 0,
                 }
