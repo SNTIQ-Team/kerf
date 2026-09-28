@@ -411,3 +411,20 @@ def test_an_old_version_with_unknown_end_never_answers_today():
     _status, picked, _res = select_version([old, middle, current],
                                            "2007-01-01", Chain())
     assert picked is old
+
+
+def test_bundle_captures_json_stays_valid_and_old_cut_bundles_still_build():
+    captures = [{"kind": "norm_html", "url": "https://example.test/" + "x" * 400,
+                 "timestamp": f"2010{i:010d}"} for i in range(120)]
+    text = history_bundle._captures_json(captures)
+    assert len(text) <= 20000
+    kept = json.loads(text)
+    assert kept and kept == captures[:len(kept)]
+    # A bundle exported before the fix cut the JSON string mid-value.
+    cut = json.dumps(captures)[:20000]
+    with pytest.raises(ValueError):
+        json.loads(cut)
+    assert build_law_history._capture_kinds(cut) == {"norm_html"}
+    assert build_law_history._capture_kinds(None) == set()
+    assert build_law_history._capture_kinds('[{"kind": "xml_zip"}]') == {
+        "xml_zip"}

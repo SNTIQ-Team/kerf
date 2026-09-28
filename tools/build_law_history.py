@@ -205,6 +205,25 @@ def gii_states(act: dict[str, Any], data_dir: Path,
 _BUNDLE_TEXTS: dict[int, dict[str, Any]] = {}
 
 
+_KIND_RE = re.compile(r'"kind"\s*:\s*"([^"\\]*)"')
+
+
+def _capture_kinds(raw: Any) -> set[str]:
+    """Capture kinds of a bundle row.
+
+    Bundles exported before 2026-09-28 cut ``captures_json`` at 20,000
+    characters, which can leave invalid JSON; fall back to scanning the
+    ``"kind"`` fields so such a bundle still builds.
+    """
+    try:
+        items = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return set(_KIND_RE.findall(str(raw or "")))
+    if not isinstance(items, list):
+        return set()
+    return {str(c.get("kind")) for c in items if isinstance(c, dict)}
+
+
 def bundle_states(bundle: sqlite3.Connection | None, act_id: str
                   ) -> list[StateObs]:
     if bundle is None:
@@ -234,8 +253,7 @@ def bundle_states(bundle: sqlite3.Connection | None, act_id: str
         captured = str(row["captured_at"] or "")
         first = str(row["first_captured_at"] or captured)
         last = str(row["last_captured_at"] or captured)
-        kinds = {str(c.get("kind")) for c in json.loads(
-            row["captures_json"] or "[]") if isinstance(c, dict)}
+        kinds = _capture_kinds(row["captures_json"])
         kind = "norm_html" if "norm_html" in kinds or (
             not row["complete"] and row["norm_count"] <= 1) else None
         states.append(StateObs(
