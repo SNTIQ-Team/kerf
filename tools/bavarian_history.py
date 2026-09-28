@@ -614,7 +614,7 @@ def _gvbl_lines(text_html) -> list[dict]:
     return lines
 
 
-def _follows(previous: str | None, number: str) -> bool:
+def _follows(previous: str | None, number: str, strict: bool = True) -> bool:
     """Amending acts number their own articles 1, 2, 3 … (maybe 1a): a heading
     that breaks the sequence belongs to quoted new wording."""
     if previous is None:
@@ -624,10 +624,12 @@ def _follows(previous: str | None, number: str) -> bool:
     if not p or not n:
         return False
     pn, nn = int(p.group(1)), int(n.group(1))
+    if not strict:           # PDF text: OCR may lose a heading or two
+        return pn < nn <= pn + 3 or (nn == pn and n.group(2) > p.group(2))
     return nn == pn + 1 and not n.group(2) or (nn == pn and n.group(2) > p.group(2))
 
 
-def gvbl_sections(lines: list[dict]) -> list[dict]:
+def gvbl_sections(lines: list[dict], strict: bool = True) -> list[dict]:
     """Split GVBl text lines into article sections (``§ 1 …``/``Art. 1 …``).
 
     Only headings in the document's own unit and numbering sequence open a
@@ -642,7 +644,7 @@ def gvbl_sections(lines: list[dict]) -> list[dict]:
         if match and own_prefix is None:
             own_prefix = match.group(1)
         if match and (match.group(1) != own_prefix or not _follows(
-                current["number"] if current else None, match.group(2))):
+                current["number"] if current else None, match.group(2), strict)):
             match = None
         if match:
             title = match.group(3)
@@ -701,7 +703,7 @@ def parse_gvbl_detail(data: bytes) -> dict:
     return {**out, **_gvbl_body(lines)}
 
 
-def _gvbl_body(lines: list[dict]) -> dict:
+def _gvbl_body(lines: list[dict], strict: bool = True) -> dict:
     title, title_date = None, None
     for idx, line in enumerate(lines[:8]):
         if title is None and line["heading"] and not HEADING_ART_RE.match(line["text"]) \
@@ -723,7 +725,7 @@ def _gvbl_body(lines: list[dict]) -> dict:
         match = re.match(r"^München,\s*(?:den\s*)?" + LONG_DATE, line["text"])
         if match:
             signature = {"raw": match.group(0), "date": long_date(match.group(0))}
-    sections = gvbl_sections(lines)
+    sections = gvbl_sections(lines, strict)
     return {"title": title, "title_date": title_date, "decision_date": decision_date,
             "lines": lines,
             "sections": [{k: v for k, v in s.items() if k != "lines"}
@@ -797,7 +799,11 @@ def parse_gvbl_pdf_pages(pages: list[str], first_page: int, page: int,
     body = raw_lines[heading_at + 1:(end + 1) if end is not None else len(raw_lines)]
     if end is None:
         out["warnings"].append("no signature line found")
-    lines = [{"text": line, "heading": bool(re.fullmatch(r"(?:§|Art\.)\s*\d+[a-z]?", line)),
+    inline_heading = re.compile(r"(?:§|Art\.)\s*\d+[a-z]?\s+[A-ZÄÖÜ][^.:]{2,70}")
+    verbs = re.compile(r"\b(?:wird|werden|tritt|treten|ist|sind|erhält|erhalten|gilt|hat|kann)\b")
+    lines = [{"text": line,
+              "heading": bool(re.fullmatch(r"(?:§|Art\.)\s*\d+[a-z]?", line)
+                              or (inline_heading.fullmatch(line) and not verbs.search(line))),
               "tag": "pdf", "classes": []} for line in body if line]
     # a PDF heading is "§ 1" alone on its line, its title on the next line
     for i, line in enumerate(lines[:-1]):
@@ -809,7 +815,7 @@ def parse_gvbl_pdf_pages(pages: list[str], first_page: int, page: int,
                 and not follow.endswith(":")
                 and not re.search(r"\b(?:wird|werden|tritt|treten|ist|sind|erhält|"
                                   r"erhalten|gilt|hat|kann|verordnet)\b", follow))
-    parsed = _gvbl_body(lines)
+    parsed = _gvbl_body(lines, strict=False)
     parsed["title"], parsed["title_date"] = title, title_date
     parsed["signature"] = ({"raw": raw_lines[end], "date": long_date(raw_lines[end])}
                            if end is not None else None)
@@ -881,8 +887,8 @@ def parse_commencement(clause: str, promulgated: str | None) -> dict:
             continue
         core = re.sub(r"^(?:\(\d+\)\s*)?(?:\d+\s*(?=[A-ZÄÖÜ]))?", "", sentence)
         core = re.sub(r"^Abweichend\s+von\s+(?:Satz|Abs\.)\s*\d+\s*", "", core)
-        opening = re.search(r"\b(?:Dieses|Diese)\s+(?:Gesetz|Verordnung|Bekanntmachung|"
-                            r"Statut|Satzung)\s+tr(?:itt|eten)\b", core)
+        opening = re.search(r"(?<![A-Za-zÄÖÜäöüß])(?:Dieses|Diese)\s+(?:Gesetz|Verordnung|"
+                            r"Bekanntmachung|Statut|Satzung)\s+tr(?:itt|eten)\b", core)
         # a heading fragment may precede the clause ("Übergangsregelungen (1) 1Dieses …")
         general = bool(opening and len(core[:opening.start()]) < 40
                        and not REF_RE.search(core[:opening.start()]))
@@ -1402,6 +1408,9 @@ def command_targets(head: str, prefix: str, default_predicate: str = "") -> list
         if cut:
             subject = subject[:cut.start()]
     predicate = text[verb.start():] if verb else default_predicate
+    if re.match(r"^(?:Nach|Vor)\s", subject) and re.search(
+            r"\b(?:eingefügt|angefügt)\b", predicate):
+        return []          # "Nach Art. 3 wird folgender Teil 2a eingefügt": a position
     repeal = bool(re.match(r"^(?:wird|werden)\s+aufgehoben\b", predicate))
     rewrite = bool(re.match(r"^(?:erhält|erhalten)\s+folgende\s+Fassung|"
                             r"^(?:wird|werden)\s+wie\s+folgt\s+gefasst", predicate))
@@ -1418,6 +1427,14 @@ def command_targets(head: str, prefix: str, default_predicate: str = "") -> list
                       "ersetzt" if replace and whole else "geändert")
             targets.append({"norm": f"{prefix} {number}", "change_type": change,
                             "operation": change if whole else f"{change} (Teil)"})
+    # "In Art. 99 Abs. 1 und 107 Abs. 2 …": a bare number followed by its own
+    # "Abs." names another article ("Abs. 1 und 2 Satz 1" is an Absatz list)
+    if targets:
+        for extra in re.finditer(r"(?:,|\bund)\s+(\d+[a-z]?)\s+(?=Abs\.)", subject):
+            label = f"{prefix} {extra.group(1)}"
+            if not any(t["norm"] == label for t in targets):
+                targets.append({"norm": label, "change_type": "geändert",
+                                "operation": "geändert (Teil)"})
     return targets
 
 
@@ -1429,7 +1446,8 @@ def structural_targets(head: str, lines: list[str], prefix: str) -> list[dict]:
     """"Teil 7a wird wie folgt gefasst: „… Art. 66a Inklusionsamt …“" names
     no norm itself; the norms are the headings of the quoted new wording."""
     text = _unquoted(_collapse(head))
-    if not STRUCTURE_RE.match(text):
+    if not (STRUCTURE_RE.match(text) or re.search(
+            r"folgende[rsn]?\s+(?:neue[rn]?\s+)?(?:Teil|Abschnitt|Kapitel|Unterabschnitt)\b", text)):
         return []
     insert = bool(re.search(r"\b(?:eingefügt|angefügt|vorangestellt)\b", text))
     rewrite = bool(re.search(r"wie\s+folgt\s+gefasst|folgende\s+Fassung|durch\s+folgende", text))
@@ -1448,10 +1466,11 @@ def structural_targets(head: str, lines: list[str], prefix: str) -> list[dict]:
 
 
 def _container(section_lines: list[str], nummer: str | None,
-               absatz: str | None) -> tuple[list[str], int] | None:
+               absatz: str | None) -> tuple[list[str], int, str] | None:
     """Lines amending the target act inside one GVBl article section and the
     item level of its commands."""
     lines = section_lines
+    absatz_head = ""
     if absatz:
         start = next((i for i, l in enumerate(lines)
                       if (m := ABSATZ_MARKER.match(l)) and m.group(1) == absatz), None)
@@ -1460,6 +1479,7 @@ def _container(section_lines: list[str], nummer: str | None,
         end = next((i for i in range(start + 1, len(lines))
                     if ABSATZ_MARKER.match(lines[i])), len(lines))
         lines = [ABSATZ_MARKER.sub("", lines[start], count=1)] + lines[start + 1:end]
+        absatz_head = lines[0]
     if nummer:
         start = next((i for i, l in enumerate(lines)
                       if (lv := _level(l)) and lv == (1, nummer)), None)
@@ -1468,8 +1488,8 @@ def _container(section_lines: list[str], nummer: str | None,
         end = next((i for i in range(start + 1, len(lines))
                     if (lv := _level(lines[i])) and lv[0] == 1), len(lines))
         head = LEVEL_MARKERS[0][1].sub("", lines[start], count=1)
-        return [head] + lines[start + 1:end], 2
-    return lines, 1
+        return [head] + lines[start + 1:end], 2, absatz_head
+    return lines, 1, absatz_head
 
 
 def extract_commands(section: dict, prefix: str, nummer: str | None = None,
@@ -1480,7 +1500,7 @@ def extract_commands(section: dict, prefix: str, nummer: str | None = None,
     found = _container(section.get("items") or [], nummer, absatz)
     if found is None:
         return {"status": "container_not_found", "commands": []}
-    lines, level = found
+    lines, level, absatz_head = found
     items, intro = [], []
     depth = 0
     for line in lines:
@@ -1499,7 +1519,8 @@ def extract_commands(section: dict, prefix: str, nummer: str | None = None,
                      if intro and items and re.match(r"^(?:In\s+|Dem\s+|Der\s+|Die\s+)?"
                                                      r"(?:Art\.|§)\s*\d", intro[0])
                      else [])
-    context = " ".join([section.get("title") or ""] + (section.get("items") or [])[:1])
+    context = " ".join([section.get("title") or ""] + (section.get("items") or [])[:1]
+                       + lines[:1] + [absatz_head])
     default = ("werden aufgehoben" if re.search(r"\bAufhebung\b|werden\s+aufgehoben:|"
                                                 r"treten\s+außer\s+Kraft:", context)
                else "")
@@ -1507,7 +1528,8 @@ def extract_commands(section: dict, prefix: str, nummer: str | None = None,
         head = lines[0] if lines else ""
         return {"status": "single_command", "commands": [{
             "nummer": nummer, "buchstabe": None, "raw": _collapse(" ".join(lines))[:2000],
-            "targets": command_targets(head, prefix, default)}]}
+            "targets": (command_targets(head, prefix, default)
+                        or structural_targets(head, lines, prefix))}]}
     commands = []
     expected = 1
     for item in items:
@@ -1586,16 +1608,27 @@ ACT_NAMES = {
 }
 
 
+CLAUSE_START = re.compile(r"(?:\(1\)\s*)?(?:1\s*)?(?:Dieses|Diese)\s+(?:Gesetz|Verordnung|"
+                          r"Bekanntmachung|Satzung)\s+tr(?:itt|eten)\b")
+
+
 def commencement_section(doc: dict) -> dict | None:
+    """The Inkrafttreten article; where headings failed (OCR, truncated
+    pages) the clause is cut from the last "Dieses Gesetz tritt …" up to
+    the signature line."""
     for section in reversed(doc.get("sections") or []):
-        if re.search(r"Inkraft|In-Kraft|Geltungsdauer", section.get("heading") or "") \
-                and "in Kraft" in (section.get("text") or ""):
+        if re.search(r"[Il1]nkraft|In-Kraft|Geltungsdauer", section.get("heading") or "") \
+                and CLAUSE_START.search(section.get("text") or ""):
             return section
-    # single-article documents: the clause may close the last article
-    for section in reversed(doc.get("sections") or []):
-        if "in Kraft" in (section.get("text") or ""):
-            return section
-    return None
+    text = doc.get("text") or "\n".join(s.get("text") or "" for s in doc.get("sections") or [])
+    starts = list(CLAUSE_START.finditer(text))
+    if not starts:
+        return None
+    start = starts[-1].start()
+    end = text.find("München, den", start)
+    clause = text[start:end if end > 0 else None]
+    return {"prefix": None, "number": None, "heading": "(clause located by its wording)",
+            "title": "", "text": clause, "items": clause.split("\n")}
 
 
 # ------------------------------------------------------------- building
@@ -1657,7 +1690,7 @@ def parsed_capture(row: dict, root=None, refresh: bool = False) -> dict:
     return record
 
 
-PARSER_VERSION = "2026-09-28.16"
+PARSER_VERSION = "2026-09-28.18"
 
 
 def wayback_observations(act_id: str, root=None) -> tuple[list[dict], list[dict]]:
@@ -2584,8 +2617,20 @@ def text_difference_findings(act_id: str, versions: dict[str, list[dict]],
                     "evidence": [prev.get("archive_url") or prev.get("snapshot"),
                                  cur.get("archive_url") or cur.get("snapshot")]})
                 continue
+            delta = word_delta(prev, cur)
+            if "(außer Kraft)" in cur["text"] and "(außer Kraft)" not in prev["text"]:
+                findings.append({
+                    "act_id": act_id, "norm_id": norm_id,
+                    "kind": "provision_marked_expired",
+                    "detail": (f"between {prev['known_at']} ({prev.get('consolidation_raw')}) and "
+                               f"{cur['known_at']} ({cur.get('consolidation_raw')}) BAYERN.RECHT "
+                               f"shows part of the norm as '(außer Kraft)' (expiry by its own "
+                               f"terms; no amending act): {delta}"),
+                    "evidence": [prev.get("archive_url") or prev.get("snapshot"),
+                                 cur.get("archive_url") or cur.get("snapshot")]})
+                continue
             findings.append({
-                "act_id": act_id, "norm_id": norm_id,
+                "act_id": act_id, "norm_id": norm_id, "delta": delta,
                 "kind": "text_difference_without_version_log_change",
                 "detail": (f"text differs between {prev['known_at']} ({prev['source']}, "
                            f"{prev.get('consolidation_raw')}) and {cur['known_at']} "
@@ -2613,6 +2658,21 @@ def split_editions(act_id: str, wayback: list[dict]) -> tuple[list[dict], list[d
 
 
 EDITORIAL_START = re.compile(r"^\[(?:Redaktioneller Hinweis|Red\. Anm\.|Amtl\. Anm\.)")
+
+
+def word_delta(prev: dict, cur: dict, limit: int = 3) -> list[str]:
+    """Short human-readable word-level delta between two observations."""
+    import difflib
+    out = []
+    if prev["titel"] != cur["titel"]:
+        out.append(f"Überschrift: {prev['titel']!r} -> {cur['titel']!r}")
+    a, b = prev["text"].split(), cur["text"].split()
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if op != "equal":
+            out.append(f"{op}: {' '.join(a[i1:i2])[:120]!r} -> {' '.join(b[j1:j2])[:120]!r}")
+    if not out:
+        out.append("whitespace/line breaks only")
+    return out[:limit] + ([f"… {len(out) - limit} more"] if len(out) > limit else [])
 
 
 def editorial_notes_only(old: str, new: str) -> list[str] | None:

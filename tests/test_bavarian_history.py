@@ -399,3 +399,19 @@ def test_editorial_note_is_not_a_norm_change():
     notes = bh.editorial_notes_only(old, new)
     assert notes and notes[0].startswith("[Redaktioneller Hinweis: Die Quoten wurden mWv 1.8.2025")
     assert bh.editorial_notes_only(old, old.replace("35,6", "36,1")) is None
+
+
+@pytest.mark.parametrize(("command", "expected"), [
+    # GVBl 2021 S. 196 § 2 Nr. 14 (verbatim head)
+    ("In Art. 99 Abs. 1 und 107 Abs. 2 wird jeweils die Angabe „27j“ durch die Angabe „27l“ "
+     "ersetzt.", ["Art. 99", "Art. 107"]),
+    # GVBl 2019 S. 746 § 1 Nr. 2 (verbatim head): "2 Satz 1" is an Absatz
+    ("In Art. 74 Abs. 5, Art. 76 Abs. 1 und 2 Satz 1 werden jeweils die Wörter „Elften Buches "
+     "Sozialgesetzbuch“ durch die Angabe „SGB XI“ ersetzt.", ["Art. 74", "Art. 76"]),
+    # GVBl 2023 S. 443 § 2 (verbatim head): a position, not a target
+    ("Nach Art. 3 des Gesetzes zur Ausführung der Sozialgesetze (AGSG) vom 8. Dezember 2006 "
+     "(GVBl. S. 942, BayRS 86-7-A/G), das zuletzt durch § 4 des Gesetzes vom 24. Juli 2023 "
+     "(GVBl. S. 431) geändert worden ist, wird folgender Teil 2a eingefügt:", []),
+])
+def test_command_targets(command, expected):
+    assert [t["norm"] for t in bh.command_targets(command, "Art.")] == expected
