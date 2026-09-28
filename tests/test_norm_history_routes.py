@@ -214,3 +214,9 @@ def test_missing_materials_store_is_unavailable_not_empty(data, monkeypatch):
     body = response.json()
     assert body["status"] == "unavailable"
     assert body["total"] is None and body["evidence"] == []
+
+
+def test_transport_cache_key_is_accepted_on_norm_routes(data):
+    response = _client(data).get(f"/norms/{P29A}/log?t=1790582645")
+    assert response.status_code == 200
+    assert _client(data).get(f"/norms/{P29A}/log?t=1&at=x").status_code == 422

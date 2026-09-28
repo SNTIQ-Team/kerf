@@ -20,7 +20,8 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Request
 
-from api.evidence import EnvelopeError, envelope, error_envelope, response
+from api.evidence import (CACHE_KEY_ARGUMENTS, EnvelopeError, envelope,
+                          error_envelope, response)
 from api.law_structure import (
     STRUCTURE_PARSER_VERSION,
     human_locator,
@@ -362,7 +363,7 @@ def create_router(data_dir: Callable[[], Path],
 def _strict(request: Request, operation: str) -> None:
     allowed = _ALLOWED[operation]
     params = request.query_params
-    unknown = sorted(set(params) - allowed)
+    unknown = sorted(set(params) - allowed - CACHE_KEY_ARGUMENTS)
     repeated = sorted(k for k in params if len(params.getlist(k)) > 1)
     if unknown or repeated:
         temporal = {"at", "valid_at", "known_at", "stichtag"} & set(unknown)

@@ -63,7 +63,8 @@ from api.act_archive import (
     render_markdown_snapshot,
 )
 from api.decision_passages import create_router as decision_passages_router, coverage_status as decision_passage_coverage
-from api.evidence import EnvelopeError, unknown_argument_payload
+from api.evidence import (CACHE_KEY_ARGUMENTS, EnvelopeError,
+                          unknown_argument_payload)
 from api.law_routes import create_router as law_router
 try:
     from api.materials_routes import create_router as materials_router
@@ -109,7 +110,7 @@ _SELF_VALIDATING_PREFIXES = ("/norms/", "/materials")
 # Transport-only cache keys that deployed clients append (``?t=<ms>``,
 # ``/digest?d=<day>``).  They never select content; they are accepted but
 # disclosed in X-Lexgraph-Ignored-Arguments instead of being silently dropped.
-_CACHE_KEYS = {"t", "_", "cb"}
+_CACHE_KEYS = set(CACHE_KEY_ARGUMENTS)
 _ROUTE_CACHE_KEYS = {"/digest": {"d"}}
 
 
