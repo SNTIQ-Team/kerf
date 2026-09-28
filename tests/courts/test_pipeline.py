@@ -335,3 +335,24 @@ def test_a_slow_start_does_not_fix_a_loose_baseline():
     for _ in range(20):
         g.answered(2.0)                        # now a real spike: > 3x 0.4 s and > 0.4 s + 1 s
     assert g.limit == 2
+
+
+def test_a_stall_of_this_process_is_not_a_host_signal():
+    clock, logs = Clock(), []
+    lag = [0.0]
+    g = HostGovernor("h", start=6, maximum=8, min_interval=1.0, log=logs.append, clock=clock, sleep=clock.sleep,
+                     lag=lambda: lag[0])
+    for _ in range(20):
+        g.answered(0.3)
+    lag[0] = 2.0                               # every thread of the process was stalled
+    for _ in range(20):
+        g.answered(3.0)
+    assert g.limit == 6 and g.local_stalls == 1
+    clock.now += 121
+    for _ in range(10):
+        g.answered(0.3)
+    assert g.limit == 6                        # no growth while the process stalls
+    lag[0] = 0.0
+    for _ in range(20):
+        g.answered(3.0)                        # a real spike
+    assert g.limit == 3

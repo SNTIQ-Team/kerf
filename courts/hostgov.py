@@ -37,6 +37,29 @@ GROW_BELOW = 2.0
 SPIKE_ABOVE = 3.0
 SPIKE_MARGIN = 1.0      # and at least this many seconds above the baseline (small baselines are noisy)
 MIN_BASELINE = 0.2
+LOCAL_LAG = 0.5         # seconds a 100 ms sleep overran: this process was stalled, not the host
+LAG_WINDOW = 15.0
+
+
+class LagMonitor:
+    """How late a 100 ms sleep wakes up in this process.  Latency measured while every thread was stalled
+    (GIL, disk) says nothing about the host: such spikes neither halve nor count as quiet windows."""
+
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
+        self.samples: collections.deque = collections.deque(maxlen=2000)
+        self._thread = threading.Thread(target=self._run, name="lag-monitor", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while True:
+            started = self.clock()
+            time.sleep(0.1)
+            self.samples.append((self.clock(), max(0.0, self.clock() - started - 0.1)))
+
+    def max_lag(self, seconds: float = LAG_WINDOW) -> float:
+        now = self.clock()
+        return max((lag for at, lag in list(self.samples) if now - at <= seconds), default=0.0)
 
 
 @dataclass(frozen=True)
@@ -52,11 +75,13 @@ def _p95(values) -> float:
 
 class HostGovernor:
     def __init__(self, host: str, *, start: int, maximum: int, min_interval: float, log=None, clock=time.monotonic,
-                 sleep=time.sleep):
+                 sleep=time.sleep, lag=None):
         self.host, self.maximum, self.min_interval = host, max(1, maximum), max(1.0, min_interval)
         self.limit = max(1, min(start, self.maximum))
         self.log = log or (lambda message: None)
         self.clock, self.sleep = clock, sleep
+        self.lag = lag or (lambda: 0.0)       # LagMonitor.max_lag of the process
+        self.local_stalls = 0
         self.cond = threading.Condition()
         now = clock()
         self.in_flight = 0
@@ -140,6 +165,13 @@ class HostGovernor:
             if self.baseline is None:
                 return
             spike = _p95(self.recent)
+            stalled = self.lag() > LOCAL_LAG
+            if stalled and len(self.recent) >= SPIKE_SAMPLES and spike > SPIKE_ABOVE * self.baseline:
+                # The process itself stalled: the measured latency is ours, not the host's.
+                self.local_stalls += 1
+                self.recent.clear()
+                self.window, self.window_errors = [], 0
+                return
             if len(self.recent) >= SPIKE_SAMPLES and len(self.window) >= MIN_SAMPLES \
                     and spike > SPIKE_ABOVE * self.baseline and spike > self.baseline + SPIKE_MARGIN:
                 self._throttle(now, f"latency spike p95 {_p95(self.recent):.2f}s > {SPIKE_ABOVE:.0f}x baseline "
@@ -151,7 +183,7 @@ class HostGovernor:
                 # The baseline only ever tightens: the first answers of a run (TLS handshakes, every source
                 # starting at once) are slow, and a high baseline would make both rules toothless.
                 self.baseline = max(MIN_BASELINE, min(self.baseline, _p95(self.window)))
-            if (now - self.last_change >= INCREASE_EVERY and now >= self.cooldown_until
+            if (now - self.last_change >= INCREASE_EVERY and now >= self.cooldown_until and not stalled
                     and len(self.window) >= MIN_SAMPLES and not self.window_errors
                     and _p95(self.window) < GROW_BELOW * self.baseline and self.limit < self.maximum):
                 self._set(self.limit + 1, f"p95 {_p95(self.window):.2f}s < {GROW_BELOW:.0f}x baseline "
@@ -187,6 +219,7 @@ class HostGovernor:
         with self.cond:
             return {"limit": self.limit, "peak": self.peak, "in_flight": self.in_flight, "requests": self.requests,
                     "baseline_p95": round(self.baseline, 3) if self.baseline else None,
+                    "local_stalls_ignored": self.local_stalls,
                     "recent_p95": round(_p95(self.recent), 3) if self.recent else None,
                     "blocks_10min": len(self.blocks)}
 
@@ -194,8 +227,9 @@ class HostGovernor:
 class Governors:
     """host -> HostGovernor, created on first use with the host's class (see ``concurrency_for``)."""
 
-    def __init__(self, log=None, clock=time.monotonic, sleep=time.sleep):
+    def __init__(self, log=None, clock=time.monotonic, sleep=time.sleep, monitor_lag: bool = False):
         self.log, self.clock, self.sleep = log, clock, sleep
+        self.lag_monitor = LagMonitor() if monitor_lag else None
         self._by_host: dict[str, HostGovernor] = {}
         self._policy: dict[str, tuple[Concurrency, float]] = {}
         self._lock = threading.Lock()
@@ -214,7 +248,8 @@ class Governors:
             if governor is None:
                 concurrency, interval = self._policy.get(host, (Concurrency(1, 2), 1.1))
                 governor = HostGovernor(host, start=concurrency.start, maximum=concurrency.maximum,
-                                        min_interval=interval, log=self.log, clock=self.clock, sleep=self.sleep)
+                                        min_interval=interval, log=self.log, clock=self.clock, sleep=self.sleep,
+                                        lag=self.lag_monitor.max_lag if self.lag_monitor else None)
                 self._by_host[host] = governor
             return governor
 
