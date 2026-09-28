@@ -56,7 +56,7 @@ def assemble(decision_id: str, sections: list[Section]) -> tuple[list[Paragraph]
             continue
         numbered = section.name not in HEADNOTE_SECTIONS and any(clean_label(b.label) for b in blocks)
         positional_ids = section.name in HEADNOTE_SECTIONS or (
-            not numbered and (numbering == "rn" or section.name == "tenor"))
+            not numbered and (numbering == "rn" or section.name in ("tenor", "rechtsmittelbelehrung")))
         if positional_ids:
             # Positional ids; labels here are list markers, not Randnummern.
             for block in blocks:

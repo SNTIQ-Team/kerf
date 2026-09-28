@@ -84,6 +84,9 @@ def record(conn: sqlite3.Connection, *, target: str, kind: str, new, evidence: s
                 or not new.get("assessment"):
             raise CorrectionError('relation_assessment needs --target-id and new={"assessment": .., '
                                   '"status": "confirmed"|"rejected"}')
+        from .polarity import STORED_ASSESSMENTS
+        if new["assessment"] not in STORED_ASSESSMENTS:
+            raise CorrectionError(f"assessment must be one of {sorted(STORED_ASSESSMENTS)}")
         field = target_id
     elif kind == "paragraph_boundary":
         if not quote or not isinstance(new, str):

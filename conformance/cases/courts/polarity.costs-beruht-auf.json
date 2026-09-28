@@ -3,8 +3,8 @@
   "id": "courts.polarity.costs-beruht-auf",
   "module": "courts",
   "kind": "relation_assessments",
-  "description": "relation polarity rules: costs-beruht-auf",
-  "origin": "BAG 8 AZB 10/24 Rn 33 (costs basis)",
+  "description": "Cost clauses cite procedural norms: procedural_reference, never 'applies' (operator rule 2026-09-28; the 'beruht auf' rule scored 0.48 precision on applies, mostly cost/enforceability clauses).",
+  "origin": "BAG 8 AZB 10/24 Rn 33 (costs basis); polarity gold 2026-09-28",
   "status": "active",
   "input": {
     "text": "Die Kostenentscheidung beruht auf § 62 Abs. 2 Satz 1 ArbGG, § 891 Satz 3 iVm. § 97 Abs. 1 ZPO.",
@@ -13,11 +13,12 @@
     "land": "de"
   },
   "expected": {
-    "assessment_keys": {
-      "$contains": [
-        "applies|de/bund/arbgg/para/62/abs/2/satz/1"
-      ]
-    }
+    "relations": [
+      {"relation": "procedural_reference", "target_id": "de/bund/arbgg/para/62/abs/2/satz/1"},
+      {"relation": "procedural_reference", "target_id": "de/bund/zpo/para/891/satz/3"},
+      {"relation": "procedural_reference", "target_id": "de/bund/zpo/para/97/abs/1"}
+    ],
+    "assessment_keys": []
   },
   "match": "subset"
 }

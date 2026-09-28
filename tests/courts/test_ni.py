@@ -177,8 +177,8 @@ def test_stored_decision(fixture, tmp_path):
     decision_id, _ = store_decision(conn, parsed, content_hash="x", capture_path="raw/x", media_type="text/html")
     row = conn.execute("SELECT numbering, court_id FROM decisions WHERE id=?", (decision_id,)).fetchone()
     assert (row["numbering"], row["court_id"]) == ("none", "lsg-nihb")
-    proc = conn.execute("SELECT count(*) FROM relations WHERE decision_id=? AND relation='procedural_reference'",
-                        (decision_id,)).fetchone()[0]
+    proc = conn.execute("SELECT count(*) FROM relations WHERE decision_id=? AND relation='procedural_reference' "
+                        "AND target_kind='decision'", (decision_id,)).fetchone()[0]
     assert proc == 1
 
 

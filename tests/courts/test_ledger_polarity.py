@@ -27,7 +27,11 @@ def test_assessment_stage_runs_after_store_and_keeps_parser_output_pure(conn):
     rows = conn.execute("SELECT assessment, target_id, rule_id, derived_by, legal_effect_verified, paragraph_id "
                         "FROM relation_assessments").fetchall()
     keys = {(r["assessment"], r["target_id"]) for r in rows}
-    assert ("applies", "de/bund/vwgo/para/154/abs/2") in keys                     # "beruht auf § 154 Abs. 2 VwGO"
+    assert ("applies", "de/bund/asylvfg_1992/para/24/abs/4") in keys
+    # Cost clauses ("beruht auf § 154 Abs. 2 VwGO") are procedural_reference and never assessed.
+    assert not any(r["target_id"] == "de/bund/vwgo/para/154/abs/2" for r in rows)
+    assert conn.execute("SELECT relation FROM relations WHERE target_id='de/bund/vwgo/para/154/abs/2'"
+                        ).fetchone()[0] == "procedural_reference"
     assert ("interprets", "de/bund/vwgo/para/132/abs/2/nr/1") in keys            # "im Sinne des … , wenn"
     assert all(r["derived_by"] == "rules" and r["legal_effect_verified"] == 0 for r in rows)
     assert not any(r["target_id"] == "de/bund/vwgo/para/75" for r in rows)      # Rn 10: mentions only
@@ -65,14 +69,14 @@ def test_decision_field_correction_survives_reparse_and_writes_open_fixture(conn
 
 
 def test_rejecting_a_rule_proposal(conn, tmp_path):
-    target = f"{ECLI}#rn-12"
-    record(conn, target=target, kind="relation_assessment", target_id="de/bund/vwgo/para/154/abs/2",
+    target = f"{ECLI}#rn-7"
+    record(conn, target=target, kind="relation_assessment", target_id="de/bund/asylvfg_1992/para/24/abs/4",
            new={"assessment": "applies", "status": "rejected"}, evidence="test rejection", author="user")
     status = conn.execute("SELECT status FROM relation_assessments WHERE target_id=? AND assessment='applies'",
-                          ("de/bund/vwgo/para/154/abs/2",)).fetchone()[0]
+                          ("de/bund/asylvfg_1992/para/24/abs/4",)).fetchone()[0]
     assert status == "rejected"
     case = json.loads(next((tmp_path / "cases").glob("*.json")).read_text())
-    assert case["expected"] == {"assessment_keys": {"$excludes": ["applies|de/bund/vwgo/para/154/abs/2"]}}
+    assert case["expected"] == {"assessment_keys": {"$excludes": ["applies|de/bund/asylvfg_1992/para/24/abs/4"]}}
 
 
 def test_confirmation_is_user_derived_and_verified(conn):
@@ -94,3 +98,4 @@ def test_invalid_corrections_are_refused(conn):
         record(conn, target="ECLI:none", kind="case_numbers", new=["x"], evidence="e", author="a")
     with pytest.raises(CorrectionError):
         record(conn, target=ECLI, kind="case_numbers", new=["1 B 19/16"], evidence=" ", author="a")
+

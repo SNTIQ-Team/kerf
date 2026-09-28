@@ -46,6 +46,38 @@ def pdf_text(pdf: bytes, *, url: str | None = None) -> str:
     return text
 
 
+XHTML = "{http://www.w3.org/1999/xhtml}"
+
+
+def pdf_word_lines(pdf: bytes, *, url: str | None = None) -> list[dict]:
+    """Per page: ``{"width", "height", "lines": [{"y0", "y1", "words": [(x0, x1, text)]}]}`` from
+    ``pdftotext -bbox-layout``.  Positions let a reader find a margin column exactly, which the
+    space-padded ``-layout`` text cannot do reliably (a justified line may leave one space before
+    a right-margin number, or none)."""
+    import xml.etree.ElementTree as ET
+    if not pdf.startswith(b"%PDF"):
+        raise UpstreamFailure("unexpected_representation", "not a PDF", url=url)
+    if shutil.which("pdftotext") is None:
+        raise UpstreamFailure("parse_error", "pdftotext (poppler) not installed", url=url)
+    proc = subprocess.run(["pdftotext", "-bbox-layout", "-enc", "UTF-8", "-", "-"], input=pdf,
+                          capture_output=True, timeout=180)
+    if proc.returncode != 0:
+        raise UpstreamFailure("parse_error", f"pdftotext -bbox-layout failed: {proc.stderr[:200]!r}", url=url)
+    try:
+        root = ET.fromstring(proc.stdout)
+    except ET.ParseError as exc:
+        raise UpstreamFailure("parse_error", f"pdftotext bbox output: {exc}", url=url) from exc
+    pages = []
+    for page in root.iter(f"{XHTML}page"):
+        lines = []
+        for line in page.iter(f"{XHTML}line"):
+            words = [(float(w.get("xMin")), float(w.get("xMax")), w.text or "") for w in line.iter(f"{XHTML}word")]
+            if words:
+                lines.append({"y0": float(line.get("yMin")), "y1": float(line.get("yMax")), "words": words})
+        pages.append({"width": float(page.get("width")), "height": float(page.get("height")), "lines": lines})
+    return pages
+
+
 def spaced_word(line: str) -> str:
     """'G r ü n d e :' -> 'Gründe:' ; normal words unchanged."""
     stripped = line.strip()

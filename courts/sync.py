@@ -210,7 +210,8 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
 
 
 def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None,
-                   decision_ids: set[str] | None = None, force: bool = False) -> dict:
+                   decision_ids: set[str] | None = None, force: bool = False,
+                   include_skipped: bool = False) -> dict:
     """Re-parse stored raw captures with the current parser (no network).
 
     Decisions whose text and parser version are unchanged are left alone; a
@@ -245,5 +246,61 @@ def reparse_source(adapter: Adapter, conn: sqlite3.Connection, *, home=None,
         except Exception as exc:  # keep the old record; report the parser defect
             counts["failed"] += 1
             log(f"{adapter.source_id}: reparse {row['id']}: {type(exc).__name__}: {exc}")
+    if include_skipped:
+        counts.update(reexamine_skipped(adapter, conn, home=home))
     relink(conn)
+    return counts
+
+
+MEDIA_BY_EXTENSION = {"html": "text/html", "zip": "application/zip", "pdf": "application/pdf",
+                      "xml": "application/xml", "json": "application/json"}
+
+
+def reexamine_skipped(adapter: Adapter, conn: sqlite3.Connection, *, home=None) -> dict:
+    """Duplicates skipped under older rules, re-examined offline (identity and precedence rules change).
+
+    With a packed capture the item is parsed and stored again (it stays skipped if it still collides).
+    Without one (skipped before captures were kept for duplicates) it is re-queued when the decision it
+    collided with is gone (its id changed) or is unnumbered (an explicit-Rn copy would now supersede it).
+    """
+    from .sources.base import Capture
+    from .store import read_capture
+    counts = {"skipped_stored": 0, "skipped_still_duplicate": 0, "skipped_requeued": 0, "skipped_kept": 0}
+    rows = conn.execute("SELECT * FROM source_items WHERE source_id=? AND state='skipped'",
+                        (adapter.source_id,)).fetchall()
+    for row in rows:
+        if row["content_hash"]:
+            ref = conn.execute("SELECT extension, pack, offset FROM captures WHERE sha256=?",
+                               (row["content_hash"],)).fetchone()
+            if ref is None:
+                continue
+            try:
+                body = read_capture(conn, row["content_hash"], None, home)
+                capture = Capture(body, row["url"], MEDIA_BY_EXTENSION.get(ref["extension"], ""), ref["extension"])
+                decision_id, changed = store_decision(conn, adapter.parse(capture, row),
+                                                      content_hash=row["content_hash"],
+                                                      capture_path=f"{ref['pack']}@{ref['offset']}",
+                                                      media_type=capture.media_type)
+                if changed:
+                    after_store(conn, decision_id)
+                counts["skipped_stored"] += 1
+            except UpstreamFailure as failure:
+                if failure.kind == "duplicate_identity":
+                    conn.execute("UPDATE source_items SET failure_detail=? WHERE source_id=? AND source_doc_id=?",
+                                 (failure.detail[:500], row["source_id"], row["source_doc_id"]))
+                    conn.commit()
+                    counts["skipped_still_duplicate"] += 1
+                else:
+                    log(f"{adapter.source_id}: re-examine {row['source_doc_id']}: {failure.kind}: "
+                        f"{failure.detail[:160]}")
+            continue
+        target = (row["failure_detail"] or "").split(" already stored", 1)[0].split(" superseded", 1)[0].strip()
+        other = conn.execute("SELECT numbering FROM decisions WHERE id=?", (target,)).fetchone() if target else None
+        if other is None or other["numbering"] == "none":
+            conn.execute("UPDATE source_items SET state='pending', failure_kind=NULL, failure_detail=NULL "
+                         "WHERE source_id=? AND source_doc_id=?", (row["source_id"], row["source_doc_id"]))
+            conn.commit()
+            counts["skipped_requeued"] += 1
+        else:
+            counts["skipped_kept"] += 1
     return counts

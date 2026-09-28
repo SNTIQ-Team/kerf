@@ -7,4 +7,4 @@ the database contract that the Node MCP reads directly.
 """
 
 SCHEMA_VERSION = 3
-PARSER_VERSION = "courts-parser/1.4.0"
+PARSER_VERSION = "courts-parser/1.5.0"
