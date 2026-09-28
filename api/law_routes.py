@@ -457,7 +457,7 @@ def create_router(data_dir: Callable[[], Path],
                                               "states", "states_by_source",
                                               "earliest_text", "norms",
                                               "norm_versions")},
-                change_summary=act_summary(lh, act_id, on))
+                change_summary=_stored_act_summary(lh, act_id, on))
         return run("act_changes", request, act_id, handler)
 
     @router.get("/norms/{norm_id:path}/materials")
@@ -681,6 +681,14 @@ def _collapse_by_sub(versions: list[NormVersion], sub: str,
             shown.append(version)
             previous = text
     return shown
+
+
+def _stored_act_summary(lh: LawHistoryStore, act_id: str, on: str
+                        ) -> dict[str, Any]:
+    stored = (lh.acts().get(act_id) or {}).get("act_change_summary")
+    if stored and stored.get("as_of") == on:
+        return stored
+    return act_summary(lh, act_id, on)
 
 
 def _is_lh(chain: ActChain) -> bool:

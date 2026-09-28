@@ -1320,8 +1320,11 @@ def store_index_summaries(path: Path, as_of: str) -> None:
     from api.law_history_chain import act_summary, index_entry
     store = LawHistoryStore(path)
     rows = {}
+    full_rows = {}
     for act_id, info in store.acts().items():
-        rows[act_id] = index_entry(act_summary(store, act_id, as_of))
+        full = act_summary(store, act_id, as_of)
+        full_rows[act_id] = full
+        rows[act_id] = index_entry(full)
     store.close()
     db = sqlite3.connect(path)
     for act_id, entry in rows.items():
@@ -1329,6 +1332,7 @@ def store_index_summaries(path: Path, as_of: str) -> None:
             "SELECT summary_json FROM acts WHERE act_id=?",
             (act_id,)).fetchone()[0])
         summary["index_summary"] = entry
+        summary["act_change_summary"] = full_rows[act_id]
         db.execute("UPDATE acts SET summary_json=? WHERE act_id=?",
                    (_json(summary), act_id))
     db.commit()

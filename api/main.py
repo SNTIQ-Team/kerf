@@ -650,6 +650,9 @@ def _act_change_summary(act_id: str, on: str | None = None,
                 return None
             return norm_summary(store, act_id, resolved["norm_id"], changes,
                                 versions, day, versions[-1])
+        stored = (store.acts().get(act_id) or {}).get("act_change_summary")
+        if stored and stored.get("as_of") == day:
+            return stored
         return law_act_summary(store, act_id, day)
     except Exception:
         return None
