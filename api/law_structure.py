@@ -68,6 +68,7 @@ class Node:
     end: int
     children: list["Node"] = field(default_factory=list)
     marker_end: int | None = None  # end of the "(2)" / "1." marker
+    flags: list[str] = field(default_factory=list)
 
     def as_dict(self, text: str, prefix: str = "") -> dict[str, Any]:
         locator = _join_locator(prefix, self.type, self.number)
@@ -83,6 +84,8 @@ class Node:
         }
         if self.marker_end is not None:
             payload["marker"] = text[self.start:self.marker_end].strip()
+        if self.flags:
+            payload["flags"] = list(self.flags)
         if self.children:
             payload["children"] = [child.as_dict(text, locator)
                                    for child in self.children]
@@ -114,7 +117,7 @@ def _follows(previous: str | None, candidate: str) -> bool:
     """Whether ``candidate`` may follow ``previous`` in a numbered sequence."""
     if previous is None:
         return candidate in {"1", "1a"} or candidate == "0"
-    prev_n, prev_s = _num_key(previous)
+    prev_n, prev_s = _num_key(previous.split("~")[0])
     cand_n, cand_s = _num_key(candidate)
     if cand_n == prev_n:
         return bool(cand_s) and cand_s > prev_s
@@ -132,7 +135,15 @@ def _letter_follows(previous: str | None, candidate: str) -> bool:
 # ------------------------------------------------------------------ Absatz
 
 def _absatz_nodes(text: str) -> list[Node]:
-    """Numbered Absätze, accepted only in sequence and at a boundary."""
+    """Numbered Absätze at a boundary, in a monotone sequence.
+
+    Real consolidations are not always tidy, and each irregularity is kept
+    visible instead of being merged into the previous Absatz:
+
+    * a repealed Absatz can vanish (``(5) … (7)``): accepted as a gap;
+    * a number can occur twice (``(3) … (3)``): the second becomes ``3~2``;
+    * the first Absatz can be unmarked (``Text … (2) …``): implicit ``1``.
+    """
     nodes: list[Node] = []
     previous: str | None = None
     for match in _ABSATZ.finditer(text):
@@ -143,15 +154,36 @@ def _absatz_nodes(text: str) -> list[Node]:
         if not at_boundary:
             continue
         number = match.group(1) + match.group(2)
-        if previous is None and number not in {"1", "0"}:
-            # A body that starts mid-sequence (e.g. an extract) is not
-            # silently renumbered; only a leading marker may start it.
-            if before:
+        flags: list[str] = []
+        if previous is None:
+            if number not in {"1", "0"}:
+                if not before or int(match.group(1)) > 3:
+                    continue
+                # Leading unmarked text followed by "(2)": an implicit Abs. 1.
+                implicit = Node("absatz", "1", 0, start)
+                implicit.flags = ["implicit_marker"]
+                nodes.append(implicit)
+                previous = "1"
+                if not _follows(previous, number):
+                    continue
+        elif not _follows(previous, number):
+            prev_num = int(re.match(r"\d+", previous.split("~")[0]).group(0))
+            cand_num = int(match.group(1))
+            follows_text = re.match(r"[\s\u00a0]*[A-ZÄÖÜ„»\"]",
+                                    text[match.end():match.end() + 4])
+            if number == previous.split("~")[0] and follows_text:
+                count = sum(1 for node in nodes
+                            if (node.number or "").split("~")[0] == number)
+                number = f"{number}~{count + 1}"
+                flags.append("duplicate_number_in_source")
+            elif prev_num < cand_num <= prev_num + 3 and \
+                    not match.group(2) and follows_text:
+                flags.append("sequence_gap_in_source")
+            else:
                 continue
-        elif previous is not None and not _follows(previous, number):
-            continue
-        nodes.append(Node("absatz", number, start, len(text),
-                          marker_end=match.end()))
+        node = Node("absatz", number, start, len(text), marker_end=match.end())
+        node.flags = flags
+        nodes.append(node)
         previous = number
     for node, following in zip(nodes, nodes[1:]):
         node.end = following.start
@@ -368,22 +400,25 @@ def _trim_children(node: Node) -> None:
 
 # ----------------------------------------------------------------- public
 
-def parse_norm_structure(text: str, *, bavarian: bool = False
-                         ) -> dict[str, Any]:
+def parse_norm_structure(text: str, *, bavarian: bool = False,
+                         annex: bool = False) -> dict[str, Any]:
     """Parse one canonical norm body into typed legal units.
 
     The result counts legal units only; offsets always refer to ``text`` so a
     caller can render or diff the canonical bytes without re-tokenizing.
+    Annexes (Anlage/Anhang) are usually tables or forms whose "(2)(5)(7)"
+    are column references, not Absätze: they get sentence units only.
     """
     body = text or ""
-    absaetze = _absatz_nodes(body)
+    absaetze = [] if annex else _absatz_nodes(body)
     spaced = bavarian or bool(re.search(r"\b1\.[  ]+\S", body)) and \
         not re.search(r"\b1\.(?=[A-Za-zÄÖÜäöüß„])", body)
     containers = absaetze or [Node("absatz", None, 0, len(body))]
     for absatz in containers:
         content_start = absatz.marker_end if absatz.marker_end is not None \
             else absatz.start
-        items = _items(body, content_start, absatz.end, spaced=spaced)
+        items = [] if annex else _items(body, content_start, absatz.end,
+                                        spaced=spaced)
         absatz.children = _sentences(body, content_start, absatz.end, items,
                                      bavarian=bavarian)
     units = [node.as_dict(body) for node in containers]
@@ -400,6 +435,7 @@ def parse_norm_structure(text: str, *, bavarian: bool = False
         count(unit)
     return {
         "parser_version": STRUCTURE_PARSER_VERSION,
+        "mode": "annex_sentences_only" if annex else "legal_units",
         "numbered_absaetze": bool(absaetze),
         "counts": counts,
         "units": units,
@@ -421,15 +457,15 @@ def normalize_sentence(value: str) -> str:
     return " ".join(text.split())
 
 
-def sentence_units(text: str, *, bavarian: bool = False
-                   ) -> list[dict[str, Any]]:
+def sentence_units(text: str, *, bavarian: bool = False,
+                   annex: bool = False) -> list[dict[str, Any]]:
     """Leaf sentences with structural locators, in document order.
 
     A sentence that carries a list is one unit (its list items are reported
     as ``items`` with their own locators) because legal amendments and
     citations address the whole Satz as well as its Nummern.
     """
-    structure = parse_norm_structure(text, bavarian=bavarian)
+    structure = parse_norm_structure(text, bavarian=bavarian, annex=annex)
     result = []
     for absatz in structure["units"]:
         for satz in absatz.get("children") or []:

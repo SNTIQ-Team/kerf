@@ -77,9 +77,10 @@ def _yaml(value: Any) -> str:
     return json.dumps(str(value), ensure_ascii=False)
 
 
-def render_body(text: str, *, bavarian: bool) -> list[str]:
+def render_body(text: str, *, bavarian: bool, annex: bool = False
+                ) -> list[str]:
     """One legal sentence per line; Absätze separated by a blank line."""
-    structure = parse_norm_structure(text, bavarian=bavarian)
+    structure = parse_norm_structure(text, bavarian=bavarian, annex=annex)
     lines: list[str] = []
     for absatz in structure["units"]:
         if lines:
@@ -146,7 +147,8 @@ def render_norm(chain: ActChain, version: NormVersion,
         url = gii_norm_url(toc, slug, unit, number)
         role = ("verified_reconstruction" if state.derived else
                 "official_consolidation_gii")
-    structure = parse_norm_structure(version.text, bavarian=chain.bavarian)
+    structure = parse_norm_structure(version.text, bavarian=chain.bavarian,
+                                     annex=version.annex)
     amendment = state.amendment or {}
     fields = [
         ("id", version.norm_id),
@@ -193,7 +195,8 @@ def render_norm(chain: ActChain, version: NormVersion,
         heading = f"{heading} {version.title}"
     lines.append(f"# {heading}")
     lines.append("")
-    lines.extend(render_body(version.text, bavarian=chain.bavarian))
+    lines.extend(render_body(version.text, bavarian=chain.bavarian,
+                             annex=version.annex))
     return "\n".join(lines).rstrip() + "\n"
 
 

@@ -131,7 +131,8 @@ def split_norm_id(value: str) -> tuple[str, str, str, str, str]:
         raise NormIdentityError("sub-unit path must be key/value pairs")
     order = []
     for key, sub in zip(rest[::2], rest[1::2]):
-        if key not in _SUB_UNITS or not re.fullmatch(r"[0-9a-z]+", sub):
+        if key not in _SUB_UNITS or not re.fullmatch(r"[0-9a-z]+(?:~\d+)?",
+                                                      sub):
             raise NormIdentityError(f"invalid sub-unit {key}/{sub}")
         order.append(key)
     if order != sorted(order, key=_SUB_UNITS.index):
