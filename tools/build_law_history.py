@@ -1309,6 +1309,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", type=Path, default=ROOT / "web" / "data")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--bundle", type=Path, default=None)
+    parser.add_argument("--bundle-signers", type=Path, default=None,
+                        help="allowed_signers file; the bundle manifest "
+                             "signature must verify or the bundle is ignored")
     parser.add_argument("--documents", type=Path,
                         default=ROOT / "data" / "snapshots")
     parser.add_argument("--change-dates", type=Path, action="append",
@@ -1325,6 +1328,14 @@ def main(argv: list[str] | None = None) -> int:
     bundle = None
     bundle_meta: dict[str, Any] = {}
     date_paths = list(args.change_dates)
+    if args.bundle and args.bundle_signers:
+        try:
+            from tools.history_bundle import verify as verify_bundle
+            verify_bundle(args.bundle, signers=args.bundle_signers)
+        except (SystemExit, Exception) as exc:  # never build on bad bytes
+            print(f"[warn] history bundle rejected ({exc}); building from "
+                  "the official daily states only", file=sys.stderr)
+            args.bundle = None
     if args.bundle and (args.bundle / "corpus.sqlite").is_file():
         bundle = sqlite3.connect(
             f"file:{args.bundle / 'corpus.sqlite'}?mode=ro", uri=True)
