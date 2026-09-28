@@ -119,6 +119,12 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
                     set_source_status(conn, adapter.source_id, "blocked", notes)
                     log(f"{adapter.source_id}: {notes}")
                     break
+            except OSError as exc:
+                # A local I/O error (e.g. ENOSPC) is not an upstream failure: stop the run and leave
+                # the item pending instead of recording a misleading parse_error for it.
+                status, notes = "failed", f"local I/O error, run stopped: {type(exc).__name__}: {exc}"[:500]
+                log(f"{adapter.source_id}: {notes}")
+                break
             except Exception as exc:  # parser defect: typed, recorded, never stored as a decision
                 counts["failed"] += 1
                 detail = f"{type(exc).__name__}: {exc} | " + traceback.format_exc(limit=3).replace("\n", " ")[-600:]
@@ -131,6 +137,8 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
         relink(conn)
         if status == "ok" and counts["failed"]:
             status = "partial"
+        if status == "failed":
+            return _result(counts, status, run_id, http, requests_before)
         if status != "blocked":
             set_source_status(conn, adapter.source_id, "ok" if status == "ok" else "partial",
                               None if status == "ok" else f"{counts['failed']} item failures in run {run_id}")
