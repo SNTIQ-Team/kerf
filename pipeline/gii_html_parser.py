@@ -553,8 +553,46 @@ def _parse_table_layout(root: Node, record: dict) -> None:
         record["stand"] = stand_record(entries)
 
 
+def _parse_norm_page(root: Node, record: dict) -> None:
+    """Single-norm page (``<slug>/__7.html``): a bare ``div.jnheader`` with
+    the act title and the designator, followed by the body."""
+    container = (root.find("div", id="paddingLR12")
+                 or root.find("div", id="container") or root.find("body"))
+    if container is None:
+        record["warnings"].append("no content container found")
+        return
+    header = next((c for c in container.elements()
+                   if "jnheader" in c.classes), None)
+    if header is None:
+        record["warnings"].append("norm page without header")
+        return
+    enbez, titel, flags = _heading_parts(header)
+    anchor = next((a for a in header.find_all("a") if a.get("name")), None)
+    body = [c for c in container.children
+            if not (isinstance(c, Node) and (c is header or c.classes
+                                             & {"jnfussnote", "jnheader"}))]
+    if not enbez:
+        return
+    if enbez in TOC_LABELS and _looks_like_toc_element(container):
+        text = ""
+        flags.append("toc_element_text_suppressed")
+    else:
+        text = flatten(body)
+    enbez = _xxxx(enbez, titel, text, flags)
+    norm = {"enbez": enbez, "titel": titel, "text": text, "gliederung": "",
+            "doknr": anchor.get("name") if anchor is not None else None}
+    flags.append("single_norm_page")
+    norm["flags"] = flags
+    record["norms"].append(norm)
+    h1 = header.find("h1")
+    if h1 is not None:
+        record["title"] = leading_text(h1)
+
+
 def detect_layout(html: str) -> str:
     low = html.lower()
+    if 'class="jnnorm"' not in low and 'class="jnenbez"' in low:
+        return "jnnorm-page"
     if 'class="jnnorm"' in low:
         if "content_2022" in low:
             return "jnnorm-2022"
@@ -579,7 +617,9 @@ def parse_gii_html(data: bytes) -> dict:
     if title is not None:
         record["page_title"] = clean_label("".join(
             c for c in title.children if isinstance(c, str)))
-    if layout.startswith("jnnorm"):
+    if layout == "jnnorm-page":
+        _parse_norm_page(root, record)
+    elif layout.startswith("jnnorm"):
         _parse_jnnorm(root, record)
     elif layout == "juris-table-2006":
         _parse_table_layout(root, record)
@@ -601,7 +641,13 @@ def parse_gii_html(data: bytes) -> dict:
     if not record["stand"]["entries"]:
         record["warnings"].append("no Stand block found")
     if not record["jurabk"] and record.get("page_title"):
-        record["jurabk"] = record["page_title"].split(" - ")[0].strip()
+        jurabk = record["page_title"].split(" - ")[0].strip()
+        if layout == "jnnorm-page" and record["norms"]:
+            # "§ 7 SGB 2 - Einzelnorm": drop the designator
+            shown = record["norms"][0]["enbez"].replace("(XXXX)", "").strip()
+            if shown and jurabk.startswith(shown):
+                jurabk = jurabk[len(shown):].strip()
+        record["jurabk"] = jurabk
     labels = [n["enbez"] for n in record["norms"]]
     dupes = sorted({l for l in labels if labels.count(l) > 1})
     if dupes:

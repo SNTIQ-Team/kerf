@@ -96,7 +96,16 @@ def parse_object(source: str, ext: str, data: bytes, rows: list[dict]) -> dict:
         return neuris_ldml_parser.parse_neuris_zip(data)
     if ext == "zip":
         return gii_html_parser.parse_gii_xml_zip(data, slug_for(rows))
-    return gii_html_parser.parse_gii_html(data)
+    parsed = gii_html_parser.parse_gii_html(data)
+    if any(row.get("kind") == "norm_html" for row in rows):
+        # a single-norm page is evidence for that norm, never a whole act
+        parsed["complete"] = False
+        if not str(parsed.get("layout")).endswith("-page"):
+            parsed["layout"] = f"{parsed.get('layout')}-norm-page"
+        parsed["warnings"] = [w for w in parsed["warnings"]
+                              if w != "no Stand block found"]
+        parsed["warnings"].append("single-norm page: partial act by design")
+    return parsed
 
 
 def build_record(source: str, act_id: str, sha: str, ext: str, parsed: dict,
