@@ -698,6 +698,26 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
             f"review_id: {_yaml_string(legal_meta.get('review_id'))}",
             f"source_url: {_yaml_string(legal_meta.get('source_url') or legal_meta.get('url'))}",
         ])
+    elif target == head_date:
+        # The current consolidation is a source snapshot too: keep where and
+        # from which build it came, so the Markdown stays self-describing
+        # after it leaves the API (paper §7.4).
+        bavarian = str(act.get("juris") or "") == "DE-BY"
+        lines.extend([
+            "date_basis: \"current_consolidation_retrieval_not_effective_date\"",
+            f"source: {_yaml_string('BAYERN.RECHT' if bavarian else 'GII')}",
+            f"source_url: {_yaml_string(act.get('source_url') or act.get('permalink'))}",
+            f"source_build: {_yaml_string(act.get('build'))}",
+            f"observed_at: {_yaml_string(head_date)}",
+            f"stand: {_yaml_string(' '.join(str(act.get('stand') or '').split())[:600])}",
+        ])
+    else:
+        # A conservative reconstruction starts from the current snapshot;
+        # name that base instead of implying a capture for the target date.
+        lines.extend([
+            f"reconstructed_from: {_yaml_string(head_date)}",
+            f"reconstruction_base_url: {_yaml_string(act.get('source_url') or act.get('permalink'))}",
+        ])
     lines.extend(["---", ""])
     title = str(act.get("title") or act.get("jurabk") or act.get("id") or "Act")
     if norm_ref is None:

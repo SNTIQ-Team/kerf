@@ -63,6 +63,13 @@ from api.act_archive import (
     render_markdown_snapshot,
 )
 from api.decision_passages import create_router as decision_passages_router, coverage_status as decision_passage_coverage
+from api.evidence import (CACHE_KEY_ARGUMENTS, EnvelopeError,
+                          unknown_argument_payload)
+from api.law_routes import create_router as law_router
+try:
+    from api.materials_routes import create_router as materials_router
+except ImportError:  # optional component; /capabilities still declares it
+    materials_router = None
 from api.gii_catalog import GiiCatalogIndex
 from api.citation_store import CitationStoreError, query_citations
 from api.search_engine import SearchEngine, normalize_search_text
@@ -93,23 +100,67 @@ READER_DIR = Path(os.environ.get(
 
 app = FastAPI(title="Lexgraph", version="1.5")
 app.include_router(decision_passages_router(lambda: DATA_DIR))
+# Norm-level Git semantics (log/at/diff/blame) and role-typed legislative
+# materials.  Both validate their own query strings and answer with the typed
+# evidence envelope from api.evidence.
+app.include_router(law_router(
+    lambda: DATA_DIR, lambda: _norm_history_manifest(), lambda: corpus_snapshot()))
+if materials_router is not None:
+    app.include_router(materials_router(lambda: DATA_DIR))
+
+# Routes that parse and reject their own query strings with the same typed
+# envelope (they read parameters dynamically, so declared FastAPI parameters
+# are not the whole contract).
+_SELF_VALIDATING_PREFIXES = ("/norms/", "/materials")
+# Transport-only cache keys that deployed clients append (``?t=<ms>``,
+# ``/digest?d=<day>``).  They never select content; they are accepted but
+# disclosed in X-Lexgraph-Ignored-Arguments instead of being silently dropped.
+_CACHE_KEYS = set(CACHE_KEY_ARGUMENTS)
+_ROUTE_CACHE_KEYS = {"/digest": {"d"}}
+
+
+def _declared_query_names(route_path: str, method: str) -> set[str] | None:
+    """Declared query parameters of the API route serving ``route_path``."""
+    from starlette.routing import Match
+    scope = {"type": "http", "path": route_path, "method": method,
+             "root_path": ""}
+    for route in app.routes:
+        dependant = getattr(route, "dependant", None)
+        if dependant is None:
+            continue
+        match, _ = route.matches(scope)
+        if match == Match.FULL:
+            return {param.alias or param.name
+                    for param in dependant.query_params}
+    return None
+
 
 @app.middleware("http")
 async def search_contract(request: Request, call_next):
+    """Strict runtime schemas: undeclared arguments are rejected, never
+    silently ignored (a dropped ``at=`` would answer for another date)."""
     route_path = request.url.path
     root_path = request.scope.get("root_path", "")
     if root_path and route_path.startswith(root_path + "/"):
         route_path = route_path[len(root_path):]
-    if route_path == "/search":
-        allowed = {"q", "limit", "norm_limit", "procedure_limit", "catalog_limit"}
-        unsupported = sorted(set(request.query_params) - allowed)
-        repeated = sorted(k for k in request.query_params if len(request.query_params.getlist(k)) > 1)
-        if unsupported or repeated:
-            temporal = bool(set(unsupported) & {"at", "as_of", "valid_at", "known_at"})
-            return JSONResponse(status_code=422, content={
-                "status": "unsupported_temporal_request" if temporal else "invalid_request",
-                "unsupported_arguments": unsupported, "repeated_arguments": repeated,
-                "search_scope": "current_norms_and_recorded_history"})
+    params = request.query_params
+    ignored: list[str] = []
+    if params and not route_path.startswith(_SELF_VALIDATING_PREFIXES):
+        allowed = _declared_query_names(route_path, request.method)
+        if allowed is not None:
+            cache_keys = (_CACHE_KEYS | _ROUTE_CACHE_KEYS.get(route_path, set())) - allowed
+            ignored = sorted(set(params) & cache_keys)
+            unsupported = sorted(set(params) - allowed - cache_keys)
+            repeated = sorted(k for k in params if len(params.getlist(k)) > 1)
+            if unsupported or repeated:
+                payload = unknown_argument_payload(
+                    route=route_path, unsupported=unsupported,
+                    repeated=repeated, allowed=allowed,
+                    snapshot_id=corpus_snapshot())
+                if route_path == "/search":
+                    payload["search_scope"] = "current_norms_and_recorded_history"
+                    payload["historical_alternative"] = "/norms/{id}/at?date="
+                return JSONResponse(status_code=422, content=payload)
     snapshot = corpus_snapshot()
     requested = request.headers.get("if-lexgraph-snapshot")
     if requested and requested != snapshot:
@@ -117,6 +168,8 @@ async def search_contract(request: Request, call_next):
     response = await call_next(request)
     if snapshot:
         response.headers["X-Lexgraph-Snapshot"] = snapshot
+    if ignored:
+        response.headers["X-Lexgraph-Ignored-Arguments"] = ",".join(ignored)
     return response
 
 
@@ -135,7 +188,30 @@ def capabilities():
                        "decisions": "metadata", "decision_passages": "retained_official_source_blocks", "decision_relations": "source_bound_citation_mentions", "component_status": True},
             "historical_text": {"operation": "acts/{id}/markdown", "parameters": ["at", "as_of"],
                                 "resolution": "source_capture_or_verified_reconstruction"},
-            "operations": ["search", "acts/{id}/markdown", "acts/{id}/history", "changes", "decisions", "decision-passages", "decisions/{id}/passages/{passage_id}", "decisions/{id}/relations"]}
+            # Current-text discovery and historical resolution are different
+            # capabilities; neither silently substitutes for the other.
+            "temporal": {
+                "search": {"mode": "current_consolidation_only",
+                           "valid_at": "unsupported", "known_at": "unsupported",
+                           "on_temporal_argument": "reject_422_unsupported_temporal_request",
+                           "historical_alternative": "norms/{id}/at?date="},
+                "norm_history": {"operations": ["norms/{id}/log", "norms/{id}/at",
+                                                "norms/{id}/diff", "norms/{id}/blame"],
+                                 "valid_at": "verified_intervals_only; otherwise temporally_unresolved",
+                                 "known_at": "as_of (RFC3339 with timezone)",
+                                 "jurisdictions": {"de/bund": "complete GII states + verified BGBl intervals",
+                                                   "de/by": "archived official BAYERN.RECHT pages, per norm, incomplete",
+                                                   "eu": "not_in_corpus (metadata only)"}},
+                "unknown_arguments": "rejected on every route (invalid_argument or unsupported_temporal_request)",
+            },
+            "materials": {"operation": "materials", "roles": ["entwurf", "begruendung", "stellungnahme_bundesrat",
+                                                               "gegenaeusserung_bundesregierung", "beschlussempfehlung", "bericht"],
+                          "relations": {"explains": "target norms of the fragment heading only",
+                                        "mentions": "every other reference"}},
+            "operations": ["search", "acts/{id}/markdown", "acts/{id}/markdown.json", "acts/{id}/history", "changes", "decisions",
+                           "decision-passages", "decisions/{id}/passages/{passage_id}", "decisions/{id}/relations",
+                           "norms/resolve", "norms/{id}/log", "norms/{id}/at", "norms/{id}/diff", "norms/{id}/blame",
+                           "norms/{id}/materials", "materials"]}
 
 
 # git.json lane index → jurisdiction (0=EU, 1=Bund, 2=Bayern, 3=Länder)
@@ -238,6 +314,17 @@ def _retrospective_manifest(*, optional: bool = False) -> dict | None:
                     from exc
             _RETROSPECTIVE_SOURCE = raw
         return _RETROSPECTIVE_MANIFEST
+
+
+def _norm_history_manifest() -> dict | None:
+    """Validated manifest for norm history; integrity failure stays typed."""
+    try:
+        return _retrospective_manifest(optional=True)
+    except HTTPException as exc:
+        raise EnvelopeError(
+            "integrity_check_failed", str(exc.detail),
+            failed_components=[{"component": "retrospective_history",
+                                "reason": "integrity_check_failed"}]) from exc
 
 
 def _knowledge_value(value: datetime | None) -> str | None:
@@ -679,7 +766,10 @@ def changes(
     except RetrospectiveNotFound as exc:
         raise HTTPException(404, str(exc)) from exc
     except (RetrospectiveIntegrityError, RetrospectiveAmbiguity) as exc:
-        raise HTTPException(422, str(exc)) from exc
+        # A broken immutable generation is not the caller's fault and must
+        # not look like a rejected query.
+        raise HTTPException(
+            503, f"retrospective history integrity failure: {exc}") from exc
     events = payload["events"]
     return _cached({
         **payload,
@@ -937,6 +1027,90 @@ def act_markdown(
                     headers=headers)
 
 
+def parse_front_matter(markdown: str) -> tuple[dict, str]:
+    """Split Lexgraph's Markdown front matter into typed fields.
+
+    The exporter writes one ``key: value`` per line with JSON scalars; bare
+    ISO dates and booleans are accepted too.  Unknown syntax is kept as the
+    raw string rather than dropped.
+    """
+    match = re.match(r"\ufeff?---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)",
+                     markdown, re.S)
+    if not match:
+        return {}, markdown
+    fields: dict = {}
+    for line in match.group(1).splitlines():
+        key, sep, raw = line.partition(":")
+        if not sep or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key.strip()):
+            continue
+        value = raw.strip()
+        try:
+            fields[key.strip()] = json.loads(value)
+        except ValueError:
+            fields[key.strip()] = value
+    return fields, markdown[match.end():]
+
+
+@app.get("/acts/{act_id}/markdown.json")
+def act_markdown_json(
+        act_id: str,
+        at: date | None = Query(
+            None, description="legal date (YYYY-MM-DD); omit for HEAD"),
+        as_of: datetime | None = Query(
+            None, description="RFC3339 knowledge time; requires at"),
+        norm: str | None = Query(
+            None, description="§/Art. designator; omit for the entire act")):
+    """The Markdown snapshot with its provenance as a structured object.
+
+    Markdown is a representation, not the whole contract: an adapter that
+    forwards only the body erases exactness, reconstruction and temporal
+    qualifications.  This variant keeps the complete Markdown (front matter
+    included) *and* normalises the front matter into typed fields, repeating
+    the consequential limitations as warnings.
+    """
+    rendered = act_markdown(act_id=act_id, at=at, as_of=as_of, norm=norm,
+                            download=False)
+    markdown = rendered.body.decode("utf-8")
+    front, body = parse_front_matter(markdown)
+    headers = {key.lower(): value for key, value in rendered.headers.items()
+               if key.lower().startswith("x-lexgraph-")}
+    warnings = []
+    if front.get("source_exact") is False:
+        warnings.append("text is not an exact official source capture"
+                        + (" (replay-verified reconstruction)"
+                           if front.get("verified_reconstruction") else ""))
+    if front.get("complete") is False:
+        warnings.append("text is incomplete for the requested date; see gaps")
+    if "retrieval" in str(front.get("date_basis") or ""):
+        warnings.append("the date is a retrieval observation, not a legal "
+                        "effective date")
+    gaps = int(front.get("coverage_gaps") or 0)
+    if gaps:
+        warnings.append(f"{gaps} known coverage gap(s) in this snapshot")
+    return JSONResponse({
+        "schema": "lexgraph-evidence-envelope/1",
+        "status": "ok" if front.get("complete", True) else "partial",
+        "operation": "act_markdown",
+        "request_scope": {"act_id": act_id, "at": at.isoformat() if at else None,
+                          "as_of": as_of.isoformat() if as_of else None,
+                          "norm": norm},
+        "snapshot_id": corpus_snapshot(),
+        "warnings": warnings,
+        "provenance": front,
+        "response_headers": headers,
+        "quality": {"source_exact": front.get("source_exact"),
+                    "complete": front.get("complete"),
+                    "reconstruction_status": (
+                        "verified_reconstruction"
+                        if front.get("verified_reconstruction") else
+                        "partial_reconstruction"
+                        if front.get("complete") is False else
+                        "not_reconstructed")},
+        "markdown": markdown,
+        "body": body,
+    }, headers={"Cache-Control": "public, max-age=3600"})
+
+
 @app.get("/retrospective-history.sqlite", response_class=FileResponse)
 def retrospective_sqlite():
     """Download the portable bitemporal SQLite database built with the API."""
@@ -1093,9 +1267,16 @@ def _append_gii_catalog(result: dict, query: str, limit: int) -> dict:
     """Append metadata-only breadth matches after deep corpus results."""
     try:
         payload = _load("gii_catalog")
-    except HTTPException:
-        payload = {"acts": []}  # compatibility with older data deployments
-    rows = payload.get("acts") if isinstance(payload, dict) else []
+        rows = payload.get("acts") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            raise ValueError("invalid GII catalogue representation")
+    except (HTTPException, ValueError):
+        # Unavailable breadth discovery is not "zero catalogue matches".
+        result["catalog_total"] = None
+        result["catalog_matches"] = []
+        _mark_component(result, "catalog", {"status": "unavailable",
+                                            "reason": "source_unavailable"})
+        return result
     deep_act_ids = {
         str(row.get("act_id") or row.get("id") or "")
         for row in result.get("act_matches") or []
@@ -1112,8 +1293,32 @@ def _append_gii_catalog(result: dict, query: str, limit: int) -> dict:
         query, limit=limit, exclude_act_ids=deep_act_ids)
     result["catalog_total"] = total
     result["catalog_matches"] = matches
-    result["result_total"] = int(result.get("result_total") or 0) + total
+    _mark_component(result, "catalog", {"status": "ok"}, add=total)
     return result
+
+
+def _mark_component(result: dict, name: str, status: dict,
+                    add: int | None = None) -> None:
+    """Record one component and keep the totals honest.
+
+    ``result_total`` stays a number only while every consulted component
+    answered completely.  Otherwise it becomes ``None`` and the known part
+    is kept separately as ``result_total_lower_bound``.
+    """
+    components = {**result.get("components", {}), name: status}
+    result["components"] = components
+    lower = int(result.get("result_total_lower_bound")
+                if result.get("result_total_lower_bound") is not None
+                else result.get("result_total") or 0) + int(add or 0)
+    partial = any(c.get("status") != "ok" for c in components.values())
+    result["status"] = "partial" if partial else "ok"
+    result["result_total_is_partial"] = partial
+    result["result_total_lower_bound"] = lower
+    result["result_total"] = None if partial else lower
+    result["total_semantics"] = (
+        "result_total is null because a component was unavailable; "
+        "result_total_lower_bound counts only the components that answered"
+        if partial else "complete count over every consulted component")
 
 
 def _append_temporal_search(result: dict, query: str,
@@ -1125,7 +1330,9 @@ def _append_temporal_search(result: dict, query: str,
     try:
         manifest = _retrospective_manifest(optional=True)
         if manifest is None:
-            statuses["changes"] = {"status": "unavailable", "reason": "not_in_corpus"}
+            # The archive was not consulted at all: unavailable, not "no
+            # matching changes".
+            statuses["changes"] = {"status": "unavailable", "reason": "not_built"}
         else:
             changes = resolve_changes(manifest, query=query)
             statuses["changes"] = {"status": "ok"}
@@ -1162,11 +1369,10 @@ def _append_temporal_search(result: dict, query: str,
     decision_matches = [row for row in decision_rows if decision_hit(row)]
     result["decision_total"] = len(decision_matches) if statuses["decisions"]["status"] == "ok" else None
     result["decision_matches"] = decision_matches[:decision_limit]
-    result["components"] = {**result.get("components", {}), **statuses}
-    result["status"] = "partial" if any(c["status"] != "ok" for c in statuses.values()) else "ok"
-    result["result_total_is_partial"] = result["status"] == "partial"
-    result["result_total"] = int(result.get("result_total") or 0) + \
-        (result["change_total"] or 0) + (result["decision_total"] or 0)
+    _mark_component(result, "changes", statuses["changes"],
+                    add=result["change_total"])
+    _mark_component(result, "decisions", statuses["decisions"],
+                    add=result["decision_total"])
     return result
 
 
@@ -1205,15 +1411,23 @@ def search(q: str = Query(..., min_length=1),
                        or needle in normalize_search_text(r.get("jurabk"))
                        or needle in normalize_search_text(r.get("title"))]
         matches = all_matches[:limit]
-        result = _append_temporal_search({
+        # Without the FTS artifact the norm texts were not searched at all:
+        # report the component as unavailable instead of "0 norm hits".
+        result = {
             "query": q, "total": len(all_matches), "matches": matches,
             "result_total": len(all_matches) + procedure_total,
             "act_total": len(all_matches),
-            "norm_total": 0, "act_matches": matches,
+            "norm_total": None, "act_matches": matches,
             "norm_matches": [],
             "procedure_total": procedure_total,
             "procedure_matches": procedure_matches,
-        }, q)
+            "temporal_scope": _SEARCH_TEMPORAL_SCOPE,
+        }
+        _mark_component(result, "acts", {"status": "ok",
+                                         "mode": "substring_fallback"})
+        _mark_component(result, "norms", {"status": "unavailable",
+                                          "reason": "index_not_built"})
+        result = _append_temporal_search(result, q)
         return _append_gii_catalog(result, q, catalog_limit)
 
     global _SEARCH_ENGINE
@@ -1264,8 +1478,22 @@ def search(q: str = Query(..., min_length=1),
     result["procedure_matches"] = procedure_matches
     result["result_total"] = (result["act_total"] + result["norm_total"]
                               + result["procedure_total"])
+    result["temporal_scope"] = _SEARCH_TEMPORAL_SCOPE
+    for component in ("acts", "norms", "procedures"):
+        _mark_component(result, component, {"status": "ok"})
     result = _append_temporal_search(result, q)
     return _append_gii_catalog(result, q, catalog_limit)
+
+
+# Every search result states that it answers for the current consolidation
+# only, so a current hit is never mistaken for historical text.
+_SEARCH_TEMPORAL_SCOPE = {
+    "valid_at": None,
+    "mode": "current_consolidation",
+    "historical_search": "unsupported",
+    "changes": "recorded amendment events (event-only, not historical text)",
+    "historical_text": "/norms/{id}/at?date=YYYY-MM-DD",
+}
 
 
 @app.get("/decisions")

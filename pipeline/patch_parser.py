@@ -112,8 +112,13 @@ def resolve_act(heading: str, acts: list[dict]) -> str | None:
 
 
 def _ref(text: str) -> dict:
-    """Pull the normative address out of one command."""
-    t = text[:300]
+    """Pull the normative address out of one command.
+
+    Quoted wording („…“) is the old or new *text*, never the address: a new
+    Absatz that itself mentions "Satz 1 Nummer 2" must not relocate the
+    command to Satz 1 Nummer 2.
+    """
+    t = QUOTE_RE.sub(" ", text)[:300]
     ref = {}
     m = re.search(r"§§?\s*(\d+\s*[a-z]?)\b", t)
     if m:
@@ -190,30 +195,41 @@ def parse_command(cmd: str) -> dict:
     }
 
 
+def _item_follows(previous: str | None, candidate: str) -> bool:
+    """Whether an item number continues the sequence 0, 0a, 0b, 1, 1a, 2 …
+
+    Amending laws insert items *before* 1 as 0, 0a, 0b (e.g. BGBl. 2023 I
+    Nr. 408, Art. 10); they are commands like any other and must not be
+    swallowed into the article preamble.
+    """
+    number, letter = int(re.match(r"\d+", candidate).group(0)), \
+        re.sub(r"^\d+", "", candidate)
+    if previous is None:
+        return (number, letter) in {(0, ""), (0, "a"), (1, "")}
+    prev_number = int(re.match(r"\d+", previous).group(0))
+    prev_letter = re.sub(r"^\d+", "", previous)
+    if number == prev_number:
+        # Inserted items (1a, 1b …) stay between 1 and 2; a repealed 1b may
+        # leave 1a → 1c, so only require the letter to increase.
+        return len(letter) == 1 and letter > prev_letter
+    return number == prev_number + 1 and letter == ""
+
+
 def _split_items(body: str) -> list[str]:
     """Split an Artikel body on top-level '1. ' item numbers at line
     starts; a body without numbering is a single command. Two guards
-    against phantom items: the number must continue the 1,2,3… sequence
-    (a quoted "31. Juli 2025" at a line break is a date, not item 31),
-    and it must not sit inside a „…" quotation. Inserted item numbers such
-    as 1a/1b belong between 1 and 2 and must not absorb a different norm."""
+    against phantom items: the number must continue the 0, 0a, 1, 1a, 2 …
+    sequence (a quoted "31. Juli 2025" at a line break is a date, not item
+    31), and it must not sit inside a „…" quotation."""
     spans = [m.span() for m in QUOTE_RE.finditer(body)]
-    cuts, expect, last_suffix = [], 1, ""
-    for m in re.finditer(r"(?m)^[ \t]{0,3}(\d{1,3})([a-z]?)\.[ \t]+", body):
-        number, suffix = int(m.group(1)), m.group(2)
-        if suffix:
-            if number != expect - 1 or not cuts or suffix <= last_suffix:
-                continue
-        elif number != expect:
+    cuts, previous = [], None
+    for m in re.finditer(r"(?m)^[ \t]{0,3}(\d{1,3}[a-z]?)\.[ \t]+", body):
+        if not _item_follows(previous, m.group(1)):
             continue
         if any(a < m.start() < b for a, b in spans):
             continue
         cuts.append(m)
-        if suffix:
-            last_suffix = suffix
-        else:
-            expect += 1
-            last_suffix = ""
+        previous = m.group(1)
     if not cuts:
         return [body] if _clean(body) else []
     out = []
