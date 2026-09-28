@@ -225,6 +225,7 @@ SELECT s.source_id, s.label, s.land, s.status, s.status_reason, s.upstream_liste
        (SELECT max(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_to,
        (SELECT count(*) FROM source_items i WHERE i.source_id = s.source_id AND i.state = 'failed') AS failed_items,
        (SELECT count(*) FROM source_items i WHERE i.source_id = s.source_id AND i.state = 'pending') AS pending_items,
+       (SELECT count(*) FROM source_items i WHERE i.source_id = s.source_id AND i.state = 'skipped') AS duplicate_items,
        s.last_sync_started, s.last_sync_finished, s.last_sync_status
 FROM sources s;
 """
@@ -481,6 +482,27 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
         return decision_id, False
     section_authorship = {s.name: s.authorship for s in parsed.sections}
     own_keys = {case_key(c) for c in parsed.case_numbers}
+    # Everything CPU-bound (block offsets, citation extraction) happens before the write lock.
+    paragraph_rows = []
+    relations: list[tuple[Relation, str]] = []
+    for p in paragraphs:
+        text = p.text
+        paragraph_rows.append((p.id, decision_id, p.section, section_authorship.get(p.section, "unknown"), p.ordinal,
+                               p.rn, p.numbering, len(p.blocks), block_offsets(p), text, sha256(text.encode())))
+        if section_authorship.get(p.section) == "court":
+            for r in extract_all(text, p.id, own_court_id=parsed.court_id, own_case_keys=own_keys,
+                                 own_land=parsed.land):
+                if r.relation != "quotes" and r.span_start is not None:
+                    # Derivable from paragraphs.text + span (see SCHEMA.md): not stored twice.
+                    r.quoted_context = ""
+                relations.append((r, "decision_text"))
+    for norm in parsed.metadata.get("norms", []):
+        from .citations import extract_norms
+        for r in extract_norms(_metadata_norm_text(norm), None):
+            r.quoted_context = norm
+            relations.append((r, "editorial_metadata"))
+    for proc in parsed.procedural:
+        relations.append((_procedural_relation(proc, parsed), proc.get("origin", "editorial_metadata")))
     try:
         conn.execute("BEGIN IMMEDIATE")
         for row in existing:
@@ -502,26 +524,8 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
         conn.executemany("INSERT INTO sections VALUES(?,?,?,?,?,?)",
                          [(decision_id, i, s.name, s.authorship, s.authorship_basis, s.heading)
                           for i, s in enumerate(parsed.sections, 1) if any(b.text.strip() for b in s.blocks)])
-        relations: list[tuple[Relation, str]] = []
-        for p in paragraphs:
-            text = p.text
-            conn.execute("""INSERT INTO paragraphs(id, decision_id, section, authorship, ordinal, rn, numbering,
-                              block_count, blocks, text, text_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                         (p.id, decision_id, p.section, section_authorship.get(p.section, "unknown"), p.ordinal,
-                          p.rn, p.numbering, len(p.blocks),
-                          json.dumps([{"text": b.text, "locator": b.locator, "kind": b.kind} for b in p.blocks],
-                                     ensure_ascii=False),
-                          text, sha256(text.encode())))
-            if section_authorship.get(p.section) == "court":
-                relations += [(r, "decision_text") for r in extract_all(
-                    text, p.id, own_court_id=parsed.court_id, own_case_keys=own_keys, own_land=parsed.land)]
-        for norm in parsed.metadata.get("norms", []):
-            from .citations import extract_norms
-            for r in extract_norms(_metadata_norm_text(norm), None):
-                r.quoted_context = norm
-                relations.append((r, "editorial_metadata"))
-        for proc in parsed.procedural:
-            relations.append((_procedural_relation(proc, parsed), proc.get("origin", "editorial_metadata")))
+        conn.executemany("""INSERT INTO paragraphs(id, decision_id, section, authorship, ordinal, rn, numbering,
+                              block_count, blocks, text, text_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", paragraph_rows)
         _insert_relations(conn, decision_id, relations)
         _mark_item(conn, parsed, decision_id, content_hash)
         conn.execute("COMMIT")
@@ -529,6 +533,19 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
         conn.execute("ROLLBACK")
         raise
     return decision_id, True
+
+
+BLOCK_SEPARATOR = "\n\n"
+
+
+def block_offsets(paragraph) -> str:
+    """Block boundaries as code-point offsets into paragraphs.text (text = blocks joined by a blank line)."""
+    out, position = [], 0
+    for block in paragraph.blocks:
+        end = position + len(block.text)
+        out.append({"start": position, "end": end, "locator": block.locator, "kind": block.kind})
+        position = end + len(BLOCK_SEPARATOR)
+    return json.dumps(out, ensure_ascii=False, separators=(",", ":"))
 
 
 def _metadata_norm_text(norm: str) -> str:

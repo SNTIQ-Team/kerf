@@ -300,3 +300,16 @@ def test_cli_sync_waits_for_space(monkeypatch, capsys):
     assert main(["sync", "--source", "rii", "--limit", "1"]) == 4
     out = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
     assert out["status"] == "waiting_for_space" and out["unallocated_bytes"] == 1101824
+
+
+def test_compact_keeps_content_and_refuses_while_a_sync_runs(conn, fixture, isolated_corpus, capsys):
+    from courts.sync import source_lock, sync_source
+    from tests.courts.test_store_sync_read import FakeHttp, FixtureAdapter, item
+    sync_source(FixtureAdapter(fixture, [item()]), conn, FakeHttp())
+    conn.close()
+    with source_lock("rii", isolated_corpus):
+        assert main(["compact"]) == 3
+    assert main(["compact"]) == 0
+    db = open_db()
+    assert db.execute("SELECT count(*) FROM paragraphs").fetchone()[0] > 10
+    assert db.execute("SELECT count(*) FROM paragraphs_fts WHERE paragraphs_fts MATCH 'Untätigkeitsklage'").fetchone()[0] == 1

@@ -25,6 +25,8 @@ MIN_UNALLOCATED_TO_START = 10 * GIB
 MIN_UNALLOCATED_WHILE_RUNNING = 4 * GIB
 MAX_METADATA_USED = 0.90
 MIN_FREE_OTHER = 1 * GIB
+MIN_BTRFS_FREE_TO_START = 25 * GIB      # data space ("Free (estimated)")
+MIN_BTRFS_FREE_WHILE_RUNNING = 10 * GIB
 
 
 @dataclass
@@ -112,6 +114,10 @@ def evaluate(report: SpaceReport, *, starting: bool) -> SpaceReport:
             if report.unallocated < floor:
                 report.problems.append(f"btrfs Device unallocated {report.unallocated / GIB:.2f} GiB < "
                                        f"{floor / GIB:.0f} GiB (run: sudo btrfs balance start -dusage=20 /home)")
+        if report.free is not None:
+            floor = MIN_BTRFS_FREE_TO_START if starting else MIN_BTRFS_FREE_WHILE_RUNNING
+            if report.free < floor:
+                report.problems.append(f"btrfs Free (estimated) {report.free / GIB:.1f} GiB < {floor / GIB:.0f} GiB")
         fraction = report.metadata_effective_fraction
         if fraction is not None and fraction > MAX_METADATA_USED:
             report.problems.append(f"btrfs metadata {fraction:.1%} used (> {MAX_METADATA_USED:.0%})")
