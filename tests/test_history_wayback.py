@@ -20,6 +20,8 @@ Fixtures (tests/fixtures/history/) are real bytes:
   ``gii-bgb-20220101…`` - Wayback excerpts with GII placeholder designators
   and an Ident-class table of contents, ``gii-zpo-20061018053022-…`` - a
   legacy page with a designator-less heading,
+* ``gii-asylblg-2007…/2008…-norm-page__N.html.gz`` - unmodified Wayback
+  captures of single-norm pages,
 * ``expected_gii_xml_norms.json`` - XML-derived texts
   (``fetch_gii.parse_law``): Lexgraph daily states for the 2026 fixtures,
   archived xml.zip captures of the same weeks for the older ones.
@@ -193,6 +195,32 @@ def test_legacy_heading_without_designator_is_skipped():
     assert rec["warnings"] == [
         "heading without designator skipped: Zivilprozessordnung"]
     assert [e["type"] for e in rec["stand"]["entries"]] == ["Neuf", "Stand"]
+
+
+@pytest.mark.parametrize("fixture", [
+    "gii-asylblg-20070104022451-norm-page__10.html.gz",   # 2006 markup, Rec
+    "gii-asylblg-20081204072916-norm-page__2.html.gz",    # 2008 markup
+])
+def test_single_norm_pages(fixture):
+    rec = gp.parse_gii_html(html(fixture))
+    assert rec["layout"] == "jnnorm-page" and len(rec["norms"]) == 1
+    norm = rec["norms"][0]
+    assert "single_norm_page" in norm["flags"]
+    assert rec["jurabk"] == "AsylbLG"
+    # both norms were unchanged until the Dec 2012 full-page capture
+    full = gp.parse_gii_html(html("gii-asylblg-20121227221957-jnnorm-2008.html.gz"))
+    assert ids([norm])[0] in set(ids(full["norms"]))
+
+
+def test_gap_years_and_norm_page_filter():
+    rows = [{"timestamp": "20060101000000", "statuscode": "200"},
+            {"timestamp": "20080101000000", "statuscode": "200"},
+            {"timestamp": "20070101000000", "statuscode": "302"}]
+    assert wb.gap_years(rows, first=2006, last=2009) == [2007, 2009]
+    assert wb.is_norm_page({"original": "http://bundesrecht.juris.de:80/asylblg/__2.html"}, "asylblg")
+    assert wb.is_norm_page({"original": "https://www.gesetze-im-internet.de/gg/art_1.html"}, "gg")
+    assert not wb.is_norm_page({"original": "https://www.gesetze-im-internet.de/asylblg_x/__2.html"}, "asylblg")
+    assert "from=2010" in wb.cdx_url("x/", prefix_filter=".*", year=2010)
 
 
 def test_truncated_or_foreign_pages_are_incomplete():
@@ -386,6 +414,23 @@ def test_parse_cdx_rows():
 
 
 # ------------------------------------------------------------- parse tool
+
+def test_parse_tool_marks_single_norm_pages_partial(tmp_path):
+    archive = HistoryArchive(tmp_path)
+    data = html("gii-asylblg-20081204072916-norm-page__2.html.gz")
+    sha, _ = archive.put_raw("wayback_gii", data, "html")
+    url = "https://bundesrecht.juris.de/asylblg/__2.html"
+    archive.append_ledger("wayback_gii", {
+        "act_id": "fed_asylblg", "status": "ok", "sha256": sha,
+        "kind": "norm_html", "capture_timestamp": "20081204072916",
+        "captured_at": "2008-12-04T07:29:16Z", "original_url": url,
+        "archive_url": f"https://web.archive.org/web/20081204072916id_/{url}"})
+    phc.run(archive, ["wayback_gii"], None, log=lambda *_: None)
+    record = next(archive.iter_parsed("wayback_gii"))
+    assert record["complete"] is False and record["norm_count"] == 1
+    assert "single-norm page: partial act by design" in record["warnings"]
+    assert record["captures"][0]["kind"] == "norm_html"
+
 
 def test_parse_tool_is_idempotent(tmp_path):
     archive = HistoryArchive(tmp_path)

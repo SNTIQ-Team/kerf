@@ -21,6 +21,15 @@ For every requested act (default: the 13 federal priority acts) this
 
 Capture timestamps are *capture* dates (``known_at``), never legal dates.
 
+Per-norm pages (``<slug>/__7.html``) are not captured by default.  Full-act
+captures exist for 253 of 273 act-years 2006-2026 of the 13 priority acts;
+kind ``norm_html_gap`` lists, with one bounded prefix query per remaining
+gap year and host, every per-norm page captured in such a year.  The 2026-09
+run fetched all 376 of them: 375 showed a text already known from full-act
+captures before/after the gap (they only add capture dates), 1 was a new
+version.  Per-norm pages outside gap years would multiply requests by the
+number of norms for no new text, so the default kinds stay full-act only.
+
 Politeness: at most one request per ``--delay`` seconds (default 2.5, never
 below 2.0) to archive.org, exponential back-off on 429/5xx/connection errors,
 and the run stops after ``--max-consecutive-failures`` failed requests in a
@@ -82,7 +91,7 @@ PRIORITY_ACTS: dict[str, tuple[str, str]] = {
     "fed_gg": ("gg", "BJNR000010949"),
 }
 
-KINDS = ("act_html", "xml_zip", "act_html_alt", "norm_html")
+KINDS = ("act_html", "xml_zip", "act_html_alt", "norm_html", "norm_html_gap")
 DEFAULT_KINDS = ("act_html", "xml_zip", "act_html_alt")
 MEDIA_EXT = {"act_html": "html", "act_html_alt": "html", "norm_html": "html",
              "xml_zip": "zip"}
@@ -241,11 +250,14 @@ CDX_FIELDS = "timestamp,original,statuscode,digest,length,mimetype"
 
 
 def cdx_url(url: str, *, prefix_filter: str | None = None,
-            limit: int | None = None, collapse: str = "digest") -> str:
+            limit: int | None = None, collapse: str = "digest",
+            year: int | None = None) -> str:
     params = [("url", url), ("output", "json"), ("fl", CDX_FIELDS)]
     if prefix_filter:
         params.append(("matchType", "prefix"))
         params.append(("filter", f"original:{prefix_filter}"))
+    if year:
+        params.extend([("from", str(year)), ("to", str(year))])
     if collapse:
         params.append(("collapse", collapse))
     if limit:
@@ -312,6 +324,24 @@ def is_alt_page(row: dict, slug: str, doknr: str) -> bool:
                 and match.group(2).upper() != doknr.upper())
 
 
+NORM_PAGE = re.compile(r"/([^/]+)/(?:__|art_)[^/]*\.html?", re.I)
+
+
+def is_norm_page(row: dict, slug: str) -> bool:
+    path = urllib.parse.urlsplit(row.get("original") or "").path
+    match = NORM_PAGE.fullmatch(path)
+    return bool(match and match.group(1).lower() == slug.lower())
+
+
+def gap_years(rows: list[dict], first: int = 2006,
+              last: int | None = None) -> list[int]:
+    """Years without any HTTP 200 full-act capture (on either host)."""
+    last = last or datetime.now(timezone.utc).year
+    covered = {int(r["timestamp"][:4]) for r in rows
+               if r.get("statuscode") == "200"}
+    return [y for y in range(first, last + 1) if y not in covered]
+
+
 def discover(client: PoliteClient, archive: HistoryArchive, act_id: str,
              slug: str, doknr: str, kinds: tuple[str, ...], *,
              max_age_days: float, offline: bool = False,
@@ -359,6 +389,28 @@ def discover(client: PoliteClient, archive: HistoryArchive, act_id: str,
                               f"norm_html.{tag}.{page}",
                               f"{host}/{slug}/{page}",
                               max_age_days=max_age_days, offline=offline),
+                    "norm_html")
+    if "norm_html_gap" in kinds:
+        # Per-norm pages only for years without any full-act capture: one
+        # bounded prefix query per gap year and host (juris host until 2012).
+        full: list[dict] = []
+        for host in HOSTS:
+            tag = "gii" if host.startswith("www.gesetze") else "juris"
+            full += cdx_query(client, archive, act_id, f"act_html.{tag}",
+                              f"{host}/{slug}/{doknr}.html",
+                              max_age_days=max_age_days, offline=offline) or []
+        for year in gap_years(full):
+            for host in HOSTS:
+                tag = "gii" if host.startswith("www.gesetze") else "juris"
+                if tag == "juris" and year > 2012:
+                    continue
+                rows = cdx_query(
+                    client, archive, act_id, f"norm_html_gap.{tag}.{year}",
+                    f"{host}/{slug}/",
+                    prefix_filter=r"(?i).*/(__|art_)[^/]*\.html?$",
+                    collapse="digest", limit=5000, year=year,
+                    max_age_days=max_age_days, offline=offline)
+                add([row for row in rows or [] if is_norm_page(row, slug)],
                     "norm_html")
     targets.sort(key=lambda t: (t.timestamp, t.kind, t.original))
     return targets
@@ -508,7 +560,9 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"comma list of {', '.join(KINDS)}")
     ap.add_argument("--norm-pages", default="",
                     help="comma list of per-norm page names (e.g. __7.html) "
-                    "for kind norm_html")
+                    "for kind norm_html; kind norm_html_gap instead lists "
+                    "all per-norm pages captured in years without any "
+                    "full-act capture")
     ap.add_argument("--archive", help="history archive root")
     ap.add_argument("--web-data", help="web/data dir with acts/<id>.json")
     ap.add_argument("--delay", type=float, default=2.5)
