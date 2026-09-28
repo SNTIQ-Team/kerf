@@ -160,7 +160,9 @@ class Writer:
                 "queue_depth": self.results.qsize(), "items_per_hour": round(self.jobs / wall * 3600)}
 
     def log_metrics(self) -> None:
-        self.log(f"writer: {self.metrics()}")
+        lag = SourceRun.governors.lag_monitor.max_lag(METRICS_EVERY) if SourceRun.governors is not None \
+            and SourceRun.governors.lag_monitor else None
+        self.log(f"writer: {self.metrics()} process_lag_max_5min={lag if lag is None else round(lag, 2)}s")
         for run in list(SourceRun.active):
             self.log(f"source {run.adapter.source_id}: {run.progress()}")
         if SourceRun.governors is not None:
@@ -550,7 +552,7 @@ def run_pipeline(conn: sqlite3.Connection, specs: list[SourceSpec], *, since=Non
     log = log or default_log
     # Checkpoint + space guard every 200 documents or 60 s (the btrfs probes are subprocesses).
     maintenance = maintenance or Maintenance(conn, home, every_items=200, every_seconds=60)
-    governors = governors or Governors(log=log)
+    governors = governors or Governors(log=log, monitor_lag=True)
     for spec in [*specs, *(queued or [])]:
         governors.declare(host_of(spec.adapter.base_url), concurrency_of(spec.adapter), spec.adapter.min_interval)
         http = spec.http
