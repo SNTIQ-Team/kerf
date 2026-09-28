@@ -147,3 +147,35 @@ deploy/legacy-rebuild-push.sh --dry-run  # rebuild + attest locally only
 
 Until it runs, the VPS keeps serving the previous attested rows (the build
 log shows both parser hashes); the refresh does not fail.
+
+## Law history: versions and change records (2026-09-28)
+
+`law_history.sqlite` (built into every web-data generation by
+`tools/build_law_history.py`, refresh step 23b and every procedure-watch
+publication) serves `/norms/{id}/log|at|diff|blame|changes`,
+`/acts/{id}/changes|versions` and the `change_summary` blocks.  It merges the
+VPS's daily GII states and BGBl events with a compact **history bundle** from
+the workstation, installed as `data/history_bundle/current` (signed manifest,
+namespace `lexgraph-history-bundle` in `/etc/sntiq/lexgraph-archive.allowed_signers`):
+
+* `corpus.sqlite` — parsed Wayback/GII and NeuRIS captures (raw bytes stay in
+  `~/.local/share/sntiq-legal/lexgraph-archive/history`);
+* `change_dates.jsonl.gz` — adoption, promulgation and commencement dates per
+  amendment item, read from the printed BGBl (`tools/resolve_change_dates.py`);
+* `bavarian.jsonl.gz` — BAYERN.RECHT versions and GVBl-dated changes
+  (`tools/bavarian_history.py build`).
+
+Refresh the bundle on the workstation (captures are resumable, polite):
+
+    python3 pipeline/fetch_history_wayback.py            # new Wayback captures
+    python3 tools/parse_history_captures.py              # parse into R/parsed
+    python3 tools/resolve_change_dates.py --data-root <root> --out-dir <dates> --all-acts
+    deploy/history-bundle-push.sh --change-dates <dates> \
+        --bavarian ~/.local/share/sntiq-legal/lexgraph-archive/history/derived/bavaria \
+        [--publish-now]
+
+Without a bundle (or when its signature fails) the builder still produces the
+history from the official daily states only.  2023+ amendment discovery also
+uses the recht.bund.de issue index (`pipeline/index_bgbl_issues.py`, refresh
+step 7a, `data/bgbl_documents/index/`).  Rollback of the deploy:
+`ssh sntiq 'bash /root/backups/2026-09-28-law-history/rollback.sh [--data]'`.
