@@ -220,3 +220,14 @@ def test_transport_cache_key_is_accepted_on_norm_routes(data):
     response = _client(data).get(f"/norms/{P29A}/log?t=1790582645")
     assert response.status_code == 200
     assert _client(data).get(f"/norms/{P29A}/log?t=1&at=x").status_code == 422
+
+
+def test_dates_after_the_last_observation_keep_the_latest_text_as_evidence(
+        data):
+    # The fixture's SGB XIV state was last observed 2026-09-28; later dates
+    # stay unresolved but name the latest observed wording.
+    body = _client(data).get(
+        "/norms/de/bund/sgb_14/para/37/at?date=2026-12-01").json()
+    assert body["status"] == "temporally_unresolved"
+    assert body["resolution"]["resolution"] == "after_last_observation"
+    assert body["evidence"][0]["canonical_id"] == "de/bund/sgb_14/para/37"
