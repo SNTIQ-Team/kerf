@@ -209,8 +209,9 @@ def _item_follows(previous: str | None, candidate: str) -> bool:
     prev_number = int(re.match(r"\d+", previous).group(0))
     prev_letter = re.sub(r"^\d+", "", previous)
     if number == prev_number:
-        return bool(letter) and len(letter) == 1 and (
-            ord(letter) == (ord(prev_letter) + 1 if prev_letter else ord("a")))
+        # Inserted items (1a, 1b …) stay between 1 and 2; a repealed 1b may
+        # leave 1a → 1c, so only require the letter to increase.
+        return len(letter) == 1 and letter > prev_letter
     return number == prev_number + 1 and letter == ""
 
 
@@ -222,7 +223,7 @@ def _split_items(body: str) -> list[str]:
     31), and it must not sit inside a „…" quotation."""
     spans = [m.span() for m in QUOTE_RE.finditer(body)]
     cuts, previous = [], None
-    for m in re.finditer(r"(?m)^\s{0,3}(\d{1,2}[a-z]?)\.\s+", body):
+    for m in re.finditer(r"(?m)^[ \t]{0,3}(\d{1,3}[a-z]?)\.[ \t]+", body):
         if not _item_follows(previous, m.group(1)):
             continue
         if any(a < m.start() < b for a, b in spans):
