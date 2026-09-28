@@ -1,0 +1,100 @@
+"""Incremental, prioritised, rate-limited synchronisation of one source."""
+from __future__ import annotations
+
+import sqlite3
+import sys
+import time
+import traceback
+
+from .errors import UpstreamFailure
+from .http import PoliteHttp
+from .sources.base import Adapter
+from .store import (finish_run, record_failure, register_source, relink, select_frontier,
+                    set_source_status, start_run, store_decision, upsert_items, utcnow, write_capture)
+
+# Failures that mean "the source is refusing us": stop instead of hammering.
+BLOCKING = {"challenge", "login", "robots_disallowed", "rate_limited"}
+MAX_CONSECUTIVE_BLOCKING = 3
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
+
+
+def _result(counts: dict, status: str, run_id: int, http: PoliteHttp, requests_before: int) -> dict:
+    counts["requests"] = http.requests_made - requests_before
+    return counts | {"status": status, "run_id": run_id}
+
+
+def sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *, since: str | None = None,
+                limit: int | None = None, courts: list[str] | None = None, retry_failed: bool = False,
+                home=None) -> dict:
+    register_source(conn, adapter.source_id, adapter.label, adapter.base_url, adapter.land, adapter.adapter_name)
+    run_id = start_run(conn, adapter.source_id, since, limit)
+    counts = {"listed": 0, "attempted": 0, "stored": 0, "unchanged": 0, "failed": 0, "requests": 0}
+    requests_before = http.requests_made
+    status, notes = "ok", None
+    try:
+        try:
+            listing = adapter.list_items(http, conn, since=since, limit=limit, courts=courts)
+        except UpstreamFailure as failure:
+            record_failure(conn, run_id, adapter.source_id, None, failure)
+            blocked = failure.kind in BLOCKING
+            set_source_status(conn, adapter.source_id, "blocked" if blocked else "unavailable",
+                              f"listing failed: {failure.kind}: {failure.detail}"[:500])
+            status, notes = ("blocked" if blocked else "failed"), f"listing: {failure}"
+            log(f"{adapter.source_id}: listing failed: {failure}")
+            return _result(counts, status, run_id, http, requests_before)
+        counts["listed"] = upsert_items(conn, adapter.source_id, listing.items)
+        if listing.upstream_total is not None:
+            conn.execute("UPDATE sources SET upstream_listed=? WHERE source_id=?",
+                         (listing.upstream_total, adapter.source_id))
+        frontier = select_frontier(conn, adapter.source_id, since=since, limit=limit, courts=courts,
+                                   retry_failed=retry_failed)
+        log(f"{adapter.source_id}: listed {counts['listed']} (upstream {listing.upstream_total}), "
+            f"fetching {len(frontier)}")
+        consecutive_blocking = 0
+        for position, item in enumerate(frontier, 1):
+            counts["attempted"] += 1
+            try:
+                capture = adapter.fetch(http, item)
+                content_hash, relpath = write_capture(capture.body, adapter.source_id, capture.extension, home)
+                parsed = adapter.parse(capture, item)
+                _, changed = store_decision(conn, parsed, content_hash=content_hash, capture_path=relpath,
+                                            media_type=capture.media_type, observed_at=utcnow())
+                counts["stored" if changed else "unchanged"] += 1
+                consecutive_blocking = 0
+            except UpstreamFailure as failure:
+                counts["failed"] += 1
+                if failure.url is None:
+                    failure.url = item["url"]
+                record_failure(conn, run_id, adapter.source_id, item["source_doc_id"], failure)
+                log(f"{adapter.source_id}: {item['source_doc_id']}: {failure.kind}: {failure.detail[:160]}")
+                consecutive_blocking = consecutive_blocking + 1 if failure.kind in BLOCKING else 0
+                if consecutive_blocking >= MAX_CONSECUTIVE_BLOCKING:
+                    status, notes = "blocked", f"stopped after {consecutive_blocking} consecutive {failure.kind}"
+                    set_source_status(conn, adapter.source_id, "blocked", notes)
+                    log(f"{adapter.source_id}: {notes}")
+                    break
+            except Exception as exc:  # parser defect: typed, recorded, never stored as a decision
+                counts["failed"] += 1
+                detail = f"{type(exc).__name__}: {exc} | " + traceback.format_exc(limit=3).replace("\n", " ")[-600:]
+                record_failure(conn, run_id, adapter.source_id, item["source_doc_id"],
+                               UpstreamFailure("parse_error", detail, url=item["url"]))
+                log(f"{adapter.source_id}: {item['source_doc_id']}: parse_error: {exc}")
+            if position % 50 == 0:
+                log(f"{adapter.source_id}: {position}/{len(frontier)} stored={counts['stored']} "
+                    f"unchanged={counts['unchanged']} failed={counts['failed']}")
+        relink(conn)
+        if status == "ok" and counts["failed"]:
+            status = "partial"
+        if status != "blocked":
+            set_source_status(conn, adapter.source_id, "ok" if status == "ok" else "partial",
+                              None if status == "ok" else f"{counts['failed']} item failures in run {run_id}")
+        return _result(counts, status, run_id, http, requests_before)
+    except KeyboardInterrupt:
+        status, notes = "interrupted", "interrupted by user"
+        raise
+    finally:
+        counts["requests"] = http.requests_made - requests_before
+        finish_run(conn, run_id, adapter.source_id, status, counts, notes)
