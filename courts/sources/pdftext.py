@@ -22,7 +22,12 @@ from ..model import Block
 RN_LINE = re.compile(r"^(\d{1,3})\s{2,}(\S.*)$")
 PAGE_MARKER = re.compile(r"^\s*(?:-\s*\d{1,3}\s*-|Seite\s+\d+(?:\s+von\s+\d+)?|\d{1,3}\s*/\s*\d{1,3})\s*$")
 RULE = re.compile(r"^\s*[-_=]{10,}\s*$")
+# Only at the top or bottom edge of a page: a bare page number ("2") or "Seite 2/7".
+EDGE_PAGE_MARKER = re.compile(r"^\s*(?:\d{1,3}|Seite\s+\d+(?:\s*(?:/|von)\s*\d+)?)\s*$")
+SENTENCE_END = re.compile(r"[.!?:;“”\"»)]$")
+OUTLINE = re.compile(r"^(?:[IVX]+\.|\d{1,2}\.|[a-z]{1,2}\)|\([a-z0-9]{1,3}\)|[A-Z]\.)(?:\s|$)")
 NO_JOIN = {"und", "oder", "bzw", "bzw.", "sowie"}
+COLONLESS_HEADINGS = {"tenor", "gründe", "tatbestand", "entscheidungsgründe", "leitsatz", "leitsätze"}
 
 
 def pdf_text(pdf: bytes, *, url: str | None = None) -> str:
@@ -85,20 +90,26 @@ def layout_blocks(text: str, *, running_headers: set[str] = frozenset(),
 
     pages = text.split("\f")
     for page_no, page in enumerate(pages, 1):
+        lines = page.splitlines()
+        filled = [i for i, raw in enumerate(lines) if raw.strip()]
+        edges = {filled[0], filled[-1]} if filled else set()
         if page_no > 1:
             flush()
             blocks.append(Block(text="", kind="pagebreak", locator=f"page[{page_no}]"))
-        for line_no, line in enumerate(page.splitlines(), 1):
+        for line_no, line in enumerate(lines, 1):
             compact = " ".join(line.split())
             if not compact:
                 flush()
                 continue
-            if PAGE_MARKER.match(line) or compact in headers or RULE.match(line):
+            if PAGE_MARKER.match(line) or compact in headers or RULE.match(line) or (
+                    line_no - 1 in edges and EDGE_PAGE_MARKER.match(line)):
                 flush()
                 continue
-            heading = headings.get(spaced_word(line).rstrip(":").lower()) if len(compact) <= 40 else None
-            if heading and (line.rstrip().endswith(":") or spaced_word(line).endswith(":")
-                            or spaced_word(line).rstrip(":").lower() in ("tenor",)):
+            word = spaced_word(line)
+            heading = headings.get(word.rstrip(":").lower()) if len(compact) <= 40 else None
+            # "Beschluss"/"Urteil"/"Entscheidung" also occur as plain words and titles
+            # ("URTEIL"), so they only count with a colon; reasoning headings stand alone.
+            if heading and (word.endswith(":") or word.rstrip(":").lower() in COLONLESS_HEADINGS):
                 flush()
                 blocks.append(Block(text=spaced_word(line), kind="heading", label=None,
                                     locator=f"page[{page_no}]/line[{line_no}]#{heading}"))
@@ -115,4 +126,33 @@ def layout_blocks(text: str, *, running_headers: set[str] = frozenset(),
                 locator = f"page[{page_no}]/line[{line_no}]"
             current.append(line)
     flush()
-    return blocks
+    return join_page_breaks(blocks)
+
+
+def join_page_breaks(blocks: list[Block]) -> list[Block]:
+    """Re-join a paragraph that a page break cut in two.
+
+    The text after the break continues the block before it when that block does
+    not end a sentence (or ends in a hyphenated word), unless the continuation
+    starts a new outline item ("aa)", "2.").  Labeled blocks, headings and
+    page-break markers are never merged into.
+    """
+    out: list[Block] = []
+    i = 0
+    while i < len(blocks):
+        block = blocks[i]
+        if block.kind == "pagebreak" and out and i + 1 < len(blocks):
+            prev, nxt = out[-1], blocks[i + 1]
+            joinable = (prev.kind == "text" and nxt.kind == "text" and nxt.label is None and prev.text
+                        and nxt.text and not OUTLINE.match(nxt.text)
+                        and (re.search(r"[A-Za-zäöüß]-$", prev.text) or not SENTENCE_END.search(prev.text)
+                             or nxt.text[:1].islower()))
+            if joinable:
+                merged = join_lines([prev.text, nxt.text])
+                out[-1] = Block(text=merged, label=prev.label, kind="text",
+                                locator=f"{prev.locator}+{nxt.locator}")
+                i += 2
+                continue
+        out.append(block)
+        i += 1
+    return out

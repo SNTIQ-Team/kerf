@@ -372,7 +372,8 @@ COURT_NAMES = (
     r"Oberlandesgerichts?|Landgerichts?|Amtsgerichts?|Landesarbeitsgerichts?|Arbeitsgerichts?|"
     r"Finanzgerichts?|Verfassungsgerichtshofs?e?s?)"
     r"(?:" + WS + r"(?:für das Land" + WS + r"|des Landes" + WS + r")?(?!Urteil|Beschluss|vom|v\.)"
-    r"[A-ZÄÖÜ][\wÄÖÜäöüß.-]+(?:" + WS + r"(?!Urteil|Beschluss|vom)[A-ZÄÖÜ][\wäöüß-]+)?)?")
+    r"[A-ZÄÖÜ][\wÄÖÜäöüß.-]+(?:" + WS + r"(?:(?:am|an der|in der|im)" + WS + r")?"
+    r"(?!Urteil|Beschluss|vom)[A-ZÄÖÜ][\wäöüß-]+)?)?")
 COURT_RE = re.compile(r"(?<![\w-])(?P<court>" + COURT_NAMES + r")(?![\w])")
 SELF_RE = re.compile(r"(?<![\w-])(?P<self>Senats?|Senatsurteile?s?|Senatsbeschlusse?s?|Kammer|Kammerbeschlusse?s?|"
                      r"Große[nr]? Senats?)(?![\w])")

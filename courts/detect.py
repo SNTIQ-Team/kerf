@@ -64,12 +64,19 @@ def looks_like_html(body: bytes) -> bool:
         or b"<head" in head or b"<body" in head
 
 
+# Cloudflare injects a passive bot-management beacon into normal pages
+# (/cdn-cgi/challenge-platform/scripts/jsd/main.js).  It is not a challenge.
+_CF_BEACON_RE = re.compile(r"<script\b[^>]*>(?:(?!</script>).)*?/cdn-cgi/challenge-platform/scripts/jsd/main\.js"
+                           r"(?:(?!</script>).)*</script>", re.I | re.S)
+
+
 def classify_page(body: bytes, *, status: int | None = None) -> tuple[str, str] | None:
     """Return (failure_kind, evidence) for a non-decision page, else None."""
     try:
         markup = body.decode("utf-8")
     except UnicodeDecodeError:
         markup = body.decode("latin-1")
+    markup = _CF_BEACON_RE.sub(" ", markup)
     lower = markup.lower()
     title = _first(_TITLE_RE, markup)
     h1 = _first(_H1_RE, markup)

@@ -265,8 +265,9 @@ class NrwAdapter(Adapter):
         von = datetime.fromisoformat(since).strftime("%d.%m.%Y") if since else "01.01.1900"
         von2 = None
         if not since:
-            last = conn.execute("SELECT max(finished_at) FROM sync_runs WHERE source_id='nrw' AND status IN "
-                                "('ok','partial') AND limit_n IS NULL").fetchone()[0]
+            last = conn.execute("SELECT max(started_at) FROM sync_runs WHERE source_id='nrw' AND status IN "
+                                "('ok','partial') AND limit_n IS NULL AND since IS NULL "
+                                "AND coalesce(notes, '') NOT LIKE 'listing incomplete%'").fetchone()[0]
             if last:  # incremental: everything posted since the last complete run (7 days overlap)
                 von2 = (datetime.fromisoformat(last) - timedelta(days=7)).strftime("%d.%m.%Y")
         branches = BRANCHES

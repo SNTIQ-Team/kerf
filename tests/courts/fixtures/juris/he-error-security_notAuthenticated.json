@@ -1,0 +1,7 @@
+{
+    "msgId":"security_notAuthenticated",
+    "msgParams":{
+    },
+    "httpStatus":500,
+    "info":"V37_35_00_production 10.09.2026 13:53:04 - 28.09.2026 09:12:37 - null - EAA52E6FBBDF9519E3947C19A5636453.jp14 - iam-kv-service - iam-login-kv-service"
+}

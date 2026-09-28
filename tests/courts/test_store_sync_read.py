@@ -203,3 +203,23 @@ def test_reader_refuses_other_schema_versions(conn):
     with pytest.raises(RuntimeError):
         open_db()
     assert db_path().exists()
+
+
+@pytest.mark.parametrize("ecli,valid", [
+    ("ECLI:DE:BVerwG:2016:160316B1B19.16.0", True),
+    ("ECLI:DE:LSGNRW:2026:0813.L9SO202.26B.ER.UN.00", True),
+    ("ECLI:DE:SGCOTTB:2023:0525.00", False),   # published by a portal without the Az part: not unique
+    ("ECLI:DE:BVerwG:2016", False),
+])
+def test_malformed_ecli_is_not_used_as_decision_id(ecli, valid):
+    from courts.model import Block, ParsedDecision, Section
+    from courts.store import decision_identity
+    d = ParsedDecision(source_id="x", source_doc_id="1", source_url="https://x", court_name="Sozialgericht Cottbus",
+                       decision_date="2023-05-25", case_numbers_raw="S 1 AS 1/23", case_numbers=["S 1 AS 1/23"],
+                       decision_type="Urteil", sections=[Section("gruende", "court", "t", [Block("x")])],
+                       ecli=ecli, court_id="sg-cottbus")
+    identity = decision_identity(d)
+    assert (identity == ecli) is valid
+    if not valid:
+        assert identity == "court:sg-cottbus/2023-05-25/S_1_AS_1-23"
+        assert d.metadata["ecli_published_invalid"] == ecli
