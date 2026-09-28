@@ -118,11 +118,15 @@ def apply_corrections(conn: sqlite3.Connection, decision_id: str) -> int:
         elif row["kind"] == "case_numbers":
             from .casenumbers import case_key
             conn.execute("BEGIN IMMEDIATE")
-            conn.execute("UPDATE decisions SET case_numbers=? WHERE id=?", (json.dumps(new, ensure_ascii=False),
-                                                                          decision_id))
-            conn.execute("DELETE FROM case_numbers WHERE decision_id=?", (decision_id,))
-            conn.executemany("INSERT INTO case_numbers VALUES(?,?,?,?)",
-                             [(decision_id, i, c, case_key(c)) for i, c in enumerate(new, 1)])
+            try:
+                conn.execute("UPDATE decisions SET case_numbers=? WHERE id=?", (json.dumps(new, ensure_ascii=False),
+                                                                              decision_id))
+                conn.execute("DELETE FROM case_numbers WHERE decision_id=?", (decision_id,))
+                conn.executemany("INSERT INTO case_numbers VALUES(?,?,?,?)",
+                                 [(decision_id, i, c, case_key(c)) for i, c in enumerate(new, 1)])
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
             conn.execute("COMMIT")
         elif row["kind"] == "relation_assessment":
             paragraph_id = row["target"] if "#" in row["target"] else None

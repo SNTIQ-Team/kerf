@@ -43,22 +43,48 @@ def http_for(adapter) -> PoliteHttp:
                       respect_robots=adapter.robots_policy == "respect")
 
 
+MAX_PARALLEL_SOURCES = 6
+
+
 def cmd_sync(args) -> int:
-    adapter = get_adapter(args.source)
+    """One writer process: each source is a thread (its own polite HTTP session, network in parallel);
+    all share one connection whose transaction lock serialises the short write transactions, and one
+    Maintenance checkpoints the WAL and runs the space guard (courts.writer)."""
+    import threading
+    from .writer import Maintenance, SharedConnection
+    sources = [s.strip() for s in args.source.split(",") if s.strip()]
+    if len(sources) > MAX_PARALLEL_SOURCES:
+        print(json.dumps({"status": "invalid_argument",
+                          "detail": f"at most {MAX_PARALLEL_SOURCES} sources per writer process"}), file=sys.stderr)
+        return 2
+    adapters = [get_adapter(s) for s in sources]
     if not space_ok(f"sync {args.source}"):
         return 4
-    conn = connect()
+    conn = SharedConnection(connect(threads=True))
     init_db(conn)
-    http = http_for(adapter)
+    maintenance = Maintenance(conn)
     courts = [c.strip() for c in args.court.split(",")] if args.court else None
-    try:
-        result = sync_source(adapter, conn, http, since=args.since, limit=args.limit, courts=courts,
-                             retry_failed=args.retry_failed)
-    except SourceBusy as exc:
-        print(json.dumps({"status": "busy", "detail": str(exc)}), file=sys.stderr)
-        return 3
-    print(json.dumps(result, ensure_ascii=False))
-    return 0 if result["status"] in ("ok", "partial") else 1
+    results: dict[str, dict] = {}
+
+    def run(adapter):
+        try:
+            results[adapter.source_id] = sync_source(adapter, conn, http_for(adapter), since=args.since,
+                                                     limit=args.limit, courts=courts,
+                                                     retry_failed=args.retry_failed, maintenance=maintenance)
+        except SourceBusy as exc:
+            results[adapter.source_id] = {"status": "busy", "detail": str(exc)}
+        except Exception as exc:  # one source's defect must not take the others down
+            results[adapter.source_id] = {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"[:500]}
+    threads = [threading.Thread(target=run, args=(a,), name=f"sync-{a.source_id}", daemon=True) for a in adapters]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        while thread.is_alive():
+            thread.join(timeout=1.0)  # the main thread keeps receiving SIGTERM
+    from .writer import checkpoint
+    checkpoint(conn)
+    print(json.dumps(results if len(sources) > 1 else results[sources[0]], ensure_ascii=False))
+    return 0 if all(r.get("status") in ("ok", "partial") for r in results.values()) else 1
 
 
 def cmd_reparse(args) -> int:
@@ -172,6 +198,15 @@ def cmd_running(args) -> int:
                 state, pid = "running", handle.read().strip() or "?"
         rows.append([lock.stem, state, pid])
     print(_table(rows))
+    writer = data_home() / ".writer.lock"
+    if writer.exists():
+        with open(writer, "r+") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(handle, fcntl.LOCK_UN)
+                print("writer: none")
+            except BlockingIOError:
+                print(f"writer: {handle.read().strip() or '?'}")
     return 0
 
 
@@ -327,11 +362,16 @@ def cmd_cites(args) -> int:
     return 0
 
 
+WRITING_COMMANDS = {cmd_sync, cmd_reparse, cmd_migrate_captures, cmd_compact, cmd_classify, cmd_correct,
+                    cmd_verify, cmd_courts_map}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m courts", description="Local German court decision corpus")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("sync", help="incremental sync of one source")
-    p.add_argument("--source", required=True, help="rii | nrw | by | <land> (" + ", ".join(sorted(registry())) + ")")
+    p = sub.add_parser("sync", help="incremental sync of one or more sources (one writer process)")
+    p.add_argument("--source", required=True, help="comma list, at most 6: rii | nrw | by | <land> ("
+                   + ", ".join(sorted(registry())) + ")")
     p.add_argument("--since", type=_date, help="only decisions dated on/after YYYY-MM-DD")
     p.add_argument("--limit", type=_positive, help="fetch at most N decisions (priority order)")
     p.add_argument("--court", help="comma list of court ids/prefixes to restrict (e.g. bsg,bverwg)")
@@ -427,8 +467,15 @@ def main(argv: list[str] | None = None) -> int:
             return
         raise KeyboardInterrupt(f"signal {signum}")
     signal.signal(signal.SIGTERM, _terminate)
+    from .writer import WriterBusy, writer_lock
     try:
+        if args.func in WRITING_COMMANDS:
+            with writer_lock(f"{args.command} " + " ".join(argv or sys.argv[1:])):
+                return args.func(args)
         return args.func(args)
+    except WriterBusy as exc:
+        print(json.dumps({"status": "writer_busy", "detail": str(exc)}), file=sys.stderr)
+        return 3
     except KeyboardInterrupt:
         print(json.dumps({"status": "interrupted"}), file=sys.stderr)
         return 130

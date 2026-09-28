@@ -246,15 +246,18 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def connect(path: Path | None = None, *, readonly: bool = False) -> sqlite3.Connection:
+def connect(path: Path | None = None, *, readonly: bool = False, threads: bool = False) -> sqlite3.Connection:
+    """``threads``: the connection is shared by the source threads of the one writer process
+    (wrap it in courts.writer.SharedConnection)."""
     path = path or db_path()
     if readonly:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=60)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(path, timeout=120)
+        conn = sqlite3.connect(path, timeout=120, check_same_thread=not threads)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA journal_size_limit=268435456")  # the WAL left after a checkpoint (courts.writer)
     conn.isolation_level = None  # explicit BEGIN/COMMIT only
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=120000")
@@ -404,6 +407,16 @@ def upsert_items(conn: sqlite3.Connection, source_id: str, items: list[dict]) ->
              i.get("listed_case_numbers"), i.get("listed_modified"), i.get("priority", 1),
              json.dumps(i.get("extra") or {}, ensure_ascii=False)) for i in items]
     conn.execute("BEGIN IMMEDIATE")
+    try:
+        _upsert_rows(conn, rows)
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")
+    return len(rows)
+
+
+def _upsert_rows(conn: sqlite3.Connection, rows: list[tuple]) -> None:
     conn.executemany("""INSERT INTO source_items(source_id, source_doc_id, url, listed_date, listed_court,
                           listed_case_numbers, listed_modified, priority, extra) VALUES(?,?,?,?,?,?,?,?,?)
                         ON CONFLICT(source_id, source_doc_id) DO UPDATE SET
@@ -416,8 +429,6 @@ def upsert_items(conn: sqlite3.Connection, source_id: str, items: list[dict]) ->
                                       AND excluded.listed_modified <> source_items.fetched_modified
                                      THEN 'pending' ELSE source_items.state END,
                           listed_modified=excluded.listed_modified""", rows)
-    conn.execute("COMMIT")
-    return len(rows)
 
 
 def select_frontier(conn: sqlite3.Connection, source_id: str, *, since: str | None, limit: int | None,
@@ -607,7 +618,21 @@ def same_decision_elsewhere(conn: sqlite3.Connection, parsed: ParsedDecision):
 
 def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_hash: str, capture_path: str,
                    media_type: str, observed_at: str | None = None, force: bool = False) -> tuple[str, bool]:
-    """Insert or replace one decision; return (decision_id, changed)."""
+    """Insert or replace one decision; return (decision_id, changed).
+
+    The identity checks read the database, so with source threads sharing one writer connection
+    (courts.writer.SharedConnection) the whole store runs under that connection's lock."""
+    lock = getattr(conn, "lock", None)
+    if lock is not None:
+        with lock:
+            return _store_decision(conn, parsed, content_hash=content_hash, capture_path=capture_path,
+                                   media_type=media_type, observed_at=observed_at, force=force)
+    return _store_decision(conn, parsed, content_hash=content_hash, capture_path=capture_path,
+                           media_type=media_type, observed_at=observed_at, force=force)
+
+
+def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_hash: str, capture_path: str,
+                    media_type: str, observed_at: str | None = None, force: bool = False) -> tuple[str, bool]:
     parsed = finalise(parsed)
     decision_id = decision_identity(parsed)
     paragraphs, numbering = assemble(decision_id, parsed.sections)
