@@ -19,8 +19,10 @@ from typing import Any
 
 _MONTH = (r"(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|"
           r"Oktober|November|Dezember)")
-_ISSUED = (rf",?\s*ausgegeben\s+zu\s+(?:Bonn|Berlin|Köln)\s+am\s+\d{{1,2}}\.\s*"
-           rf"{_MONTH}\s+\d{{4}}")
+# Older text layers break words at line ends ("ausgegeben zu Bonn a\nm 5.
+# August 2004"), so "am" may be split by whitespace.
+_ISSUED = (rf",?\s*ausgegeben\s+zu\s+(?:Bonn|Berlin|Köln)\s+a\s*m\s+"
+           rf"\d{{1,2}}\.\s*{_MONTH}\s+\d{{4}}")
 
 # ``T eil`` occurs in older BGBl text layers (letter-spaced typesetting).
 _BGBL_CORE = (r"Bundesgesetzblatt\s+Jahrgang\s+\d{4}\s+T\s?eil\s+[IVX]+\s+"
@@ -31,11 +33,16 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # ausgegeben zu Bonn am 28. Dezember 2023"
     ("bgbl_running_header", re.compile(
         rf"Seite\s+\d+\s+von\s+\d+\s+{_BGBL_CORE}(?:{_ISSUED})?")),
-    # Printed BGBl (until 2022): page number before or after the header.
+    # Printed BGBl (until 2022): the page number stands before or after the
+    # header -- glued to it ("3341Bundesgesetzblatt"), after a space, or on
+    # its own line.  Only a bare 1-5 digit line directly adjacent to the
+    # header is taken as its page number.
     ("bgbl_running_header", re.compile(
-        rf"(?:(?<=\n)|^)[ \t]*\d{{1,5}}[ \t]+{_BGBL_CORE}{_ISSUED}", re.M)),
+        rf"(?:(?<=\n)|^)[ \t]*\d{{1,5}}[ \t]*(?:\n[ \t]*)?{_BGBL_CORE}"
+        rf"{_ISSUED}(?:[ \t]*\n[ \t]*\d{{1,5}}(?=[ \t]*(?:\n|$)))?", re.M)),
     ("bgbl_running_header", re.compile(
-        rf"{_BGBL_CORE}{_ISSUED}(?:[ \t]+\d{{1,5}}(?=[ \t]*(?:\n|$)))?")),
+        rf"{_BGBL_CORE}{_ISSUED}(?:[ \t]*\n?[ \t]*\d{{1,5}}"
+        rf"(?=[ \t]*(?:\n|$)))?")),
     ("bgbl_footer", re.compile(
         r"Das\s+Bundesgesetzblatt\s+im\s+Internet:[^\n]*")),
     # Bundestag Drucksache running header, both page orientations.

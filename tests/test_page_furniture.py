@@ -67,3 +67,24 @@ def test_backfill_parser_strips_mid_line_headers():
     assert commands
     assert all("Bundesgesetzblatt" not in command["raw"]
                for command in commands)
+
+
+def test_broken_text_layers_of_printed_bgbl():
+    """Real pre-2006 text layers split "am" across lines and put the page
+    number on its own line before or after the header."""
+    for document_id in ("bgbl-1-2004-s2198", "bgbl-1-2005-s837",
+                        "bgbl-1-2004-s1950", "bgbl-1-2005-s721"):
+        row = _row(document_id)
+        clean, removed = strip_page_furniture(row["raw"])
+        assert removed, document_id
+        assert "Bundesgesetzblatt Jahrgang" not in clean, document_id
+        assert "ausgegeben zu Bonn" not in clean, document_id
+        for span in removed:
+            assert row["raw"][span["start"]:span["end"]] == span["text"]
+    clean, removed = strip_page_furniture(_row("bgbl-1-2004-s2198")["raw"])
+    assert removed[0]["text"].startswith("2208\nBundesgesetzblatt")
+
+
+def test_numbers_that_are_not_page_furniture_survive():
+    text = ("1. § 3 wird aufgehoben.\n2208\n2. § 4 wird aufgehoben.")
+    assert strip_page_furniture(text) == (text, [])
