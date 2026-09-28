@@ -106,6 +106,11 @@ if materials_router is not None:
 # envelope (they read parameters dynamically, so declared FastAPI parameters
 # are not the whole contract).
 _SELF_VALIDATING_PREFIXES = ("/norms/", "/materials")
+# Transport-only cache keys that deployed clients append (``?t=<ms>``,
+# ``/digest?d=<day>``).  They never select content; they are accepted but
+# disclosed in X-Lexgraph-Ignored-Arguments instead of being silently dropped.
+_CACHE_KEYS = {"t", "_", "cb"}
+_ROUTE_CACHE_KEYS = {"/digest": {"d"}}
 
 
 def _declared_query_names(route_path: str, method: str) -> set[str] | None:
@@ -133,10 +138,13 @@ async def search_contract(request: Request, call_next):
     if root_path and route_path.startswith(root_path + "/"):
         route_path = route_path[len(root_path):]
     params = request.query_params
+    ignored: list[str] = []
     if params and not route_path.startswith(_SELF_VALIDATING_PREFIXES):
         allowed = _declared_query_names(route_path, request.method)
         if allowed is not None:
-            unsupported = sorted(set(params) - allowed)
+            cache_keys = (_CACHE_KEYS | _ROUTE_CACHE_KEYS.get(route_path, set())) - allowed
+            ignored = sorted(set(params) & cache_keys)
+            unsupported = sorted(set(params) - allowed - cache_keys)
             repeated = sorted(k for k in params if len(params.getlist(k)) > 1)
             if unsupported or repeated:
                 payload = unknown_argument_payload(
@@ -154,6 +162,8 @@ async def search_contract(request: Request, call_next):
     response = await call_next(request)
     if snapshot:
         response.headers["X-Lexgraph-Snapshot"] = snapshot
+    if ignored:
+        response.headers["X-Lexgraph-Ignored-Arguments"] = ",".join(ignored)
     return response
 
 

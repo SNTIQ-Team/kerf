@@ -62,6 +62,7 @@ server.add_middleware(
     expose_headers=[
         "Content-Disposition",
         "X-Lexgraph-Snapshot",
+        "X-Lexgraph-Ignored-Arguments",
         "X-Lexgraph-Source-Sha256",
         "X-Lexgraph-Requested-Date",
         "X-Lexgraph-Resolved-Date",
