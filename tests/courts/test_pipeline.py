@@ -90,8 +90,8 @@ def test_latency_spike_halves():
     g = governor(clock, logs, start=6)
     for _ in range(20):
         g.answered(0.3)
-    for _ in range(20):
-        g.answered(2.0)                        # p95 > 3x baseline and > baseline + 1 s
+    for _ in range(40):
+        g.answered(2.0)                        # p95 > 3x baseline and > baseline + 1 s, median up too
     assert g.limit == 3 and "latency spike" in logs[-1]
 
 
@@ -292,7 +292,7 @@ def test_a_small_baseline_does_not_turn_noise_into_spikes():
     g = governor(clock, logs, start=4)
     for _ in range(20):
         g.answered(0.2)
-    for _ in range(20):
+    for _ in range(40):
         g.answered(0.9)                        # 4.5x the baseline, but only 0.7 s above it
     assert g.limit == 4
 
@@ -332,7 +332,7 @@ def test_a_slow_start_does_not_fix_a_loose_baseline():
     for _ in range(10):
         g.answered(0.4)
     assert g.baseline == pytest.approx(0.4) and g.limit == 5
-    for _ in range(20):
+    for _ in range(40):
         g.answered(2.0)                        # now a real spike: > 3x 0.4 s and > 0.4 s + 1 s
     assert g.limit == 2
 
@@ -345,7 +345,7 @@ def test_a_stall_of_this_process_is_not_a_host_signal():
     for _ in range(20):
         g.answered(0.3)
     lag[0] = 2.0                               # every thread of the process was stalled
-    for _ in range(20):
+    for _ in range(40):
         g.answered(3.0)
     assert g.limit == 6 and g.local_stalls == 1
     clock.now += 121
@@ -353,6 +353,16 @@ def test_a_stall_of_this_process_is_not_a_host_signal():
         g.answered(0.3)
     assert g.limit == 6                        # no growth while the process stalls
     lag[0] = 0.0
-    for _ in range(20):
+    for _ in range(40):
         g.answered(3.0)                        # a real spike
     assert g.limit == 3
+
+
+def test_a_few_slow_documents_are_not_a_spike():
+    clock, logs = Clock(), []
+    g = governor(clock, logs, start=6)
+    for _ in range(20):
+        g.answered(0.3)
+    for i in range(80):
+        g.answered(6.0 if i % 10 == 0 else 0.3)  # 10 % slow answers: p95 high, median unchanged
+    assert g.limit == 6

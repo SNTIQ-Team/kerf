@@ -32,7 +32,8 @@ BLOCKS_TO_ALERT = 3
 ALERT_HOLD = 1800.0
 BASELINE_SAMPLES = 20
 MIN_SAMPLES = 10
-SPIKE_SAMPLES = 20
+SPIKE_SAMPLES = 40      # p95 of 20 answers is their maximum: one slow document would read as a spike
+SPIKE_MEDIAN = 1.5      # a spike is sustained: the median of the recent answers also rose by half
 GROW_BELOW = 2.0
 SPIKE_ABOVE = 3.0
 SPIKE_MARGIN = 1.0      # and at least this many seconds above the baseline (small baselines are noisy)
@@ -73,6 +74,11 @@ def _p95(values) -> float:
     return values[min(len(values) - 1, int(0.95 * len(values)))] if values else 0.0
 
 
+def _median(values) -> float:
+    values = sorted(values)
+    return values[len(values) // 2] if values else 0.0
+
+
 class HostGovernor:
     def __init__(self, host: str, *, start: int, maximum: int, min_interval: float, log=None, clock=time.monotonic,
                  sleep=time.sleep, lag=None):
@@ -92,6 +98,7 @@ class HostGovernor:
         self.last_change = now
         self.ceiling_until = 0.0
         self.baseline: float | None = None
+        self.baseline_median: float | None = None
         self._first: list[float] = []
         self.window: list[float] = []          # latencies since the last change
         self.window_errors = 0
@@ -158,6 +165,7 @@ class HostGovernor:
                 self._first.append(latency)
                 if len(self._first) >= BASELINE_SAMPLES:
                     self.baseline = max(MIN_BASELINE, _p95(self._first))
+                    self.baseline_median = max(MIN_BASELINE / 2, _median(self._first))
                     self.window, self.window_errors = [], 0   # later windows judge against it
                 return
             self.window.append(latency)
@@ -173,7 +181,8 @@ class HostGovernor:
                 self.window, self.window_errors = [], 0
                 return
             if len(self.recent) >= SPIKE_SAMPLES and len(self.window) >= MIN_SAMPLES \
-                    and spike > SPIKE_ABOVE * self.baseline and spike > self.baseline + SPIKE_MARGIN:
+                    and spike > SPIKE_ABOVE * self.baseline and spike > self.baseline + SPIKE_MARGIN \
+                    and _median(self.recent) > SPIKE_MEDIAN * self.baseline_median:
                 self._throttle(now, f"latency spike p95 {_p95(self.recent):.2f}s > {SPIKE_ABOVE:.0f}x baseline "
                                     f"{self.baseline:.2f}s", retry_after=None, block=False)
                 self.recent.clear()
@@ -183,6 +192,7 @@ class HostGovernor:
                 # The baseline only ever tightens: the first answers of a run (TLS handshakes, every source
                 # starting at once) are slow, and a high baseline would make both rules toothless.
                 self.baseline = max(MIN_BASELINE, min(self.baseline, _p95(self.window)))
+                self.baseline_median = max(MIN_BASELINE / 2, min(self.baseline_median, _median(self.window)))
             if (now - self.last_change >= INCREASE_EVERY and now >= self.cooldown_until and not stalled
                     and len(self.window) >= MIN_SAMPLES and not self.window_errors
                     and _p95(self.window) < GROW_BELOW * self.baseline and self.limit < self.maximum):
