@@ -6,6 +6,7 @@ import fcntl
 import os
 import sqlite3
 import sys
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -17,6 +18,9 @@ from .http import PoliteHttp
 from .sources.base import Adapter
 from .store import (finish_run, record_failure, register_source, relink, select_frontier,
                     set_source_status, start_run, store_decision, upsert_items, utcnow, write_capture)
+
+# First SIGTERM during a sync: finish the current item, then stop (cli sets it); a second one interrupts.
+STOP_AFTER_ITEM = threading.Event()
 
 # Failures that mean "the source is refusing us": stop instead of hammering.
 BLOCKING = {"challenge", "login", "robots_disallowed", "rate_limited"}
@@ -123,6 +127,10 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
             f"fetching {len(frontier)}")
         consecutive_blocking = 0
         for position, item in enumerate(frontier, 1):
+            if STOP_AFTER_ITEM.is_set():
+                status, notes = "interrupted", "stopped after the current item (SIGTERM)"
+                log(f"{adapter.source_id}: {notes}")
+                break
             counts["attempted"] += 1
             content_hash = None
             try:
@@ -193,7 +201,7 @@ def _sync_source(adapter: Adapter, conn: sqlite3.Connection, http: PoliteHttp, *
         relink(conn)
         if status == "ok" and counts["failed"]:
             status = "partial"
-        if status == "failed":
+        if status in ("failed", "interrupted"):
             return _result(counts, status, run_id, http, requests_before)
         if status != "blocked":
             set_source_status(conn, adapter.source_id, "ok" if status == "ok" else "partial",
