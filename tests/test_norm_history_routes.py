@@ -204,3 +204,13 @@ def test_bavarian_history_from_archived_official_pages(data):
         "§ 2 G v. 23.12.2021 (GVBl. S. 671)"
     assert newest["source"]["norm_url"] is None  # never built from a number
     assert any("incomplete" in warning for warning in body["warnings"])
+
+
+def test_missing_materials_store_is_unavailable_not_empty(data, monkeypatch):
+    monkeypatch.delenv("LEX_MATERIALS_DIR", raising=False)
+    response = _client(data).get(
+        "/norms/de/bund/sgb_14/para/37/materials")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "unavailable"
+    assert body["total"] is None and body["evidence"] == []
