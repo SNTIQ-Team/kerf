@@ -600,3 +600,113 @@ def test_a_vorinstanz_without_court_is_kept_without_target():
     decision_id, _ = store_decision(conn, parsed, content_hash="h", capture_path="-", media_type="x")
     row = conn.execute("SELECT relation, target_id, target_raw FROM relations WHERE decision_id=?", (decision_id,)).fetchone()
     assert tuple(row) == ("procedural_reference", None, "6 L 612/21 vom 2. November 2021")
+
+
+def _doc(source, doc_id, texts, *, date="2017-01-18", az="7 Ca 3580/16", ecli=None, labels=None, dtype="Beschluss",
+         court="arbg-frankfurt"):
+    from courts.model import Block, ParsedDecision, Section
+    labels = labels or [str(i) for i in range(1, len(texts) + 1)]
+    return ParsedDecision(source_id=source, source_doc_id=doc_id, source_url=f"https://x/{doc_id}",
+                          court_name="ArbG Frankfurt", decision_date=date, case_numbers_raw=az, case_numbers=[az],
+                          decision_type=dtype, ecli=ecli, court_id=court,
+                          sections=[Section("gruende", "court", "t", [Block(t, lab) for t, lab in zip(texts, labels)])])
+
+
+REASONS = ["Die Klage ist zulässig.", "Sie ist jedoch unbegründet.", "Die Kosten trägt der Kläger.",
+           "Der Streitwert wird auf 5.000 EUR festgesetzt."]
+
+
+def test_a_portal_publishing_one_decision_twice_keeps_one_copy():
+    """NRW lists LSG NRW L 10 KR 606/23 under two URL spellings; juris portals re-issue document numbers."""
+    from courts.store import connect, init_db, store_decision
+    conn = connect()
+    init_db(conn)
+    store_decision(conn, _doc("he", "LARE1", REASONS), content_hash="a", capture_path="-", media_type="x")
+    with pytest.raises(UpstreamFailure) as exc:
+        store_decision(conn, _doc("he", "LARE2", [t.upper().replace(".", " .") for t in REASONS]),
+                       content_hash="b", capture_path="-", media_type="x")
+    assert exc.value.kind == "duplicate_identity" and "republication: 100%" in exc.value.detail
+    # A different text of the same day and docket is no republication.
+    from courts.store import republication_of
+    other = _doc("he", "LARE3", ["Der Antrag auf Prozesskostenhilfe wird abgelehnt.", "Gründe folgen."])
+    assert republication_of(conn, other, [b.text for b in other.sections[0].blocks]) is None
+
+
+def test_a_republication_with_randnummern_supersedes_the_unnumbered_copy():
+    from courts.store import connect, init_db, store_decision
+    conn = connect()
+    init_db(conn)
+    for doc in ("LARE1", "LARE2"):
+        conn.execute("INSERT INTO source_items(source_id, source_doc_id, url) VALUES('he',?,'u')", (doc,))
+    store_decision(conn, _doc("he", "LARE1", REASONS, labels=[None] * 4), content_hash="a", capture_path="-",
+                   media_type="x")
+    decision_id, changed = store_decision(conn, _doc("he", "LARE2", REASONS), content_hash="b", capture_path="-",
+                                          media_type="x")
+    assert changed
+    assert [tuple(r) for r in conn.execute("SELECT source_doc_id, numbering FROM decisions")] == [("LARE2", "rn")]
+    assert conn.execute("SELECT state FROM source_items WHERE source_doc_id='LARE1'").fetchone()[0] == "skipped"
+
+
+ARBG_ECLI = "ECLI:DE:ARBGFFM:2017:0118.7CA3580.16.00"
+
+
+def test_a_shared_ecli_belongs_to_the_document_whose_date_it_encodes():
+    """hessenrecht gave the ECLI of the Beschluss of 18.01.2017 also to the Urteil of 08.11.2017 and the
+    Beschluss of 31.08.2016 (same docket): whichever arrives first, the 18.01. document owns it."""
+    from courts.read import resolve_decision
+    from courts.store import connect, init_db, store_decision
+    conn = connect()
+    init_db(conn)
+    wrong, _ = store_decision(conn, _doc("he", "LARE909", ["Das Urteil."], date="2017-11-08", dtype="Urteil",
+                                         ecli=ARBG_ECLI), content_hash="a", capture_path="-", media_type="x")
+    assert wrong == ARBG_ECLI  # nothing to compare with yet
+    right, _ = store_decision(conn, _doc("he", "LARE914", ["Der Beschluss."], ecli=ARBG_ECLI), content_hash="b",
+                              capture_path="-", media_type="x")
+    other, _ = store_decision(conn, _doc("he", "LARE903", ["Ein früherer Beschluss."], date="2016-08-31",
+                                         ecli=ARBG_ECLI), content_hash="c", capture_path="-", media_type="x")
+    assert right == ARBG_ECLI and other == "court:arbg-frankfurt/2016-08-31/7_Ca_3580-16"
+    rows = {r["source_doc_id"]: r for r in conn.execute("SELECT * FROM decisions")}
+    assert rows["LARE909"]["id"] == "court:arbg-frankfurt/2017-11-08/7_Ca_3580-16" and rows["LARE909"]["ecli"] is None
+    assert json.loads(rows["LARE909"]["metadata"])["ecli_published_other_document"]["ecli"] == ARBG_ECLI
+    assert rows["LARE903"]["ecli"] is None
+    assert conn.execute("SELECT count(*) FROM paragraphs WHERE decision_id=?", (rows["LARE909"]["id"],)).fetchone()[0] == 1
+    assert resolve_decision(conn, ARBG_ECLI) == ("ok", [ARBG_ECLI])
+
+
+def test_dedupe_repairs_duplicates_stored_under_the_old_rules(monkeypatch):
+    import courts.store as store_module
+    from courts.dedupe import dedupe
+    from courts.read import resolve_decision
+    from courts.store import connect, init_db, store_decision
+    conn = connect()
+    init_db(conn)
+    for doc in ("LARE1", "LARE2", "LARE909", "LARE914"):
+        conn.execute("INSERT INTO source_items(source_id, source_doc_id, url) VALUES('he',?,'u')", (doc,))
+    with monkeypatch.context() as m:  # the old rules: no republication check, first document keeps the ECLI
+        m.setattr(store_module, "republication_of", lambda *a: None)
+        m.setattr(store_module, "ecli_fit", lambda *a: 0)
+        shared = "ECLI:DE:ARBGFFM:2020:0324.14CA453.19.00"  # both copies carry it: the second got a synthetic id
+        store_decision(conn, _doc("he", "LARE1", REASONS, date="2020-03-24", az="14 Ca 453/19", ecli=shared),
+                       content_hash="a", capture_path="-", media_type="x")
+        store_decision(conn, _doc("he", "LARE2", REASONS[:3] + ["Der Streitwert wird auf 5.000 EUR festgesetzt!!"],
+                                  date="2020-03-24", az="14 Ca 453/19", ecli=shared), content_hash="b",
+                       capture_path="-", media_type="x")
+        store_decision(conn, _doc("he", "LARE909", ["Das Urteil."], date="2017-11-08", dtype="Urteil", ecli=ARBG_ECLI),
+                       content_hash="c", capture_path="-", media_type="x")
+        store_decision(conn, _doc("he", "LARE914", ["Der Beschluss."], ecli=ARBG_ECLI), content_hash="d",
+                       capture_path="-", media_type="x")
+    assert conn.execute("SELECT count(*) FROM decisions").fetchone()[0] == 4
+    dry = dedupe(conn)
+    assert dry["summary"]["republications"] == {"would merge": 1}
+    # A dry run does not merge, so the two copies still share their ECLI (and fit it alike).
+    assert dry["summary"]["shared_eclis"] == {"would settle": 1,
+                                              "kept ambiguous: several documents fit the ordinal alike": 1}
+    assert conn.execute("SELECT count(*) FROM decisions").fetchone()[0] == 4
+    done = dedupe(conn, apply=True)
+    assert done["summary"]["republications"] == {"merged": 1} and done["summary"]["shared_eclis"] == {"settled": 1}
+    assert [r[0] for r in conn.execute("SELECT source_doc_id FROM decisions ORDER BY 1")] == ["LARE1", "LARE909", "LARE914"]
+    assert conn.execute("SELECT state, failure_kind FROM source_items WHERE source_doc_id='LARE2'").fetchone()[:] == \
+        ("skipped", "duplicate_identity")
+    assert resolve_decision(conn, ARBG_ECLI) == ("ok", [ARBG_ECLI])
+    assert conn.execute("SELECT source_doc_id FROM decisions WHERE id=?", (ARBG_ECLI,)).fetchone()[0] == "LARE914"
+    assert dedupe(conn)["summary"] == {"republications": {}, "shared_eclis": {}}

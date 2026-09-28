@@ -726,16 +726,54 @@ def ecli_date_conflict(ecli: str, decision_date: str) -> str | None:
     year = parts[3]
     if year.isdigit() and decision_date[:4] != year:
         return f"ECLI year {year} != decision year {decision_date[:4]}"
+    encoded = ecli_encoded_date(ecli)
+    if encoded is None:
+        return None
+    return None if encoded == decision_date else f"ECLI encodes {encoded}, decision dated {decision_date}"
+
+
+def ecli_encoded_date(ecli: str) -> str | None:
+    """The date a German ECLI ordinal encodes (federal ddmmyy / BVerfG yyyymmdd / Länder "mmdd."), or None."""
+    parts = ecli.split(":")
+    if len(parts) != 5 or parts[1] != "DE":
+        return None
     m = GERMAN_ECLI_DATE.match(parts[4])
     if not m:
         return None
     if m.group("y4"):
-        encoded = f"{m.group('y4')}-{m.group('m4')}-{m.group('d4')}"
-    elif m.group("d"):
-        encoded = f"20{m.group('y')}-{m.group('m')}-{m.group('d')}"
-    else:
-        encoded = f"{year}-{m.group('mm')}-{m.group('dd')}"
-    return None if encoded == decision_date else f"ECLI encodes {encoded}, decision dated {decision_date}"
+        return f"{m.group('y4')}-{m.group('m4')}-{m.group('d4')}"
+    if m.group("d"):
+        return f"20{m.group('y')}-{m.group('m')}-{m.group('d')}"
+    return f"{parts[3]}-{m.group('mm')}-{m.group('dd')}"
+
+
+def _compact_key(text: str) -> str:
+    return re.sub(r"(?<![0-9])0+(?=[0-9])", "", re.sub(r"[^A-Z0-9]", "", text.upper()))
+
+
+def ecli_fit(ecli: str, decision_date: str, case_numbers: list[str]) -> int:
+    """How well a German ECLI fits one document (0-3): 2 when its ordinal encodes the decision date (1 when a
+    Länder ordinal is a few days off, as juris portals often are), +1 when the ordinal embeds one of the
+    Aktenzeichen.  Only used to decide which of several documents sharing one ECLI owns it; the Az part is
+    too loose to reject an ECLI on its own ("OVG 11 S 59.18" -> "11S59.18", "4 B 39/17" -> "4B2017.39")."""
+    score = 0
+    encoded = ecli_encoded_date(ecli)
+    if encoded and encoded == decision_date:
+        score += 2
+    elif encoded:
+        try:
+            days = abs((datetime.fromisoformat(encoded) - datetime.fromisoformat(decision_date)).days)
+        except ValueError:
+            days = None
+        if days is not None and days <= 7 and ecli.split(":")[2] not in FEDERAL_ECLI_COURTS:
+            score += 1
+    ordinal = _compact_key(ecli.rsplit(":", 1)[-1])
+    for az in case_numbers:
+        key = _compact_key(re.sub(r"\(.*?\)", "", az))
+        if key and key in ordinal:
+            score += 1
+            break
+    return score
 
 
 def finalise(parsed: ParsedDecision) -> ParsedDecision:
@@ -783,6 +821,97 @@ def same_decision_elsewhere(conn: sqlite3.Connection, parsed: ParsedDecision):
     return None
 
 
+REPUBLICATION_MIN_OVERLAP = 0.9
+
+
+def _paragraph_key(text: str) -> str:
+    return re.sub(r"\W+", "", text.casefold())
+
+
+def paragraph_overlap(a: list[str], b: list[str]) -> float:
+    """Share of identical paragraphs (case, spacing and punctuation ignored) over the longer text."""
+    keys_a = {k for t in a if (k := _paragraph_key(t))}
+    keys_b = {k for t in b if (k := _paragraph_key(t))}
+    if not keys_a or not keys_b:
+        return 0.0
+    return len(keys_a & keys_b) / max(len(keys_a), len(keys_b))
+
+
+def republication_of(conn: sqlite3.Connection, parsed: ParsedDecision, texts: list[str]):
+    """The same decision published twice by one source under two document ids (NRW under a second URL
+    spelling or year folder, juris portals under a re-issued document number): same court, date, first Az
+    and decision type, no two distinct ECLIs, and at least REPUBLICATION_MIN_OVERLAP of the paragraphs
+    identical.  Returns (row, overlap) or None."""
+    if not parsed.case_numbers or not parsed.court_id:
+        return None
+    kind = (parsed.decision_type or "").split(" ")[0].lower()
+    rows = conn.execute("""SELECT d.id, d.source_id, d.source_doc_id, d.numbering, d.decision_type, d.ecli,
+                                  d.content_hash, d.text_hash, d.parser_version, d.first_seen
+                           FROM decisions d JOIN case_numbers c ON c.decision_id = d.id AND c.position = 1
+                           WHERE d.court_slug = ? AND d.decision_date = ? AND c.case_key = ? AND d.source_id = ?
+                             AND d.source_doc_id <> ?""",
+                        (parsed.court_id, parsed.decision_date, case_key(parsed.case_numbers[0]), parsed.source_id,
+                         parsed.source_doc_id)).fetchall()
+    best = None
+    for row in rows:
+        if (row["decision_type"] or "").split(" ")[0].lower() != kind:
+            continue
+        if parsed.ecli and row["ecli"]:
+            a, b = _loose_ecli(parsed.ecli), _loose_ecli(row["ecli"])
+            if not (a.startswith(b) or b.startswith(a)):
+                continue
+        theirs = [t for (t,) in conn.execute("SELECT text FROM paragraphs WHERE decision_id=? ORDER BY ordinal",
+                                             (row["id"],))]
+        overlap = paragraph_overlap(texts, theirs)
+        if overlap >= REPUBLICATION_MIN_OVERLAP and (best is None or overlap > best[1]):
+            best = (row, overlap)
+    return best
+
+
+DECISION_ID_COLUMNS = (("paragraphs", "decision_id"), ("sections", "decision_id"), ("case_numbers", "decision_id"),
+                       ("relations", "decision_id"), ("relation_assessments", "decision_id"),
+                       ("verification_checks", "decision_id"), ("verification_findings", "decision_id"),
+                       ("verification_captures", "decision_id"), ("source_items", "decision_id"))
+
+
+def rekey_decision(conn: sqlite3.Connection, old_id: str, new_id: str) -> None:
+    """Move one stored decision to another id (inside the caller's transaction).  Citations resolved to the old
+    id (relations.target_decision_id) are left alone: they were resolved by the ECLI or court+date+Az the
+    id stood for.  The append-only corrections ledger cannot follow; callers refuse ids it names."""
+    for table, column in DECISION_ID_COLUMNS:
+        conn.execute(f"UPDATE {table} SET {column}=? WHERE {column}=?", (new_id, old_id))
+    conn.execute("UPDATE decisions SET id=? WHERE id=?", (new_id, old_id))
+
+
+def named_by_corrections(conn: sqlite3.Connection, decision_id: str) -> bool:
+    return conn.execute("SELECT 1 FROM corrections WHERE target=? OR target LIKE ? LIMIT 1",
+                        (decision_id, decision_id + "#%")).fetchone() is not None
+
+
+def release_ecli(conn: sqlite3.Connection, decision_id: str, ecli: str, reason: str) -> str | None:
+    """A stored document carries an ECLI that belongs to another document: it moves to its synthetic id and
+    keeps the published ECLI only in metadata (ecli_published_other_document).  Returns the new id, or None
+    when the corrections ledger names the old id (then nothing changes)."""
+    row = conn.execute("SELECT id, court_slug, decision_date, case_numbers, source_doc_id, metadata FROM decisions "
+                       "WHERE id=?", (decision_id,)).fetchone()
+    if row is None or named_by_corrections(conn, decision_id):
+        return None
+    case_numbers = json.loads(row["case_numbers"])
+    if not case_numbers:
+        return None
+    new_id = synthetic_decision_id(row["court_slug"], row["decision_date"], case_numbers[0])
+    if new_id != decision_id and conn.execute("SELECT 1 FROM decisions WHERE id=?", (new_id,)).fetchone():
+        new_id = f"{new_id}~{row['source_doc_id']}"
+    metadata = json.loads(row["metadata"] or "{}")
+    metadata.pop("ecli_shared_with", None)
+    metadata["ecli_published_other_document"] = {"ecli": ecli, "reason": reason}
+    conn.execute("UPDATE decisions SET ecli=NULL, metadata=? WHERE id=?",
+                 (json.dumps(metadata, ensure_ascii=False, sort_keys=True), decision_id))
+    if new_id != decision_id:
+        rekey_decision(conn, decision_id, new_id)
+    return new_id
+
+
 def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_hash: str, capture_path: str,
                    media_type: str, observed_at: str | None = None, force: bool = False) -> tuple[str, bool]:
     """Insert or replace one decision; return (decision_id, changed).
@@ -807,13 +936,45 @@ def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content
         raise UpstreamFailure("empty_document", "no paragraphs", url=parsed.source_url)
     text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
     observed_at = observed_at or utcnow()
-    clash = conn.execute("SELECT id, source_doc_id, text_hash FROM decisions WHERE id=? AND source_id=? "
-                         "AND source_doc_id<>?", (decision_id, parsed.source_id, parsed.source_doc_id)).fetchone()
+    republication = republication_of(conn, parsed, [p.text for p in paragraphs])
+    if republication is not None and not (republication[0]["numbering"] == "none" and numbering == "rn"):
+        row, overlap = republication
+        raise UpstreamFailure("duplicate_identity",
+                              f"{row['id']} already stored from {row['source_id']}:{row['source_doc_id']} "
+                              f"(republication: {overlap:.0%} of the paragraphs identical)", url=parsed.source_url)
+    clash = conn.execute("SELECT id, source_doc_id, text_hash, decision_date, case_numbers FROM decisions "
+                         "WHERE id=? AND source_id=? AND source_doc_id<>?",
+                         (decision_id, parsed.source_id, parsed.source_doc_id)).fetchone()
     if clash is not None and parsed.ecli and decision_id == parsed.ecli and clash["text_hash"] != text_hash:
-        # One portal, two documents, one ECLI (juris portals give two Beschlüsse of one day and docket the
-        # same ordinal): the second is a decision of its own under the synthetic id; decisions.ecli keeps the
-        # published ECLI, so an ECLI lookup returns both (ambiguous_identity).
-        parsed.metadata["ecli_shared_with"] = f"{parsed.source_id}:{clash['source_doc_id']}"
+        # One portal, two documents, one ECLI.  The document whose date and Az the ordinal encodes owns it
+        # (portals copy a judgment's ECLI into later decisions of the docket); the other is a decision of its
+        # own under the synthetic id.  When both fit alike (juris portals give two Beschlüsse of one day and
+        # docket the same ordinal) decisions.ecli keeps the ECLI on both: an ECLI lookup returns both
+        # (ambiguous_identity).
+        mine = ecli_fit(parsed.ecli, parsed.decision_date, parsed.case_numbers)
+        theirs = ecli_fit(parsed.ecli, clash["decision_date"], json.loads(clash["case_numbers"]))
+        released, split = None, True
+        if mine > theirs:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                released = release_ecli(conn, clash["id"], parsed.ecli,
+                                        f"its date/Az fit the ordinal less than {parsed.source_id}:{parsed.source_doc_id}")
+                conn.execute("COMMIT")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+        if released is not None:
+            split = False  # the ECLI id is free now: this document takes it
+        elif theirs > mine:
+            parsed.metadata["ecli_published_other_document"] = {
+                "ecli": parsed.ecli,
+                "reason": f"its date/Az fit the ordinal less than {parsed.source_id}:{clash['source_doc_id']}"}
+            parsed.ecli = None
+        else:
+            parsed.metadata["ecli_shared_with"] = f"{parsed.source_id}:{clash['source_doc_id']}"
+    else:
+        split = False
+    if split:
         decision_id = decision_identity(parsed)
         taken = conn.execute("SELECT source_doc_id FROM decisions WHERE id=? AND source_doc_id<>?",
                              (decision_id, parsed.source_doc_id)).fetchone()
