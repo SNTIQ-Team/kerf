@@ -221,10 +221,15 @@ def bundle_states(bundle: sqlite3.Connection | None, act_id: str
             return out
 
         captured = str(row["captured_at"] or "")
+        keys = row.keys()
+        first = str(row["first_captured_at"] if "first_captured_at" in keys
+                    and row["first_captured_at"] else captured)
+        last = str(row["last_captured_at"] if "last_captured_at" in keys
+                   and row["last_captured_at"] else captured)
         states.append(StateObs(
             key=f"{row['source']}:{row['sha256'][:16]}",
             source=row["source"], source_role=row["source_role"],
-            known_from=_day(captured), known_until=_day(captured),
+            known_from=_day(first), known_until=_day(last),
             loader=load, url=row["original_url"],
             archive_url=row["archive_url"], sha256=row["sha256"],
             stand=row["stand"], complete=bool(row["complete"]),
@@ -804,12 +809,41 @@ def command_reflection(change: dict[str, Any], before: str | None,
     return "mixed" if "reflected" in verdicts else "unknown"
 
 
+def _replay(previous_row: dict[str, Any], target: Run,
+            groups: list[list[dict[str, Any]]], bavarian: bool
+            ) -> list[tuple[str, str]] | None:
+    """Replay dated groups of changes; texts after each group, or None."""
+    from api.command_replay import ReplayUnsupported, apply_change
+    titel = str(previous_row.get("titel") or "")
+    text = str(previous_row.get("text") or "")
+    enbez = str((target.row or {}).get("enbez") or "")
+    steps: list[tuple[str, str]] = []
+    try:
+        for group in groups:
+            for change in group:
+                titel, text = apply_change(titel, text,
+                                           change.get("commands") or [],
+                                           bavarian=bavarian)
+            steps.append((titel, text))
+    except ReplayUnsupported:
+        return None
+    if norm_identity(enbez, titel, text) != target.identity:
+        return None
+    return steps
+
+
 def attribute(runs: list[Run], changes: list[dict[str, Any]],
               findings: list[dict[str, Any]], norm_id: str,
               as_of: str) -> list[dict[str, Any]]:
-    """Per-version temporal/amendment records; mutates change text_effect."""
-    records: list[dict[str, Any]] = []
+    """Version entries (runs + labelled reconstructions) in chain order.
+
+    Each entry is ``{"run": Run | None, "row": …, "record": temporal,
+    "effects": [(change, verdict)], "reconstruction": bool}``; the caller
+    numbers them and resolves ``text_effect`` indexes.
+    """
+    entries: list[dict[str, Any]] = []
     used: set[str] = set()
+    bavarian = norm_id.startswith("de/by/")
     for index, run in enumerate(runs):
         record: dict[str, Any] = {"valid_from": None,
                                   "valid_from_status": "unresolved",
@@ -824,9 +858,11 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
                           valid_from_basis=first_state.valid_from_basis
                           or "verified retrospective interval",
                           interval_amendment=first_state.amendment)
+        entry = {"run": run, "row": run.row, "record": record, "effects": [],
+                 "reconstruction": False}
         if index == 0:
             record["attribution"] = {"status": "predates_text_history"}
-            records.append(record)
+            entries.append(entry)
             continue
         previous = runs[index - 1]
         low = previous.known_until or previous.known_from
@@ -847,10 +883,9 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
                                            "unknown"))
         before_text = previous.row.get("text") if previous.row else None
         after_text = run.row.get("text") if run.row else ""
-        scored = []
-        for change, why in candidates:
-            verdict = command_reflection(change, before_text, after_text)
-            scored.append((change, why, verdict))
+        scored = [(change, why, command_reflection(change, before_text,
+                                                   after_text))
+                  for change, why in candidates]
         # Every amendment targeting this norm whose evidenced in-force date
         # lies between the two captures explains (part of) the change; the
         # quoted wording may have been overwritten by a later one, so a
@@ -862,14 +897,9 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
         status = None
         if dated:
             dates_seen = sorted({change_effective_date(s[0]) for s in dated})
-            if len(dates_seen) == 1:
-                chosen = dated
-                status = "bracketed_by_captures"
-            else:
-                # several amendments with different dates fall between two
-                # captures: the text before the last one was never captured
-                chosen = dated
-                status = "multiple_amendments_between_captures"
+            chosen = dated
+            status = ("bracketed_by_captures" if len(dates_seen) == 1 else
+                      "multiple_amendments_between_captures")
         elif len(plausible) == 1:
             chosen = plausible
             status = "bracketed_promulgation_only"
@@ -888,39 +918,70 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
                 "kind": "ambiguous_attribution", "norm_id": norm_id,
                 "window": window,
                 "candidates": [s[0]["change_id"] for s in plausible]})
-        if chosen:
-            verified = any(s[2] == "reflected" for s in chosen)
-            for change, why, verdict in chosen:
-                used.add(change["change_id"])
-                change["text_effect"] = {
-                    "before_version": index - 1, "after_version": index,
-                    "observed_from": run.known_from,
-                    "previous_observed_until": low,
-                    "verification": ("command_wording_reflected"
-                                     if verdict == "reflected" else
-                                     "bracketed_by_captures"),
-                    "attribution": status}
-            record["change_ids"] = [s[0]["change_id"] for s in chosen]
-            record["attribution"] = {
-                "status": status, "window": window,
-                "verification": "command_wording_reflected" if verified
-                else "bracketed_by_captures"}
-            latest = max((change_effective_date(s[0]) or "" for s in chosen),
-                         default="")
-            if latest and record["valid_from"] is None:
-                source_change = next(s[0] for s in chosen
-                                     if change_effective_date(s[0]) == latest)
-                in_force = source_change["dates"]["in_force"]
-                amending = source_change["amending_act"]
+        if not chosen:
+            entries.append(entry)
+            continue
+        # group the chosen changes by in-force date and try to replay them
+        by_date: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for change, _why, _verdict in chosen:
+            by_date[change_effective_date(change) or ""].append(change)
+        order = sorted(by_date)
+        groups = [sorted(by_date[d], key=lambda c: (
+            str(c["amending_act"].get("document_id")),
+            str(c["amending_act"].get("article")),
+            [int(x) if str(x).isdigit() else 0 for x in
+             c["amending_act"].get("items") or []])) for d in order]
+        steps = _replay(previous.row or {}, run, groups, bavarian) \
+            if previous.row else None
+        replayed = steps is not None
+        reflected = any(s[2] == "reflected" for s in chosen)
+        verification = ("replay_verified" if replayed else
+                        "command_wording_reflected" if reflected else
+                        "bracketed_by_captures")
+        verdicts = {s[0]["change_id"]: s[2] for s in chosen}
+        if replayed and len(groups) > 1 and all(order):
+            # labelled reconstructions for the versions no source captured
+            for position, group in enumerate(groups[:-1]):
+                titel, text = steps[position]
+                start = order[position]
+                lead = group[0]
+                in_force = lead["dates"]["in_force"]
+                amending = lead["amending_act"]
                 label = amending.get("citation") or amending.get(
                     "document_id")
-                record.update(
-                    valid_from=latest,
-                    valid_from_status=in_force.get("status"),
-                    valid_from_basis=(
-                        f"in force date of {label} "
-                        f"({in_force.get('basis')}); the text change is "
-                        f"observed between {low} and {high}"))
+                entries.append({
+                    "run": None,
+                    "row": {"enbez": (run.row or {}).get("enbez"),
+                            "titel": titel, "text": text},
+                    "record": {
+                        "valid_from": start,
+                        "valid_from_status": in_force.get("status"),
+                        "valid_from_basis": (
+                            f"in force date of {label} "
+                            f"({in_force.get('basis')}); wording "
+                            "reconstructed by replaying the official "
+                            "amendment commands"),
+                        "change_ids": [c["change_id"] for c in group],
+                        "attribution": {
+                            "status": "reconstructed_between_captures",
+                            "window": window,
+                            "verification": "replay_verified",
+                            "note": ("not captured by any source; replaying "
+                                     "the later amendments on it yields the "
+                                     "next captured official text exactly")},
+                    },
+                    "effects": [(c, "replay_verified") for c in group],
+                    "reconstruction": True,
+                    "window": window,
+                })
+            findings.append({
+                "kind": "intermediate_version_reconstructed",
+                "norm_id": norm_id, "window": window,
+                "reconstructed": len(groups) - 1,
+                "changes": [c["change_id"] for g in groups for c in g]})
+            last_group = groups[-1]
+        else:
+            last_group = [c for g in groups for c in g]
             if status == "multiple_amendments_between_captures":
                 findings.append({
                     "kind": "intermediate_version_not_captured",
@@ -929,15 +990,45 @@ def attribute(runs: list[Run], changes: list[dict[str, Any]],
                                  "in_force": change_effective_date(s[0])}
                                 for s in chosen],
                     "note": "a version valid between the earlier and the "
-                            "later amendment is not in any captured source"})
-        records.append(record)
-    for position, record in enumerate(records[:-1]):
-        following = records[position + 1]
+                            "later amendment is not in any captured source "
+                            "and could not be reconstructed"})
+        for change, _why, _verdict in chosen:
+            used.add(change["change_id"])
+        entry["effects"] = [(c, "replay_verified" if replayed else
+                             ("command_wording_reflected"
+                              if verdicts.get(c["change_id"]) == "reflected"
+                              else "bracketed_by_captures"))
+                            for c in last_group]
+        entry["window"] = window
+        record["change_ids"] = [c["change_id"] for c in last_group]
+        record["attribution"] = {
+            "status": ("replay_verified_between_captures"
+                       if replayed and len(groups) == 1 else status),
+            "window": window, "verification": verification}
+        latest = order[-1] if order and order[-1] else ""
+        if latest and record["valid_from"] is None:
+            source_change = by_date[latest][0]
+            in_force = source_change["dates"]["in_force"]
+            amending = source_change["amending_act"]
+            label = amending.get("citation") or amending.get("document_id")
+            record.update(
+                valid_from=latest,
+                valid_from_status=in_force.get("status"),
+                valid_from_basis=(
+                    f"in force date of {label} ({in_force.get('basis')}); "
+                    f"the text change is observed between {low} and {high}"
+                    + ("; replaying the official commands reproduces it"
+                       if replayed else "")))
+        entries.append(entry)
+    for position, entry in enumerate(entries[:-1]):
+        following = entries[position + 1]["record"]
         if following.get("valid_from"):
-            record["valid_until"] = following["valid_from"]
-            record["valid_until_status"] = following["valid_from_status"]
-            record["valid_until_basis"] = "legal start of the next version"
-    return records
+            entry["record"]["valid_until"] = following["valid_from"]
+            entry["record"]["valid_until_status"] = \
+                following["valid_from_status"]
+            entry["record"]["valid_until_basis"] = \
+                "legal start of the next version"
+    return entries
 
 
 # ------------------------------------------------------------------ writer
@@ -1042,8 +1133,53 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
         for run in runs:
             run.row = best[run.identity][1]
         own_changes = changes_by_norm.get(norm_id, [])
-        temporal = attribute(runs, own_changes, findings, norm_id, as_of)
-        for vseq, (run, time_record) in enumerate(zip(runs, temporal)):
+        entries = attribute(runs, own_changes, findings, norm_id, as_of)
+        for vseq, entry in enumerate(entries):
+            entry["vseq"] = vseq
+        for vseq, entry in enumerate(entries):
+            time_record = entry["record"]
+            run = entry["run"]
+            for change, verdict in entry["effects"]:
+                change["text_effect"] = {
+                    "before_version": vseq - 1 if vseq else None,
+                    "after_version": vseq,
+                    "observed_from": run.known_from if run else None,
+                    "previous_observed_until": (entry.get("window") or {}
+                                                ).get("after"),
+                    "verification": verdict,
+                    "attribution": (time_record.get("attribution") or {}
+                                    ).get("status"),
+                    "reconstructed": run is None}
+            if run is None:
+                row = entry["row"]
+                identity = norm_identity(row.get("enbez"), row.get("titel"),
+                                         row.get("text"))
+                record = {
+                    "state_intervals": [],
+                    "attestations": [{
+                        "source": "Lexgraph reconstruction",
+                        "role": "reconstruction", "known_from": None,
+                        "known_until": None, "count": 1,
+                        "samples": [], "method": "command-replay/1"}],
+                    "temporal": {**time_record, "known_from": None,
+                                 "known_until": None},
+                    "completeness": {
+                        "status": "reconstructed",
+                        "reason": "derived from the previous captured text "
+                                  "and the official amendment commands; "
+                                  "verified against the next capture"},
+                    "verification": {"cross_source": "replay_verified",
+                                     "sources": ["reconstruction"]},
+                    "first_state": None, "last_state": None,
+                    "state_count": 0,
+                }
+                writer.db.execute(
+                    "INSERT INTO versions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (norm_id, vseq, act_id, writer.text_id(identity, row),
+                     None, None, None, None, "reconstruction",
+                     pack_json(record)))
+                version_count += 1
+                continue
             role = min((s.source_role for s in run.states),
                        key=lambda r: ("official_consolidation",
                                       "official_promulgation",
@@ -1089,11 +1225,13 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
         present = runs[-1].states[-1].seq == latest_seq
         summary = summarize(own_changes, scope="norm", subject=norm_id,
                             as_of=as_of,
-                            versions=[{"source_role": s.source_role}
-                                      for s in (r.states[0] for r in runs)])
+                            versions=[{"source_role": "reconstruction"}
+                                      if e["run"] is None else
+                                      {"source_role": e["run"].states[0]
+                                       .source_role} for e in entries])
         norm_rows.append((norm_id, act_id, str(last_row.get("enbez") or ""),
                           str(last_row.get("titel") or ""), int(present),
-                          len(runs), len(own_changes), runs[0].known_from,
+                          len(entries), len(own_changes), runs[0].known_from,
                           _json({"counts": summary["counts"]})))
     # changes whose norm never appears in any stored text
     for norm_id, own in changes_by_norm.items():

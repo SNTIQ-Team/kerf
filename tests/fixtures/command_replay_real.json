@@ -1,0 +1,90 @@
+{
+ "container": {
+  "norm_id": "de/bund/asylblg/para/2",
+  "before": {
+   "enbez": "§ 2",
+   "titel": "Leistungen in besonderen Fällen",
+   "text": "(1) Abweichend von den §§ 3 bis 7 ist das Zwölfte Buch Sozialgesetzbuch auf diejenigen Leistungsberechtigten entsprechend anzuwenden, die über eine Dauer von insgesamt 48 Monaten Leistungen nach § 3 erhalten haben und die Dauer des Aufenthalts nicht rechtsmissbräuchlich selbst beeinflusst haben.(2) Bei der Unterbringung von Leistungsberechtigten nach Absatz 1 in einer Gemeinschaftsunterkunft bestimmt die zuständige Behörde die Form der Leistung auf Grund der örtlichen Umstände.(3) Minderjährige Kinder, die mit ihren Eltern oder einem Elternteil in einer Haushaltsgemeinschaft leben, erhalten Leistungen nach Absatz 1 nur, wenn mindestens ein Elternteil in der Haushaltsgemeinschaft Leistungen nach Absatz 1 erhält."
+  },
+  "after": {
+   "enbez": "§ 2",
+   "titel": "Leistungen in besonderen Fällen",
+   "text": "(1) Abweichend von den §§ 3 bis 7 ist das Zwölfte Buch Sozialgesetzbuch auf diejenigen Leistungsberechtigten entsprechend anzuwenden, die sich seit 15 Monaten ohne wesentliche Unterbrechung im Bundesgebiet aufhalten und die Dauer des Aufenthalts nicht rechtsmissbräuchlich selbst beeinflusst haben.(2) Bei der Unterbringung von Leistungsberechtigten nach Absatz 1 in einer Gemeinschaftsunterkunft bestimmt die zuständige Behörde die Form der Leistung auf Grund der örtlichen Umstände.(3) Minderjährige Kinder, die mit ihren Eltern oder einem Elternteil in einer Haushaltsgemeinschaft leben, erhalten Leistungen nach Absatz 1 auch dann, wenn mindestens ein Elternteil in der Haushaltsgemeinschaft Leistungen nach Absatz 1 erhält."
+  },
+  "change": {
+   "document_id": "bgbl-1-2014-s2187",
+   "article": "1",
+   "commands": [
+    {
+     "raw": "§ 2 wird wie folgt geändert:\na) In Absatz 1 werden die Wörter „über eine Dauer\nv o ni n s g e s a m t4 8M o n a t e nL e i s t u n g e nn a c h§3\nerhalten haben “ durch die Wörter „sich seit 15\nMonaten ohne wesentliche Unterbrechung im\nBundesgebiet aufhalten “ ersetzt.\nb) In Absatz 3 wird das Wort „nur“ durch die Wörter\n„auch dann “ ersetzt."
+    }
+   ]
+  }
+ },
+ "insert_absatz": {
+  "norm_id": "de/bund/asylblg/para/4",
+  "before": {
+   "enbez": "§ 4",
+   "titel": "Leistungen bei Krankheit, Schwangerschaft und Geburt",
+   "text": "(1) Zur Behandlung akuter Erkrankungen und Schmerzzustände sind die erforderliche ärztliche und zahnärztliche Behandlung einschließlich der Versorgung mit Arznei- und Verbandmitteln sowie sonstiger zur Genesung, zur Besserung oder zur Linderung von Krankheiten oder Krankheitsfolgen erforderlichen Leistungen zu gewähren. Zur Verhütung und Früherkennung von Krankheiten werden Schutzimpfungen entsprechend den §§ 47, 52 Absatz 1 Satz 1 des Zwölften Buches Sozialgesetzbuch und die medizinisch gebotenen Vorsorgeuntersuchungen erbracht. Eine Versorgung mit Zahnersatz erfolgt nur, soweit dies im Einzelfall aus medizinischen Gründen unaufschiebbar ist.(2) Werdenden Müttern und Wöchnerinnen sind ärztliche und pflegerische Hilfe und Betreuung, Hebammenhilfe, Arznei-, Verband- und Heilmittel zu gewähren.(3) Die zuständige Behörde stellt die Versorgung mit den Leistungen nach den Absätzen 1 und 2 sicher. Sie stellt auch sicher, dass den Leistungsberechtigten frühzeitig eine Vervollständigung ihres Impfschutzes angeboten wird. Soweit die Leistungen durch niedergelassene Ärzte oder Zahnärzte erfolgen, richtet sich die Vergütung nach den am Ort der Niederlassung des Arztes oder Zahnarztes geltenden Verträgen nach § 72 Absatz 2 und § 132e Absatz 1 des Fünften Buches Sozialgesetzbuch. Die zuständige Behörde bestimmt, welcher Vertrag Anwendung findet."
+  },
+  "after": {
+   "enbez": "§ 4",
+   "titel": "Leistungen bei Krankheit, Schwangerschaft und Geburt",
+   "text": "(1) Zur Behandlung akuter Erkrankungen und Schmerzzustände sind die erforderliche ärztliche und zahnärztliche Behandlung einschließlich der Versorgung mit Arznei- und Verbandmitteln sowie sonstiger zur Genesung, zur Besserung oder zur Linderung von Krankheiten oder Krankheitsfolgen erforderlichen Leistungen zu gewähren. Zur Verhütung und Früherkennung von Krankheiten werden Schutzimpfungen entsprechend den §§ 47, 52 Absatz 1 Satz 1 des Zwölften Buches Sozialgesetzbuch und die medizinisch gebotenen Vorsorgeuntersuchungen erbracht. Eine Versorgung mit Zahnersatz erfolgt nur, soweit dies im Einzelfall aus medizinischen Gründen unaufschiebbar ist.(2) Werdenden Müttern und Wöchnerinnen sind ärztliche und pflegerische Hilfe und Betreuung, Hebammenhilfe, Arznei-, Verband- und Heilmittel zu gewähren.(3) Die zuständige Behörde stellt die Versorgung mit den Leistungen nach den Absätzen 1 und 2 sicher. Sie stellt auch sicher, dass den Leistungsberechtigten frühzeitig eine Vervollständigung ihres Impfschutzes angeboten wird. Soweit die Leistungen durch niedergelassene Ärzte oder Zahnärzte erfolgen, richtet sich die Vergütung nach den am Ort der Niederlassung des Arztes oder Zahnarztes geltenden Verträgen nach § 72 Absatz 2 und § 132e Absatz 1 des Fünften Buches Sozialgesetzbuch. Die zuständige Behörde bestimmt, welcher Vertrag Anwendung findet.(4) Abweichend von den Absätzen 1 bis 3 sind die §§ 47 bis 52 des Zwölften Buches Sozialgesetzbuch auf minderjährige Leistungsberechtigte entsprechend anzuwenden. Zuzahlungen und Eigenbeteiligungen sind von der zuständigen Leistungsbehörde zu übernehmen. Auf Grundlage von Satz 1 begonnene medizinische Behandlungen sind bei Eintritt der Volljährigkeit der Leistungsberechtigten ohne Unterbrechung oder Verzögerung weiter zu gewähren. Satz 3 gilt entsprechend für Personen, die vor Eintritt der Volljährigkeit Leistungen auf Grundlage des § 40 des Achten Buches Sozialgesetzbuch erhalten haben."
+  },
+  "change": {
+   "document_id": "bgbl-1-2026-112",
+   "article": "3",
+   "commands": [
+    {
+     "raw": "Nach § 4 Absatz 3 wird der folgende Absatz 4 eingefügt:\n„(4) Abweichend von den Absätzen 1 bis 3 sind die §§ 47 bis 52 des Zwölften Buches Sozialgesetzbuch auf \nminderjährige Leistungsberechtigte entsprechend anzuwenden. Zuzahlungen und Eigenbeteiligungen sind von der \nzuständigen Leistungsbehörde zu übernehmen. Auf Grundlage von Satz 1 begonnene medizinische Behandlungen \nsind bei Eintritt der Volljährigkeit der Leistungsberechtigten ohne Unterbrechung oder Verzögerung weiter zu \ngewähren. Satz 3 gilt entsprechend für Personen, die vor Eintritt der Volljährigkeit Leistungen auf Grundlage des \n§ 40 des Achten Buches Sozialgesetzbuch erhalten haben.“"
+    }
+   ]
+  }
+ },
+ "other": {
+  "norm_id": "de/bund/asylblg/para/5",
+  "before": {
+   "enbez": "§ 5",
+   "titel": "Arbeitsgelegenheiten",
+   "text": "(1) In Aufnahmeeinrichtungen im Sinne des § 44 des Asylgesetzes und in vergleichbaren Einrichtungen sollen Arbeitsgelegenheiten insbesondere zur Aufrechterhaltung und Betreibung der Einrichtung zur Verfügung gestellt werden; von der Bereitstellung dieser Arbeitsgelegenheiten unberührt bleibt die Verpflichtung der Leistungsberechtigten, Tätigkeiten der Selbstversorgung zu erledigen. Im übrigen sollen soweit wie möglich Arbeitsgelegenheiten bei staatlichen, bei kommunalen und bei gemeinnützigen Trägern zur Verfügung gestellt werden, sofern die zu leistende Arbeit sonst nicht, nicht in diesem Umfang oder nicht zu diesem Zeitpunkt verrichtet werden würde.(2) Für die zu leistende Arbeit nach Absatz 1 Satz 1 erster Halbsatz und Absatz 1 Satz 2 wird eine Aufwandsentschädigung von 80 Cent je Stunde ausgezahlt, soweit der Leistungsberechtigte nicht im Einzelfall höhere notwendige Aufwendungen nachweist, die ihm durch die Wahrnehmung der Arbeitsgelegenheit entstehen.(3) Die Arbeitsgelegenheit ist zeitlich und räumlich so auszugestalten, daß sie auf zumutbare Weise und zumindest stundenweise ausgeübt werden kann. § 11 Absatz 4 des Zwölften Buches Sozialgesetzbuch gilt entsprechend. Ein sonstiger wichtiger Grund im Sinne von § 11 Absatz 4 Satz 1 Nummer 3 des Zwölften Buches Sozialgesetzbuch kann insbesondere auch dann vorliegen, wenn die oder der Leistungsberechtigte eine Beschäftigung auf dem allgemeinen Arbeitsmarkt, eine Berufsausbildung oder ein Studium aufnimmt oder aufgenommen hat.(4) Arbeitsfähige, nicht erwerbstätige Leistungsberechtigte, die nicht mehr im schulpflichtigen Alter sind, sind zur Wahrnehmung einer zur Verfügung gestellten Arbeitsgelegenheit verpflichtet. Bei unbegründeter Ablehnung einer solchen Tätigkeit besteht nur Anspruch auf Leistungen entsprechend § 1a Absatz 1. Der Leistungsberechtigte ist vorher entsprechend zu belehren.(5) Ein Arbeitsverhältnis im Sinne des Arbeitsrechts und ein Beschäftigungsverhältnis im Sinne der gesetzlichen Kranken- und Rentenversicherung werden nicht begründet. § 61 Abs. 1 des Asylgesetzes sowie asyl- und ausländerrechtliche Auflagen über das Verbot und die Beschränkung einer Erwerbstätigkeit stehen einer Tätigkeit nach den Absätzen 1 bis 4 nicht entgegen. Die Vorschriften über den Arbeitsschutz sowie die Grundsätze der Beschränkung der Arbeitnehmerhaftung finden entsprechende Anwendung."
+  },
+  "after": {
+   "enbez": "§ 5",
+   "titel": "Arbeitsgelegenheiten",
+   "text": "(1) In Aufnahmeeinrichtungen im Sinne des § 44 des Asylgesetzes und in vergleichbaren Einrichtungen sollen Arbeitsgelegenheiten insbesondere zur Aufrechterhaltung und Betreibung der Einrichtung zur Verfügung gestellt werden; von der Bereitstellung dieser Arbeitsgelegenheiten unberührt bleibt die Verpflichtung der Leistungsberechtigten, Tätigkeiten der Selbstversorgung zu erledigen. Im Übrigen sollen soweit wie möglich Arbeitsgelegenheiten bei staatlichen, bei kommunalen und bei gemeinnützigen Trägern zur Verfügung gestellt werden, wenn das Arbeitsergebnis der Allgemeinheit dient.(2) Für die zu leistende Arbeit nach Absatz 1 Satz 1 erster Halbsatz und Absatz 1 Satz 2 wird eine Aufwandsentschädigung von 80 Cent je Stunde ausgezahlt, soweit der Leistungsberechtigte nicht im Einzelfall höhere notwendige Aufwendungen nachweist, die ihm durch die Wahrnehmung der Arbeitsgelegenheit entstehen.(3) Die Arbeitsgelegenheit ist zeitlich und räumlich so auszugestalten, daß sie auf zumutbare Weise und zumindest stundenweise ausgeübt werden kann. § 11 Absatz 4 des Zwölften Buches Sozialgesetzbuch gilt entsprechend. Ein sonstiger wichtiger Grund im Sinne von § 11 Absatz 4 Satz 1 Nummer 3 des Zwölften Buches Sozialgesetzbuch kann insbesondere auch dann vorliegen, wenn die oder der Leistungsberechtigte eine Beschäftigung auf dem allgemeinen Arbeitsmarkt, eine Berufsausbildung oder ein Studium aufnimmt oder aufgenommen hat.(4) Arbeitsfähige, nicht erwerbstätige Leistungsberechtigte, die nicht mehr im schulpflichtigen Alter sind, sind zur Wahrnehmung einer zur Verfügung gestellten Arbeitsgelegenheit verpflichtet. Bei unbegründeter Ablehnung einer solchen Tätigkeit besteht nur Anspruch auf Leistungen entsprechend § 1a Absatz 1. Der Leistungsberechtigte ist vorher entsprechend zu belehren.(5) Ein Arbeitsverhältnis im Sinne des Arbeitsrechts und ein Beschäftigungsverhältnis im Sinne der gesetzlichen Kranken- und Rentenversicherung werden nicht begründet. § 61 Abs. 1 des Asylgesetzes sowie asyl- und ausländerrechtliche Auflagen über das Verbot und die Beschränkung einer Erwerbstätigkeit stehen einer Tätigkeit nach den Absätzen 1 bis 4 nicht entgegen. Die Vorschriften über den Arbeitsschutz sowie die Grundsätze der Beschränkung der Arbeitnehmerhaftung finden entsprechende Anwendung."
+  },
+  "change": {
+   "document_id": "bgbl-1-2024-54",
+   "article": "3",
+   "commands": [
+    {
+     "raw": "§ 5 Absatz 1 Satz 2 wird wie folgt gefasst:\n„Im Übrigen sollen soweit wie möglich Arbeitsgelegenheiten bei staatlichen, bei kommunalen und bei \ngemeinnützigen Trägern zur Verfügung gestellt werden, wenn das Arbeitsergebnis der Allgemeinheit dient.“"
+    }
+   ]
+  }
+ },
+ "replace": {
+  "norm_id": "de/bund/asylvfg_1992/para/29a",
+  "before": {
+   "enbez": "§ 29a",
+   "titel": "Sichere Herkunftsstaaten im Sinne des Artikels 16a Absatz 3 des Grundgesetzes; Bericht; Verordnungsermächtigung",
+   "text": "(1) Der Asylantrag eines Ausländers aus einem Staat im Sinne des Artikels 16a Absatz 3 Satz 1 des Grundgesetzes ist als offensichtlich unbegründet abzulehnen, es sei denn, die von dem Ausländer angegebenen Tatsachen oder Beweismittel begründen die Annahme, dass ihm abweichend von der allgemeinen Lage im Herkunftsstaat Verfolgung oder unmenschliche oder erniedrigende Bestrafung oder Behandlung droht. Eine Verfolgung ist anzunehmen, wenn die Voraussetzungen des Artikels 9 der Verordnung (EU) 2024/1347 erfüllt sind.(2) Sichere Herkunftsstaaten im Sinne des Artikels 16a Absatz 3 Satz 1 des Grundgesetzes sind die in Anlage II bezeichneten Staaten.(2a) Die Bundesregierung legt dem Deutschen Bundestag alle zwei Jahre, erstmals zum 23. Oktober 2017 einen Bericht darüber vor, ob die Voraussetzungen für die Einstufung der in Anlage II bezeichneten Staaten als sichere Herkunftsstaaten weiterhin vorliegen.(3) Die Bundesregierung bestimmt durch Rechtsverordnung ohne Zustimmung des Bundesrates, dass ein in Anlage II bezeichneter Staat nicht mehr als sicherer Herkunftsstaat gilt, wenn Veränderungen in den rechtlichen oder politischen Verhältnissen dieses Staates die Annahme begründen, dass die in Artikel 16a Absatz 3 Satz 1 des Grundgesetzes bezeichneten Voraussetzungen entfallen sind. Die Verordnung tritt spätestens sechs Monate nach ihrem Inkrafttreten außer Kraft."
+  },
+  "after": {
+   "enbez": "§ 29a",
+   "titel": "Sichere Herkunftsstaaten im Sinne des Artikels 16a Absatz 3 des Grundgesetzes; Bericht; Verordnungsermächtigung",
+   "text": "(1) Der Asylantrag eines Ausländers aus einem Staat im Sinne des Artikels 16a Absatz 3 Satz 1 des Grundgesetzes ist als offensichtlich unbegründet abzulehnen, es sei denn, die von dem Ausländer angegebenen Tatsachen oder Beweismittel begründen die Annahme, dass ihm abweichend von der allgemeinen Lage im Herkunftsstaat Verfolgung oder unmenschliche oder erniedrigende Bestrafung oder Behandlung droht. Eine Verfolgung ist anzunehmen, wenn die Voraussetzungen des Artikels 9 der Verordnung (EU) 2024/1347 erfüllt sind.(2) Sichere Herkunftsstaaten im Sinne des Artikels 16a Absatz 3 Satz 1 des Grundgesetzes sind die in Anlage II bezeichneten Staaten.(2a) Die Bundesregierung legt dem Deutschen Bundestag alle zwei Jahre, erstmals zum 12. Juni 2027, einen Bericht darüber vor, ob die Voraussetzungen für die Bestimmung weiterhin vorliegen, soweit die sicheren Herkunftsstaaten nicht nach Artikel 62 Absatz 1 der Verordnung (EU) 2024/1348 auf Unionsebene bestimmt wurden.(3) Die Bundesregierung bestimmt durch Rechtsverordnung ohne Zustimmung des Bundesrates, dass ein in Anlage II bezeichneter Staat nicht mehr als sicherer Herkunftsstaat gilt, wenn Veränderungen in den rechtlichen oder politischen Verhältnissen dieses Staates die Annahme begründen, dass die in Artikel 16a Absatz 3 Satz 1 des Grundgesetzes bezeichneten Voraussetzungen entfallen sind. Die Verordnung tritt spätestens sechs Monate nach ihrem Inkrafttreten außer Kraft."
+  },
+  "change": {
+   "document_id": "bgbl-1-2026-199",
+   "article": "7",
+   "commands": [
+    {
+     "raw": "§ 29a Absatz 2a wird durch den folgenden Absatz 2a ersetzt:\n„(2a) Die Bundesregierung legt dem Deutschen Bundestag alle zwei Jahre, erstmals zum 12. Juni 2027, einen \nBericht darüber vor, ob die Voraussetzungen für die Bestimmung weiterhin vorliegen, soweit die sicheren \nHerkunftsstaaten nicht nach Artikel 62 Absatz 1 der Verordnung (EU) 2024/1348 auf Unionsebene bestimmt \nwurden.“"
+    }
+   ]
+  }
+ }
+}
