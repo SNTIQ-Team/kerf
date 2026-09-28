@@ -90,3 +90,28 @@ def test_result_list(fixture):
     assert multi["listed_court"] == "lsg-nw"
     dates = [i["listed_date"] for i in items]
     assert dates == sorted(dates, reverse=True)
+
+
+def test_backfill_quota_counts_only_new_rows(fixture):
+    """With --limit, rows already stored must not stop the paging (live regression)."""
+    from courts.http import Response
+    from courts.sources.nrw import NrwAdapter
+    from courts.store import connect, init_db
+    page1 = fixture("nrw/result_lsg_2025_2026_desc_p1.html.gz")
+
+    class Http:
+        requests_made = 0
+        calls = []
+
+        def post(self, url, data=None, **kw):
+            self.calls.append(dict(data))
+            return Response(url, 200, page1, {"content-type": "text/html; charset=utf-8"}, 0.0)
+    conn = connect()
+    init_db(conn)
+    _, rows = parse_result_list(page1.decode("utf-8"))
+    conn.executemany("INSERT INTO source_items(source_id, source_doc_id, url, state) VALUES('nrw', ?, ?, 'stored')",
+                     [(r["source_doc_id"], r["url"]) for r in rows])
+    http = Http()
+    NrwAdapter().list_items(http, conn, since=None, limit=20, courts=["sozial"])
+    pages = [c for c in http.calls if c.get("gerichtsbarkeit") == "Sozialgerichtsbarkeit"]
+    assert len(pages) == 5  # page 1 holds only stored rows, so paging continues (471 hits / 100 per page)
