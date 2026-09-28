@@ -346,3 +346,21 @@ def test_refused_second_sync_does_not_clobber_the_holders_pid(isolated_corpus):
             with source_lock("rii", isolated_corpus):
                 pass
         assert (isolated_corpus / "locks" / "rii.lock").read_text() == str(os.getpid())
+
+
+def test_parallel_init_db_does_not_race(isolated_corpus):
+    import threading
+    from courts.store import connect, init_db
+    errors = []
+
+    def worker():
+        try:
+            init_db(connect())
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
