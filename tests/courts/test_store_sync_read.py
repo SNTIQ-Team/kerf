@@ -290,7 +290,7 @@ def test_listing_complete_is_set_only_by_an_unbounded_full_listing(conn, fixture
 
 def test_local_disk_full_stops_the_run_and_leaves_items_pending(conn, fixture, monkeypatch):
     import errno
-    import courts.sync as sync_module
+    import courts.pipeline as sync_module   # the writer stores captures
 
     def no_space(*a, **k):
         raise OSError(errno.ENOSPC, "No space left on device")
@@ -334,8 +334,21 @@ def test_same_decision_from_second_source_is_skipped_not_failed(conn, fixture):
             parsed.source_id, parsed.source_doc_id = "bverwg", it["source_doc_id"]
             return parsed
     result = sync_source(CourtSite(fixture, [item("160316B1B19.16.0")]), conn, FakeHttp())
+    # bverwg.de defers to RII before fetching: same court, date and Az are already listed (and stored).
+    assert result["failed"] == 0 and result["attempted"] == 0 and result["deduped_before_fetch"] == 1
+    row = conn.execute("SELECT state, failure_kind, failure_detail FROM source_items WHERE source_id='bverwg'").fetchone()
+    assert tuple(row)[:2] == ("skipped", "duplicate_identity") and "checked before fetching" in row[2]
+
+    class Portal(CourtSite):   # a source that does not defer: the store-time identity check catches it
+        source_id = "bb"
+
+        def parse(self, capture, it):
+            parsed = super().parse(capture, it)
+            parsed.source_id = "bb"
+            return parsed
+    result = sync_source(Portal(fixture, [item("bb-1")]), conn, FakeHttp())
     assert result["failed"] == 0 and result["duplicates"] == 1 and result["status"] == "ok"
-    row = conn.execute("SELECT state, failure_kind FROM source_items WHERE source_id='bverwg'").fetchone()
+    row = conn.execute("SELECT state, failure_kind FROM source_items WHERE source_id='bb'").fetchone()
     assert tuple(row) == ("skipped", "duplicate_identity")
 
 

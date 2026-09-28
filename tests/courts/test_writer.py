@@ -92,68 +92,64 @@ def test_maintenance_is_rate_limited_and_sticky(tmp_path, monkeypatch):
     assert m.tick() == m.stopped and len(calls) == 2                  # stays stopped without re-measuring
 
 
-def test_sync_refuses_more_than_six_sources():
-    from courts.cli import main
-    assert main(["sync", "--source", "be,bw,he,hh,mv,rp,sh"]) == 2
+def test_sync_refuses_more_sources_than_the_writer_takes(monkeypatch):
+    import courts.cli as cli
+    monkeypatch.setattr(cli, "MAX_PARALLEL_SOURCES", 3)
+    assert cli.main(["sync", "--source", "be,bw,he,hh"]) == 2          # refused before any request
 
 
-def test_two_sources_as_threads_of_one_writer(fixture):
-    """The shape of `courts sync --source a,b`: threads sharing one connection and one Maintenance."""
+def test_two_sources_in_one_writer_pipeline(fixture):
+    """The shape of `courts sync --source a,b`: fetcher threads per source, one writer, one Maintenance."""
+    from courts.pipeline import SourceSpec, run_pipeline
     from courts.store import connect, init_db
-    from courts.sync import sync_source
     from tests.courts.test_store_sync_read import FakeHttp, FixtureAdapter, item
-    conn = SharedConnection(connect(threads=True))
+    conn = connect()
     init_db(conn)
     maintenance = Maintenance(conn, every_items=1)
 
     class Other(FixtureAdapter):
-        source_id = "bverwg"
+        source_id = "bb"
 
         def parse(self, capture, it):
             parsed = super().parse(capture, it)
-            parsed.source_id = "bverwg"
+            parsed.source_id = "bb"
             return parsed
-    results = {}
-
-    def run(adapter):
-        results[adapter.source_id] = sync_source(adapter, conn, FakeHttp(), maintenance=maintenance)
-    threads = [threading.Thread(target=run, args=(a,)) for a in (FixtureAdapter(fixture, [item()]),
-                                                                 Other(fixture, [item()]))]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(30)
-    assert {r["status"] for r in results.values()} <= {"ok", "partial"}
+    results = run_pipeline(conn, [SourceSpec(FixtureAdapter(fixture, [item()]), FakeHttp()),
+                                  SourceSpec(Other(fixture, [item()]), FakeHttp())], maintenance=maintenance,
+                           relist_after=0)
+    assert {results[s]["status"] for s in ("rii", "bb")} <= {"ok", "partial"}
     assert conn.execute("SELECT count(*) FROM decisions").fetchone()[0] == 1          # same ECLI: one decision
     assert conn.execute("SELECT count(*) FROM source_items WHERE state='skipped'").fetchone()[0] == 1
-    assert maintenance.last_report is not None                      # the guard ran during the threads
+    assert maintenance.last_report is not None                      # the guard ran in the writer
     from courts.writer import checkpoint
-    assert checkpoint(conn)[0] == 0                                  # and the WAL truncates once they are done
+    assert checkpoint(conn)[0] == 0
+    assert results["_writer"]["jobs"] == 2
+
+
+def _fake_runner(record):
+    def run_source(run, governors, log):
+        record.append((run.adapter.source_id, run.spec.courts))
+        time.sleep(0.05)
+        run.result = {"status": "ok"}
+    return run_source
 
 
 def test_then_sources_start_when_a_slot_frees_up(monkeypatch):
-    """`sync --source a --then b,c`: one thread at a time here, b after a, c after b (batch order)."""
+    """`sync --source a --then b,c`: one source at a time here, b after a, c after b (batch order)."""
     import courts.cli as cli
+    import courts.pipeline as pipeline
     order = []
-
-    def fake_sync(adapter, conn, http, **kw):
-        order.append(adapter.source_id)
-        time.sleep(0.05)
-        return {"status": "ok"}
-    monkeypatch.setattr(cli, "sync_source", fake_sync)
+    monkeypatch.setattr(pipeline, "run_source", _fake_runner(order))
     monkeypatch.setattr(cli, "space_ok", lambda what: True)
     assert cli.main(["sync", "--source", "nrw", "--then", "rii,bverwg"]) == 0
-    assert order == ["nrw", "rii", "bverwg"]
+    assert [o[0] for o in order] == ["nrw", "rii", "bverwg"]
 
 
 def test_a_source_carries_its_own_court_restriction(monkeypatch):
     import courts.cli as cli
-    seen = {}
-
-    def fake_sync(adapter, conn, http, **kw):
-        seen[adapter.source_id] = kw["courts"]
-        return {"status": "ok"}
-    monkeypatch.setattr(cli, "sync_source", fake_sync)
+    import courts.pipeline as pipeline
+    seen = []
+    monkeypatch.setattr(pipeline, "run_source", _fake_runner(seen))
     monkeypatch.setattr(cli, "space_ok", lambda what: True)
-    assert cli.main(["sync", "--source", "be,sn:ovg", "--then", "bw"]) == 0
-    assert seen == {"be": None, "sn": ["ovg"], "bw": None}
+    assert cli.main(["sync", "--source", "be,sn:ovg", "--then", "bw", "--max-sources", "3"]) == 0
+    assert dict(seen) == {"be": None, "sn": ["ovg"], "bw": None}

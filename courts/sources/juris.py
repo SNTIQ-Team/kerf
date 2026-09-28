@@ -44,6 +44,7 @@ from ..detect import classify_page
 from ..errors import UpstreamFailure
 from ..http import PoliteHttp
 from ..model import Block, ParsedDecision, Section
+from ..hostgov import Concurrency
 from .base import OPERATOR_DECISION_BASIS, OPERATOR_DECISION_DATE, Adapter, Capture, Listing, iso_date, squash
 from .rii import BLOCK_TAGS, section_blocks, text_content
 
@@ -556,8 +557,11 @@ class JurisPortalAdapter(Adapter):
     policy_decided_at = OPERATOR_DECISION_DATE
     policy_basis = OPERATOR_DECISION_BASIS
     min_interval = 1.1
+    concurrency = Concurrency(2, 4)   # each Land portal; operator decision 2026-09-28
 
     def __init__(self, portal: JurisPortal):
+        import threading
+        self._session_lock = threading.Lock()   # concurrent fetchers share one anonymous session
         self.portal = portal
         self.source_id = portal.source_id
         self.label = f"{portal.name} (juris Bürgerservice {portal.code}, {portal.host})"
@@ -635,14 +639,18 @@ class JurisPortalAdapter(Adapter):
     def _api(self, http: PoliteHttp, op: str, body: dict):
         """POST with the anonymous session; on security_* re-open the session once."""
         for attempt in (1, 2):
-            if self._session is None or self._session.http_id != id(http):
-                self._session = self._open_session(http)
+            with self._session_lock:
+                if self._session is None or self._session.http_id != id(http):
+                    self._session = self._open_session(http)
+                session = self._session
             try:
-                return self._post(http, self._session, op, body)
+                return self._post(http, session, op, body)
             except UpstreamFailure as failure:
                 if failure.kind != "login" or attempt == 2:
                     raise
-                self._session = None
+                with self._session_lock:
+                    if self._session is session:   # another fetcher may have re-opened it already
+                        self._session = None
         raise AssertionError("unreachable")
 
     def search(self, http: PoliteHttp, searches: list[dict], *, start: int, size: int):

@@ -133,7 +133,7 @@ def test_v1_database_is_upgraded_in_place(isolated_corpus):
 
 # --- operator robots policy -----------------------------------------------------------------
 
-IGNORED = {"rii", "bw", "be", "hh", "mv", "rp", "sl", "st", "sh", "th", "he", "sn"}
+IGNORED = {"rii", "bw", "be", "hh", "mv", "rp", "sl", "st", "sh", "th", "he", "sn", "bverwg"}
 
 
 def test_operator_decision_sources_are_flagged():
@@ -142,9 +142,10 @@ def test_operator_decision_sources_are_flagged():
         a = adapters[source_id]
         assert a.robots_policy == "ignore_by_operator_decision" and a.policy_decided_at == OPERATOR_DECISION_DATE
         assert "operator decision" in a.policy_basis and "never bypassed" in a.policy_basis
+        assert a.concurrency.maximum <= {"rii": 6}.get(source_id, 4 if a.adapter_name == "juris-jportal" else 2)
         http = http_for(a)
         assert http.respect_robots is False and http.min_interval >= 1.0
-    for source_id in ("nrw", "bverwg", "bsg", "bag", "bverfg", "bb", "ni", "hb", "by"):
+    for source_id in ("nrw", "bsg", "bag", "bverfg", "bb", "ni", "hb", "by"):
         assert adapters[source_id].robots_policy == "respect" and http_for(adapters[source_id]).respect_robots
     for source_id in ("bverwg", "bsg", "bverfg", "hb", "by", "sn"):
         assert 2.0 <= adapters[source_id].min_interval <= 5.0   # small court sites
@@ -217,7 +218,9 @@ def test_policy_recorded_and_repeated_503_stops_the_source(conn):
     failures = [UpstreamFailure("http_error", "HTTP 503 (retry-after 120, waited 120s)", url="u", status=503)
                 for _ in range(6)]
     result = sync_source(PolicyAdapter(failures), conn, Http())
-    assert result["status"] == "blocked" and result["attempted"] == 3
+    # Concurrent fetchers: documents already in flight when the third block arrives are still recorded,
+    # but no further item is claimed.
+    assert result["status"] == "blocked" and 3 <= result["attempted"] <= 6
     src = conn.execute("SELECT * FROM sources WHERE source_id='rii'").fetchone()
     assert (src["robots_policy"], src["policy_decided_at"], src["status"]) == \
         ("ignore_by_operator_decision", OPERATOR_DECISION_DATE, "blocked")
