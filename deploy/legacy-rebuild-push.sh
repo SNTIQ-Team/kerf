@@ -100,6 +100,7 @@ fi
 
 incoming="$REMOTE_ROOT/data/archive-offload/incoming/$(date -u +%Y%m%dT%H%M%SZ)"
 echo "==> push + install on the VPS"
+ssh "$REMOTE" "mkdir -p $incoming"
 rsync -a "$snap/" "$REMOTE:$incoming/"
 ssh "$REMOTE" "cd $REMOTE_ROOT && $REMOTE_PY tools/archive_offload.py install-legacy $incoming"
 ssh "$REMOTE" "cd $REMOTE_ROOT && $REMOTE_PY tools/archive_offload.py status"
