@@ -467,12 +467,14 @@ def decision_identity(parsed: ParsedDecision) -> str:
     if conflict:
         parsed.metadata["ecli_published_other_document"] = {"ecli": parsed.ecli, "reason": conflict}
         parsed.ecli = None
-    if parsed.ecli:
+    if parsed.ecli and not parsed.metadata.get("ecli_shared_with"):
         return parsed.ecli
     if not parsed.case_numbers:
         raise UpstreamFailure("parse_error", "decision without Aktenzeichen and without ECLI",
                               url=parsed.source_url)
-    return synthetic_decision_id(parsed.court_id, parsed.decision_date, parsed.case_numbers[0])
+    synthetic = synthetic_decision_id(parsed.court_id, parsed.decision_date, parsed.case_numbers[0])
+    variant = parsed.metadata.get("id_variant")
+    return f"{synthetic}~{variant}" if variant else synthetic
 
 
 REMEDY_HEADING = re.compile(r"^\s*(?:Rechtsbehelfsbelehrung(?:en)?|Rechtsmittelbelehrung(?:en)?|"
@@ -612,6 +614,21 @@ def store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content_
         raise UpstreamFailure("empty_document", "no paragraphs", url=parsed.source_url)
     text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
     observed_at = observed_at or utcnow()
+    clash = conn.execute("SELECT id, source_doc_id, text_hash FROM decisions WHERE id=? AND source_id=? "
+                         "AND source_doc_id<>?", (decision_id, parsed.source_id, parsed.source_doc_id)).fetchone()
+    if clash is not None and parsed.ecli and decision_id == parsed.ecli and clash["text_hash"] != text_hash:
+        # One portal, two documents, one ECLI (juris portals give two Beschlüsse of one day and docket the
+        # same ordinal): the second is a decision of its own under the synthetic id; decisions.ecli keeps the
+        # published ECLI, so an ECLI lookup returns both (ambiguous_identity).
+        parsed.metadata["ecli_shared_with"] = f"{parsed.source_id}:{clash['source_doc_id']}"
+        decision_id = decision_identity(parsed)
+        taken = conn.execute("SELECT source_doc_id FROM decisions WHERE id=? AND source_doc_id<>?",
+                             (decision_id, parsed.source_doc_id)).fetchone()
+        if taken is not None:
+            parsed.metadata["id_variant"] = parsed.source_doc_id
+            decision_id = decision_identity(parsed)
+        paragraphs, numbering = assemble(decision_id, parsed.sections)
+        text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
     twin = same_decision_elsewhere(conn, parsed)
     if twin is not None and twin["numbering"] == "none" and numbering == "rn" and not parsed.ecli and twin["ecli"]:
         # The explicit-Rn copy replaces an unnumbered twin and keeps its validated ECLI as the identity
