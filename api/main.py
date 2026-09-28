@@ -51,6 +51,7 @@ import threading
 import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -66,6 +67,9 @@ from api.decision_passages import create_router as decision_passages_router, cov
 from api.evidence import (CACHE_KEY_ARGUMENTS, EnvelopeError,
                           unknown_argument_payload)
 from api.law_routes import create_router as law_router
+from api.law_history import open_store as open_law_history
+from api.law_history_chain import act_summary as law_act_summary
+from api.law_history_chain import index_entry as law_index_entry
 try:
     from api.materials_routes import create_router as materials_router
 except ImportError:  # optional component; /capabilities still declares it
@@ -112,6 +116,7 @@ if materials_router is not None:
 # envelope (they read parameters dynamically, so declared FastAPI parameters
 # are not the whole contract).
 _SELF_VALIDATING_PREFIXES = ("/norms/", "/materials")
+_SELF_VALIDATING_PATHS = re.compile(r"/acts/[a-z0-9_]+/(?:changes|versions)")
 # Transport-only cache keys that deployed clients append (``?t=<ms>``,
 # ``/digest?d=<day>``).  They never select content; they are accepted but
 # disclosed in X-Lexgraph-Ignored-Arguments instead of being silently dropped.
@@ -145,7 +150,8 @@ async def search_contract(request: Request, call_next):
         route_path = route_path[len(root_path):]
     params = request.query_params
     ignored: list[str] = []
-    if params and not route_path.startswith(_SELF_VALIDATING_PREFIXES):
+    if params and not route_path.startswith(_SELF_VALIDATING_PREFIXES) and \
+            not _SELF_VALIDATING_PATHS.fullmatch(route_path):
         allowed = _declared_query_names(route_path, request.method)
         if allowed is not None:
             cache_keys = (_CACHE_KEYS | _ROUTE_CACHE_KEYS.get(route_path, set())) - allowed
@@ -574,14 +580,94 @@ def feed(limit: int = Query(100, ge=1, le=600)):
 
 @app.get("/acts")
 def acts():
-    """The act index (wiki.json): id, jurabk, juris, title, norms, changes."""
-    return _cached(_load("wiki"))
+    """The act index (wiki.json): id, jurabk, juris, title, norms, changes.
+
+    Rows of acts covered by the law history store carry a compact
+    ``change_summary`` (last change, next pending change, counts)."""
+    rows = _load("wiki")
+    compact = _act_index_summaries()
+    if compact:
+        rows = [dict(row, change_summary=compact[row.get("id")])
+                if isinstance(row, dict) and row.get("id") in compact else row
+                for row in rows]
+    return _cached(rows)
 
 
 @app.get("/acts/{act_id}")
 def act_detail(act_id: str):
     """One full act (acts/<id>.json): temporal, patches, versions, norms, …."""
-    return _cached(_load_act(act_id))
+    act = _load_act(act_id)
+    summary = _act_change_summary(act_id)
+    if summary is not None:
+        act = dict(act, change_summary=summary)
+    return _cached(act)
+
+
+_INDEX_SUMMARIES: dict[str, Any] = {}
+
+
+def _act_index_summaries() -> dict[str, dict[str, Any]]:
+    """Compact per-act change summaries, cached per generation and day.
+
+    The builder stores them for its build day; only another day recomputes
+    (the first /acts request after a restart must stay fast)."""
+    store = open_law_history(DATA_DIR)
+    if store is None:
+        return {}
+    today = date.today().isoformat()
+    key = (store.meta.get("built_at"), today)
+    if _INDEX_SUMMARIES.get("key") != key:
+        rows = {}
+        for act_id, info in store.acts().items():
+            stored = info.get("index_summary")
+            if stored and stored.get("as_of") == today:
+                rows[act_id] = stored
+                continue
+            try:
+                rows[act_id] = law_index_entry(
+                    law_act_summary(store, act_id, today))
+            except Exception:  # one broken act must not break the index
+                continue
+        _INDEX_SUMMARIES.clear()
+        _INDEX_SUMMARIES.update({"key": key, "rows": rows})
+    return _INDEX_SUMMARIES["rows"]
+
+
+def _act_change_summary(act_id: str, on: str | None = None,
+                        norm: str | None = None) -> dict[str, Any] | None:
+    store = open_law_history(DATA_DIR)
+    if store is None or not store.covers(act_id):
+        return None
+    day = on or date.today().isoformat()
+    try:
+        if norm:
+            from api.law_history_chain import norm_chain, norm_summary
+            index = _norm_store()
+            resolved = index.resolve_act_norm(act_id, norm)
+            chain, versions, changes = norm_chain(store, resolved,
+                                                  resolved["act"])
+            if not versions:
+                return None
+            return norm_summary(store, act_id, resolved["norm_id"], changes,
+                                versions, day, versions[-1])
+        stored = (store.acts().get(act_id) or {}).get("act_change_summary")
+        if stored and stored.get("as_of") == day:
+            return stored
+        return law_act_summary(store, act_id, day)
+    except Exception:
+        return None
+
+
+_NORM_STORES: dict[str, Any] = {}
+
+
+def _norm_store():
+    from api.norm_history import NormHistoryStore
+    key = str(DATA_DIR)
+    if key not in _NORM_STORES:
+        _NORM_STORES.clear()
+        _NORM_STORES[key] = NormHistoryStore(DATA_DIR)
+    return _NORM_STORES[key]
 
 
 @app.get("/acts/{act_id}/reader")
@@ -1108,6 +1194,8 @@ def act_markdown_json(
                         "not_reconstructed")},
         "markdown": markdown,
         "body": body,
+        "change_summary": _act_change_summary(
+            act_id, at.isoformat() if at else None, norm),
     }, headers={"Cache-Control": "public, max-age=3600"})
 
 
