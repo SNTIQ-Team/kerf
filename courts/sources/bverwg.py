@@ -525,14 +525,25 @@ class BverwgAdapter(Adapter):
         if self._rss_suffices(rss, window, conn, since, limit):
             return Listing(items=newest_first(window), upstream_total=None, complete=False)
         by_id = {i["source_doc_id"]: i for i in rss}
+        missing = []
         for sitemap in parse_sitemap_index(http.get(SITEMAP_INDEX_URL, timeout=120).body):
-            for item in parse_sitemap(http.get(sitemap, timeout=300).body, sitemap):
+            try:
+                body = http.get(sitemap, timeout=300).body
+            except UpstreamFailure as failure:
+                # One unavailable per-Senat sitemap (seen: sitemap_ent_10.xml -> 404) must not
+                # discard the others; it is recorded and the listing is marked incomplete.
+                missing.append(sitemap)
+                conn.execute("INSERT INTO failures(run_id, source_id, source_doc_id, url, kind, detail, http_status, "
+                             "at) VALUES(NULL, ?, NULL, ?, ?, ?, ?, datetime('now'))",
+                             (SOURCE_ID, failure.url, failure.kind, "sitemap: " + failure.detail[:300], failure.status))
+                continue
+            for item in parse_sitemap(body, sitemap):
                 by_id.setdefault(item["source_doc_id"], item)
         items = newest_first(list(by_id.values()))
         total = len(items)
         if since:
             items = [i for i in items if (i["listed_date"] or since) >= since]
-        return Listing(items=items, upstream_total=total, complete=not since)
+        return Listing(items=items, upstream_total=None if missing else total, complete=not since and not missing)
 
     @staticmethod
     def _rss_suffices(rss: list[dict], window: list[dict], conn, since: str | None, limit: int | None) -> bool:
