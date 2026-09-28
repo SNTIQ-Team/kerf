@@ -383,3 +383,31 @@ def test_act_versions_list_consolidations_with_sources(built):
     only = client.get("/acts/fed_asylvfg_1992/versions?source=gii_daily"
                       ).json()
     assert {row["source"] for row in only["evidence"]} == {"gii_daily"}
+
+
+def test_an_old_version_with_unknown_end_never_answers_today():
+    from api.norm_history import NormVersion, StateVersion, select_version
+
+    def version(key, start, observed):
+        state = StateVersion(act_id="a", key=key, valid_from=start,
+                             valid_from_status="official_commencement_"
+                             "clause" if start else "unresolved",
+                             first_observed_at=observed,
+                             last_observed_at=observed)
+        return NormVersion(norm_id="n", label="§ 1", title="", text=key,
+                           content_sha256=key, first_state=state,
+                           last_state=state, states=[state])
+    old = version("old", "2006-07-01", "2006-09-05")
+    middle = version("middle", None, "2010-01-01")
+    current = version("current", "2024-06-01", "2024-06-01")
+    old.first_state.superseded_by_observation = "2010-01-01"
+    middle.first_state.superseded_by_observation = "2024-06-01"
+
+    class Chain:
+        states = [old.first_state, middle.first_state, current.first_state]
+    status, picked, _res = select_version([old, middle, current],
+                                          "2026-09-28", Chain())
+    assert picked is current
+    _status, picked, _res = select_version([old, middle, current],
+                                           "2007-01-01", Chain())
+    assert picked is old
