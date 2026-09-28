@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.polarity.gemaess-clause-initial-applies",
+  "module": "courts",
+  "kind": "relation_assessments",
+  "description": "relation polarity rules: gemaess-clause-initial-applies",
+  "origin": "precision review of the live corpus 2026-09-28 (BAG 7 ABR …, VG … Rn)",
+  "status": "active",
+  "input": {
+    "text": "Nach § 74 Abs. 1 Satz 1 VwGO muss die Anfechtungsklage innerhalb eines Monats nach Zustellung des Widerspruchsbescheids erhoben werden.",
+    "own_court_id": "vg-berlin",
+    "jurisdiction": "verwaltung",
+    "land": "be"
+  },
+  "expected": {
+    "assessment_keys": {
+      "$contains": [
+        "applies|de/bund/vwgo/para/74/abs/1/satz/1"
+      ]
+    }
+  },
+  "match": "subset"
+}

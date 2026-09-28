@@ -22,7 +22,7 @@ import re
 import sqlite3
 from dataclasses import dataclass
 
-CLASSIFIER_VERSION = "courts-polarity-rules/1.0.0"
+CLASSIFIER_VERSION = "courts-polarity-rules/1.1.0"
 ASSESSMENTS = {
     "applies": "positive", "interprets": "neutral", "holds_inapplicable": "negative",
     "rejects_application_of": "negative", "follows": "positive", "departs_from": "negative",
@@ -180,8 +180,9 @@ def assess(text: str, span: tuple[int, int], *, target_kind: str, target_id: str
         polarity = ASSESSMENTS[rule.assessment]
         if polarity == "positive" and NEGATION_BEFORE.search(text[max(lo, cue_start - 40):cue_start]):
             continue  # "nicht unter Anwendung des § X"
-        if rule.rule_id == "norm.gemaess_ist" and not re.search(r"\b(?:gem[äa][ßs]s?|nach)\s*$", before, re.I):
-            continue  # only "Gemäß/Nach § X ist ..."
+        if rule.rule_id == "norm.gemaess_ist" and not re.fullmatch(r"\s*(?:\(?\w{1,3}[.)]\s*)?(?:Gem[äa][ßs]s?|Nach)\s*",
+                                                                    before, re.I):
+            continue  # only a clause opened by "Gemäß/Nach § X ist/kann/muss ..."; not "Einschränkungen … nach § X sind"
         if rule.rule_id == "norm.im_sinne_wenn" and not re.search(r"\bim\s+Sinne\s+(?:des|der|von)\s*$", before, re.I):
             continue
         proposals.append(Proposal(rule.assessment, rule, cue_start, cue_end, (lo, hi)))
