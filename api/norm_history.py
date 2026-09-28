@@ -534,6 +534,10 @@ class NormHistoryStore:
             if document and titles.get(str(document)):
                 state.amendment["act"] = titles[str(document)]
         norms: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+        # One state holds every norm; consecutive states rarely differ.  Reuse
+        # the previous row object for unchanged norms so a chain costs about
+        # one state plus its changes (the API runs under a 300 MB limit).
+        latest: dict[str, tuple[str, dict[str, Any]]] = {}
         for state in states:
             payload = self._read_state(state.key, act)
             state.stand = payload.get("stand")
@@ -556,9 +560,16 @@ class NormHistoryStore:
                     state.amendment["pending_note"] = stand["pending_note"]
             for norm_id, row in norm_rows_with_ids(act, payload.get("norms")
                                                    or []):
-                norms.setdefault(norm_id, []).append((state.index, {
-                    "enbez": row.get("enbez"), "titel": row.get("titel"),
-                    "text": row.get("text")}))
+                compact = {"enbez": row.get("enbez"),
+                           "titel": row.get("titel"), "text": row.get("text")}
+                digest = norm_content_hash(compact)
+                previous = latest.get(norm_id)
+                if previous is not None and previous[0] == digest:
+                    compact = previous[1]
+                else:
+                    latest[norm_id] = (digest, compact)
+                norms.setdefault(norm_id, []).append((state.index, compact))
+            del payload
         for previous, following in zip(states, states[1:]):
             if previous.valid_until is None and following.valid_from:
                 previous.valid_until = following.valid_from
