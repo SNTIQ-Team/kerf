@@ -140,6 +140,10 @@ class StateVersion:
     knowledge_from: str | None = None
     gaps: list[Any] = field(default_factory=list)
     derived: bool = False
+    # first observation (or legal start) of the version that replaced this
+    # one when its own legal end is unknown: a bound for selection only,
+    # never reported as a legal date
+    superseded_by_observation: str | None = None
 
     @property
     def order_date(self) -> str:
@@ -960,6 +964,9 @@ def select_version(versions: list[NormVersion], on: str,
             start, end = state.valid_from, state.valid_until
             if not start or state.valid_from_status == "unresolved":
                 continue
+            if end is None and state.superseded_by_observation and \
+                    on >= state.superseded_by_observation:
+                continue   # a later wording was already in the source
             if start <= on and (end is None or on < end):
                 status = state.valid_from_status
                 attribution = (state.amendment or {}).get("attribution") or {}

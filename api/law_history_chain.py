@@ -137,6 +137,12 @@ def norm_chain(store: LawHistoryStore, resolved: dict[str, Any],
                 "completeness": record.get("completeness"),
                 "verification": record.get("verification"),
                 "source_role": row.source_role}}))
+    for version, following in zip(versions, versions[1:]):
+        bound = (following.first_state.first_observed_at or
+                 following.first_state.valid_from)
+        for state in version.states:
+            if state.valid_until is None and bound:
+                state.superseded_by_observation = bound
     juris, slug = act_slug(act)
     info = store.acts().get(act_id) or {}
     chain = ActChain(
