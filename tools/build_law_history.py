@@ -1176,6 +1176,27 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
     return summary
 
 
+def store_index_summaries(path: Path, as_of: str) -> None:
+    """Precompute the /acts index summaries with the reader's own logic."""
+    from api.law_history import LawHistoryStore
+    from api.law_history_chain import act_summary, index_entry
+    store = LawHistoryStore(path)
+    rows = {}
+    for act_id, info in store.acts().items():
+        rows[act_id] = index_entry(act_summary(store, act_id, as_of))
+    store.close()
+    db = sqlite3.connect(path)
+    for act_id, entry in rows.items():
+        summary = json.loads(db.execute(
+            "SELECT summary_json FROM acts WHERE act_id=?",
+            (act_id,)).fetchone()[0])
+        summary["index_summary"] = entry
+        db.execute("UPDATE acts SET summary_json=? WHERE act_id=?",
+                   (_json(summary), act_id))
+    db.commit()
+    db.close()
+
+
 def _bundle_has(bundle: sqlite3.Connection | None, act_id: str) -> bool:
     if bundle is None:
         return False
@@ -1379,6 +1400,7 @@ def main(argv: list[str] | None = None) -> int:
                 "built_at", "schema", "sha256", "sources")},
             "change_date_rows": len(dates.rows),
         })
+        store_index_summaries(tmp, as_of)
         os.chmod(tmp, 0o644)
         os.replace(tmp, out)
     finally:

@@ -69,6 +69,7 @@ from api.evidence import (CACHE_KEY_ARGUMENTS, EnvelopeError,
 from api.law_routes import create_router as law_router
 from api.law_history import open_store as open_law_history
 from api.law_history_chain import act_summary as law_act_summary
+from api.law_history_chain import index_entry as law_index_entry
 try:
     from api.materials_routes import create_router as materials_router
 except ImportError:  # optional component; /capabilities still declares it
@@ -606,49 +607,30 @@ _INDEX_SUMMARIES: dict[str, Any] = {}
 
 
 def _act_index_summaries() -> dict[str, dict[str, Any]]:
-    """Compact per-act change summaries, cached per generation and day."""
+    """Compact per-act change summaries, cached per generation and day.
+
+    The builder stores them for its build day; only another day recomputes
+    (the first /acts request after a restart must stay fast)."""
     store = open_law_history(DATA_DIR)
     if store is None:
         return {}
-    key = (store.meta.get("built_at"), date.today().isoformat())
+    today = date.today().isoformat()
+    key = (store.meta.get("built_at"), today)
     if _INDEX_SUMMARIES.get("key") != key:
-        today = date.today().isoformat()
         rows = {}
-        for act_id in store.acts():
+        for act_id, info in store.acts().items():
+            stored = info.get("index_summary")
+            if stored and stored.get("as_of") == today:
+                rows[act_id] = stored
+                continue
             try:
-                full = law_act_summary(store, act_id, today)
+                rows[act_id] = law_index_entry(
+                    law_act_summary(store, act_id, today))
             except Exception:  # one broken act must not break the index
                 continue
-            rows[act_id] = {
-                "schema": full["schema"], "scope": "act", "as_of": today,
-                "last_change": _brief(full.get("last_change")),
-                "next_pending_change": _brief(full.get("next_pending_change")),
-                "counts": {k: full["counts"].get(k) for k in (
-                    "versions", "act_states", "events", "amending_acts",
-                    "events_pending", "events_date_unknown")},
-                "documentation_notes": len(full.get("documentation_notes")
-                                           or []),
-            }
         _INDEX_SUMMARIES.clear()
         _INDEX_SUMMARIES.update({"key": key, "rows": rows})
     return _INDEX_SUMMARIES["rows"]
-
-
-def _brief(change: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not change:
-        return None
-    dates = change.get("dates") or {}
-    act = change.get("amending_act") or {}
-    return {"change_id": change.get("change_id"),
-            "norm_label": change.get("norm_label"),
-            "citation": act.get("citation"),
-            "document_id": act.get("document_id"),
-            "gazette": (act.get("gazette") or {}).get("reference"),
-            "title": act.get("title"),
-            "in_force": (dates.get("in_force") or {}).get("date"),
-            "promulgated": (dates.get("promulgated") or {}).get("date"),
-            "adopted": (dates.get("adopted") or {}).get("date"),
-            "state": change.get("state")}
 
 
 def _act_change_summary(act_id: str, on: str | None = None,

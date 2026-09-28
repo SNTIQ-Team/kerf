@@ -330,5 +330,35 @@ def _completeness(store: LawHistoryStore, act_id: str, norm_id: str | None,
     }
 
 
+def brief(change: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not change:
+        return None
+    dates = change.get("dates") or {}
+    act = change.get("amending_act") or {}
+    return {"change_id": change.get("change_id"),
+            "norm_label": change.get("norm_label"),
+            "citation": act.get("citation"),
+            "document_id": act.get("document_id"),
+            "gazette": (act.get("gazette") or {}).get("reference"),
+            "title": act.get("title"),
+            "in_force": (dates.get("in_force") or {}).get("date"),
+            "promulgated": (dates.get("promulgated") or {}).get("date"),
+            "adopted": (dates.get("adopted") or {}).get("date"),
+            "state": change.get("state")}
+
+
+def index_entry(full: dict[str, Any]) -> dict[str, Any]:
+    """Compact act summary for the /acts index (landing tiles)."""
+    return {
+        "schema": full["schema"], "scope": "act", "as_of": full["as_of"],
+        "last_change": brief(full.get("last_change")),
+        "next_pending_change": brief(full.get("next_pending_change")),
+        "counts": {k: full["counts"].get(k) for k in (
+            "versions", "act_states", "events", "amending_acts",
+            "events_pending", "events_date_unknown")},
+        "documentation_notes": len(full.get("documentation_notes") or []),
+    }
+
+
 __all__ = ["norm_chain", "events_from_changes", "enrich_evidence",
            "history_block", "norm_summary", "act_summary", "change_state"]
