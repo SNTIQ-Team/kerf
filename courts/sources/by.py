@@ -285,6 +285,7 @@ class BayernAdapter(Adapter):
     base_url = "https://www.gesetze-bayern.de"
     land = "by"
     adapter_name = "by-court-pdfs"
+    min_interval = 3.0  # small court site (robots.txt Crawl-delay, if any, still applies)
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         items: list[dict] = []

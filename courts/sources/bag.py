@@ -345,6 +345,7 @@ class BagAdapter(Adapter):
     base_url = BASE
     land = "de"
     adapter_name = "bag-html"
+    min_interval = 2.0  # small court site (robots.txt Crawl-delay, if any, still applies)
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         if courts and not any("bag".startswith(c.lower()) for c in courts):

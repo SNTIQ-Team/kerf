@@ -335,6 +335,7 @@ class BsgAdapter(Adapter):
     base_url = BASE.rstrip("/")
     land = "de"
     adapter_name = "bsg-html"
+    min_interval = 3.0  # small court site (robots.txt Crawl-delay, if any, still applies)
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         if courts and not any(SOURCE_ID.startswith(c.strip().lower()) for c in courts if c.strip()):

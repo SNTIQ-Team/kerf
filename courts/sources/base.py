@@ -31,12 +31,32 @@ class Listing:
     complete: bool = True          # False when the listing was bounded (limit/since)
 
 
+ROBOTS_POLICIES = ("respect", "ignore_by_operator_decision")
+OPERATOR_DECISION_DATE = "2026-09-28"
+OPERATOR_DECISION_BASIS = (
+    "operator decision (user), 2026-09-28: robots.txt, Crawl-delay and TDM reservations are not applied "
+    "to this source; bot challenges, CAPTCHAs, JS challenges and logins are never bypassed; requests stay "
+    "paced (>= min_interval per host), 429/503 and Retry-After are honoured, repeated blocks stop the source")
+
+
 class Adapter:
     source_id: str = ""
     label: str = ""
     base_url: str = ""
     land: str | None = None
     adapter_name: str = ""
+    # Access policy.  "respect" enforces robots.txt (incl. Crawl-delay) in PoliteHttp;
+    # "ignore_by_operator_decision" skips robots.txt/TDM checks for this source only, as
+    # recorded in sources.robots_policy together with the decision date and basis.
+    robots_policy: str = "respect"
+    policy_decided_at: str | None = None
+    policy_basis: str | None = None
+    # Minimum seconds between requests to one host (never below 1.0; 2-5 s for small court sites).
+    min_interval: float = 1.1
+
+    def operator_policy(self) -> dict:
+        return {"robots_policy": self.robots_policy, "policy_decided_at": self.policy_decided_at,
+                "policy_basis": self.policy_basis, "min_interval": self.min_interval}
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since: str | None,
                    limit: int | None, courts: list[str] | None) -> Listing:

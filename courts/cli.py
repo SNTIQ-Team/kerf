@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import re
 import sys
 
 from .config import data_home, db_path
+from .space import check as check_space
 from .http import PoliteHttp
 from .read import citing_decisions, coverage, get_decision, get_paragraph, open_db, search
 from .sources import get_adapter, registry
@@ -27,11 +29,27 @@ def _positive(value: str) -> int:
     return n
 
 
+def space_ok(what: str) -> bool:
+    report = check_space(data_home(), starting=True)
+    if report.problems:
+        print(json.dumps({"status": "waiting_for_space", "operation": what, **report.as_dict()}), file=sys.stderr)
+        return False
+    return True
+
+
+def http_for(adapter) -> PoliteHttp:
+    """Per-source politeness: min interval and robots policy come from the adapter's declared policy."""
+    return PoliteHttp(min_interval=max(1.0, adapter.min_interval),
+                      respect_robots=adapter.robots_policy == "respect")
+
+
 def cmd_sync(args) -> int:
     adapter = get_adapter(args.source)
+    if not space_ok(f"sync {args.source}"):
+        return 4
     conn = connect()
     init_db(conn)
-    http = PoliteHttp()
+    http = http_for(adapter)
     courts = [c.strip() for c in args.court.split(",")] if args.court else None
     try:
         result = sync_source(adapter, conn, http, since=args.since, limit=args.limit, courts=courts,
@@ -44,6 +62,8 @@ def cmd_sync(args) -> int:
 
 
 def cmd_reparse(args) -> int:
+    if not space_ok("reparse"):
+        return 4
     conn = connect()
     init_db(conn)
     sources = [args.source] if args.source else [r[0] for r in conn.execute("SELECT source_id FROM sources")]
@@ -54,6 +74,34 @@ def cmd_reparse(args) -> int:
         except SourceBusy as exc:
             print(json.dumps({"source": source_id, "status": "busy", "detail": str(exc)}))
     return 0
+
+
+def cmd_migrate_captures(args) -> int:
+    from .migrate import migrate_legacy_captures, verify
+    conn = connect()
+    init_db(conn)
+    if args.verify_only:
+        print(json.dumps(verify(conn, data_home()), indent=2))
+        return 0
+    if not space_ok("migrate-captures"):
+        return 4
+    sources = [r[0] for r in conn.execute("SELECT source_id FROM sources")]
+    with contextlib.ExitStack() as stack:
+        try:
+            for source_id in sources:  # no sync may append to packs meanwhile
+                stack.enter_context(source_lock(source_id))
+        except SourceBusy as exc:
+            print(json.dumps({"status": "busy", "detail": str(exc)}), file=sys.stderr)
+            return 3
+        report = migrate_legacy_captures(conn, data_home(), delete_legacy=args.delete_legacy)
+    print(json.dumps(report, indent=2))
+    return 0 if not report["verify_error_count"] and not report["bad_legacy"] else 1
+
+
+def cmd_space(args) -> int:
+    report = check_space(data_home(), starting=True)
+    print(json.dumps({"bulk_writes_allowed": not report.problems, **report.as_dict()}, indent=2))
+    return 0 if not report.problems else 4
 
 
 def _table(rows: list[list[str]]) -> str:
@@ -70,17 +118,24 @@ def cmd_status(args) -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
-    rows = [["source", "status", "decisions", "date range", "upstream", "pending", "failed", "last sync",
-             "last run"]]
+    rows = [["source", "status", "robots", "decisions", "date range", "upstream", "pending", "failed",
+             "last sync", "last run"]]
     for s in report["sources"]:
         last = s["last_run"] or {}
-        rows.append([s["source_id"], s["status"], s["decisions"],
+        robots = "respect" if s.get("robots_policy", "respect") == "respect" else \
+            f"IGNORED (operator decision {s.get('policy_decided_at')})"
+        rows.append([s["source_id"], s["status"], robots, s["decisions"],
                      f"{s['date_from'] or '-'}..{s['date_to'] or '-'}", s["upstream_listed"] or "-",
                      s["pending_items"], s["failed_items"], (s["last_sync_finished"] or "-")[:19],
                      f"{last.get('status', '-')} a={last.get('attempted', 0)} s={last.get('stored', 0)} "
                      f"f={last.get('failed', 0)}"])
     print(f"corpus: {data_home()}  schema v{report['schema_version']}  {report['parser_version']}")
-    print(f"decisions={report['decisions']} paragraphs={report['paragraphs']} relations={report['relations']}")
+    print(f"decisions={report['decisions']} paragraphs={report['paragraphs']} relations={report['relations']} "
+          f"captures={report.get('captures')} pack_files={report.get('pack_files')}")
+    space = check_space(data_home(), starting=True)
+    print("space: " + ("ok for bulk writes" if not space.problems else "; ".join(space.problems)) +
+          f" (unallocated={space.as_dict()['unallocated_gib']} GiB, "
+          f"metadata={space.as_dict()['metadata_effective_fraction']})")
     print(_table(rows))
     for s in report["sources"]:
         if s["status_reason"] or s["failure_kinds"]:
@@ -128,6 +183,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("reparse", help="re-parse stored raw captures with the current parser (offline)")
     p.add_argument("--source", help="one source (default: all)")
     p.set_defaults(func=cmd_reparse)
+    p = sub.add_parser("migrate-captures", help="move legacy raw/*.gz captures into packs and verify")
+    p.add_argument("--delete-legacy", action="store_true", help="delete legacy files after full verification")
+    p.add_argument("--verify-only", action="store_true", help="only verify packs against the index")
+    p.set_defaults(func=cmd_migrate_captures)
+    p = sub.add_parser("space", help="btrfs/disk guard for bulk writes")
+    p.set_defaults(func=cmd_space)
     p = sub.add_parser("status", help="coverage per source")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_status)

@@ -368,6 +368,7 @@ class BremenAdapter(Adapter):
     base_url = "https://www.oberverwaltungsgericht.bremen.de"
     land = "hb"
     adapter_name = "hb-pdf"
+    min_interval = 3.0  # small court site (robots.txt Crawl-delay, if any, still applies)
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         window = since or (None if limit else incremental_since(conn, self.source_id, INCREMENTAL_OVERLAP_DAYS))

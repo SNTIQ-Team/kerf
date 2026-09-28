@@ -516,6 +516,7 @@ class BverwgAdapter(Adapter):
     base_url = BASE
     land = "de"
     adapter_name = "bverwg-html"
+    min_interval = 3.0  # small court site (robots.txt Crawl-delay, if any, still applies)
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         if not wants_court(courts):

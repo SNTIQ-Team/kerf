@@ -8,17 +8,16 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
-import os
 import re
 import sqlite3
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import PARSER_VERSION, SCHEMA_VERSION
 from .casenumbers import case_key
 from .citations import Relation, extract_all, synthetic_decision_id
-from .config import db_path, raw_dir
+from .config import data_home, db_path
+from .packs import CaptureIntegrityError, PackStore
 from .courtids import resolve as resolve_court
 from .errors import UpstreamFailure
 from .model import ParsedDecision
@@ -40,8 +39,25 @@ CREATE TABLE IF NOT EXISTS sources(
   last_sync_finished TEXT,
   last_sync_status TEXT,
   last_sync_run INTEGER,
-  listing_complete INTEGER NOT NULL DEFAULT 0
+  listing_complete INTEGER NOT NULL DEFAULT 0,
+  robots_policy TEXT NOT NULL DEFAULT 'respect'
+    CHECK(robots_policy IN ('respect','ignore_by_operator_decision')),
+  policy_decided_at TEXT,
+  policy_basis TEXT,
+  min_interval REAL
 );
+CREATE TABLE IF NOT EXISTS captures(
+  sha256 TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  extension TEXT NOT NULL,
+  pack TEXT NOT NULL,
+  offset INTEGER NOT NULL,
+  stored_size INTEGER NOT NULL,
+  raw_size INTEGER NOT NULL,
+  codec TEXT NOT NULL CHECK(codec IN ('zstd','gzip')),
+  stored_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS captures_pack ON captures(pack, offset);
 CREATE TABLE IF NOT EXISTS source_items(
   source_id TEXT NOT NULL,
   source_doc_id TEXT NOT NULL,
@@ -203,6 +219,7 @@ CREATE TABLE IF NOT EXISTS http_validators(
 DROP VIEW IF EXISTS source_coverage;
 CREATE VIEW source_coverage AS
 SELECT s.source_id, s.label, s.land, s.status, s.status_reason, s.upstream_listed, s.listing_complete,
+       s.robots_policy, s.policy_decided_at, s.policy_basis, s.min_interval,
        (SELECT count(*) FROM decisions d WHERE d.source_id = s.source_id) AS decisions,
        (SELECT min(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_from,
        (SELECT max(decision_date) FROM decisions d WHERE d.source_id = s.source_id) AS date_to,
@@ -237,15 +254,26 @@ def connect(path: Path | None = None, *, readonly: bool = False) -> sqlite3.Conn
     return conn
 
 
+SOURCE_COLUMNS_V2 = {
+    "listing_complete": "INTEGER NOT NULL DEFAULT 0",
+    "robots_policy": "TEXT NOT NULL DEFAULT 'respect' CHECK(robots_policy IN ('respect','ignore_by_operator_decision'))",
+    "policy_decided_at": "TEXT",
+    "policy_basis": "TEXT",
+    "min_interval": "REAL",
+}
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, SCHEMA_VERSION):
+    if version not in (0, 1, SCHEMA_VERSION):
         raise RuntimeError(f"database schema v{version} != code schema v{SCHEMA_VERSION}")
-    if version == SCHEMA_VERSION:
-        # Additive v1 migrations for databases created by earlier v1 code.
+    if version == 1:
+        # v1 -> v2: source policy columns and the packed-capture index (additive; legacy
+        # raw/*.gz captures stay readable until `python -m courts migrate-captures`).
         columns = {r[1] for r in conn.execute("PRAGMA table_info(sources)")}
-        if columns and "listing_complete" not in columns:
-            conn.execute("ALTER TABLE sources ADD COLUMN listing_complete INTEGER NOT NULL DEFAULT 0")
+        for column, definition in SOURCE_COLUMNS_V2.items():
+            if column not in columns:
+                conn.execute(f"ALTER TABLE sources ADD COLUMN {column} {definition}")
     conn.executescript(SCHEMA)
     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     conn.execute("INSERT OR REPLACE INTO meta VALUES('schema_version', ?)", (str(SCHEMA_VERSION),))
@@ -254,40 +282,44 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-# --- raw captures ------------------------------------------------------------
+# --- raw captures --------------------------------------------------------------
 
-def write_capture(body: bytes, source_id: str, extension: str, home: Path | None = None) -> tuple[str, str]:
-    """Store exact response bytes gzip-compressed under their sha256; return (hash, relpath)."""
-    digest = sha256(body)
-    rel = Path("raw") / source_id / digest[:2] / f"{digest}.{extension}.gz"
-    target = (home or raw_dir().parent) / rel
-    if not target.exists():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(prefix=".capture-", dir=target.parent)
-        try:
-            with os.fdopen(fd, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
-                gz.write(body)
-            os.replace(tmp, target)
-        finally:
-            Path(tmp).unlink(missing_ok=True)
-    return digest, rel.as_posix()
+def write_capture(body: bytes, source_id: str, extension: str, home: Path | None = None, *,
+                  conn: sqlite3.Connection) -> tuple[str, str]:
+    """Append exact response bytes to the source's pack (zstd, sha256-addressed); return (hash, ref)."""
+    ref = PackStore(home or data_home(), conn).put(body, source_id, extension)
+    return ref.sha256, ref.path_ref
 
 
-def read_capture(relpath: str, expected_hash: str, home: Path | None = None) -> bytes:
-    data = gzip.decompress(((home or raw_dir().parent) / relpath).read_bytes())
-    if sha256(data) != expected_hash:
-        raise ValueError(f"capture {relpath} does not match its content hash")
-    return data
+def read_capture(conn: sqlite3.Connection, content_hash: str, capture_path: str | None = None,
+                 home: Path | None = None) -> bytes:
+    """Exact capture bytes, verified against the content hash (packs first, legacy raw/*.gz second)."""
+    home = home or data_home()
+    store = PackStore(home, conn)
+    ref = store.lookup(content_hash)
+    if ref is not None:
+        return store.read(ref)
+    if capture_path and capture_path.startswith("raw/"):
+        data = gzip.decompress((home / capture_path).read_bytes())
+        if sha256(data) != content_hash:
+            raise CaptureIntegrityError(f"legacy capture {capture_path} does not match its content hash")
+        return data
+    raise FileNotFoundError(f"capture {content_hash} not found")
 
 
 # --- sources, runs, frontier ---------------------------------------------------
 
 def register_source(conn: sqlite3.Connection, source_id: str, label: str, base_url: str,
-                    land: str | None, adapter: str) -> None:
-    conn.execute("""INSERT INTO sources(source_id,label,base_url,land,adapter) VALUES(?,?,?,?,?)
+                    land: str | None, adapter: str, policy: dict | None = None) -> None:
+    policy = policy or {}
+    conn.execute("""INSERT INTO sources(source_id,label,base_url,land,adapter,robots_policy,policy_decided_at,
+                                        policy_basis,min_interval) VALUES(?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(source_id) DO UPDATE SET label=excluded.label, base_url=excluded.base_url,
-                    land=excluded.land, adapter=excluded.adapter""",
-                 (source_id, label, base_url, land, adapter))
+                    land=excluded.land, adapter=excluded.adapter, robots_policy=excluded.robots_policy,
+                    policy_decided_at=excluded.policy_decided_at, policy_basis=excluded.policy_basis,
+                    min_interval=excluded.min_interval""",
+                 (source_id, label, base_url, land, adapter, policy.get("robots_policy", "respect"),
+                  policy.get("policy_decided_at"), policy.get("policy_basis"), policy.get("min_interval")))
     conn.commit()
 
 

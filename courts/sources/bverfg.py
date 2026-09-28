@@ -678,6 +678,7 @@ class BverfgAdapter(Adapter):
     base_url = BASE
     land = "de"
     adapter_name = "bverfg-html"
+    min_interval = 3.0  # small court site (robots.txt Crawl-delay, if any, still applies)
 
     def list_items(self, http: PoliteHttp, conn: sqlite3.Connection, *, since, limit, courts) -> Listing:
         if courts and not any("bverfg".startswith(c.lower()) for c in courts):
