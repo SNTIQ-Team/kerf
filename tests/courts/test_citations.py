@@ -34,21 +34,22 @@ def test_ivm_chain_from_real_rn11(rii_paragraphs):
 
 def test_renamed_act_resolves_to_same_work(rii_paragraphs):
     rel = extract_norms(rii_paragraphs["rn-1"].text, "rn-1")[0]
-    assert rel.target_id == "de/bund/asylg/para/24/abs/4"
-    assert rel.detail["act"] == "AsylVfG" and rel.detail["act_resolution"] == "alias"
+    assert rel.target_id == "de/bund/asylvfg_1992/para/24/abs/4"
+    assert rel.detail["act"] == "AsylVfG" and rel.detail["act_resolution"] == "act_index"
+    assert rel.detail["lexgraph_act_id"] == "fed_asylvfg_1992"
 
 
 @pytest.mark.parametrize("text,expected", [
-    ("§ 7 Abs. 1 Satz 1 Nr. 2 Buchst. a SGB II", ["de/bund/sgb2/para/7/abs/1/satz/1/nr/2/buchst/a"]),
-    ("§ 7 Abs. 1 Satz 1 Nr. 2 lit. a SGB II", ["de/bund/sgb2/para/7/abs/1/satz/1/nr/2/buchst/a"]),
+    ("§ 7 Abs. 1 Satz 1 Nr. 2 Buchst. a SGB II", ["de/bund/sgb_2/para/7/abs/1/satz/1/nr/2/buchst/a"]),
+    ("§ 7 Abs. 1 Satz 1 Nr. 2 lit. a SGB II", ["de/bund/sgb_2/para/7/abs/1/satz/1/nr/2/buchst/a"]),
     ("Art. 19 Abs. 4 Satz 1 GG", ["de/bund/gg/art/19/abs/4/satz/1"]),
-    ("§ 37 Abs. 2 Nr. 3 SGB XIV", ["de/bund/sgb14/para/37/abs/2/nr/3"]),
-    ("§§ 44 bis 46 SGB X", ["de/bund/sgb10/para/44", "de/bund/sgb10/para/45", "de/bund/sgb10/para/46"]),
+    ("§ 37 Abs. 2 Nr. 3 SGB XIV", ["de/bund/sgb_14/para/37/abs/2/nr/3"]),
+    ("§§ 44 bis 46 SGB X", ["de/bund/sgb_10/para/44", "de/bund/sgb_10/para/45", "de/bund/sgb_10/para/46"]),
     ("§ 86b Abs. 2 Satz 2 SGG i.V.m. §§ 920 Abs. 2, 294 ZPO",
      ["de/bund/sgg/para/86b/abs/2/satz/2", "de/bund/zpo/para/920/abs/2", "de/bund/zpo/para/294"]),
-    ("§§ 60, 61 Abs. 1 Satz 2, 66 SGB I", ["de/bund/sgb1/para/60", "de/bund/sgb1/para/61/abs/1/satz/2",
-                                           "de/bund/sgb1/para/66"]),
-    ("§ 7 Abs. 1 und 2 SGB II", ["de/bund/sgb2/para/7/abs/1", "de/bund/sgb2/para/7/abs/2"]),
+    ("§§ 60, 61 Abs. 1 Satz 2, 66 SGB I", ["de/bund/sgb_1/para/60", "de/bund/sgb_1/para/61/abs/1/satz/2",
+                                           "de/bund/sgb_1/para/66"]),
+    ("§ 7 Abs. 1 und 2 SGB II", ["de/bund/sgb_2/para/7/abs/1", "de/bund/sgb_2/para/7/abs/2"]),
     ("Art. 6 Abs. 1 Buchst. e DSGVO", ["eu/32016R0679/art/6/abs/1/buchst/e"]),
     ("Art. 23 Abs. 2 der Richtlinie 2005/85/EG", ["eu/32005L0085/art/23/abs/2"]),
     ("Art. 4 der Verordnung (EG) Nr. 883/2004", ["eu/32004R0883/art/4"]),
@@ -62,7 +63,7 @@ def test_norm_identities(text, expected):
 
 def test_following_sections_marker():
     rel = extract_norms("nach §§ 3 ff. SGB X", "p")[0]
-    assert rel.target_id == "de/bund/sgb10/para/3" and rel.detail["following"] == "ff"
+    assert rel.target_id == "de/bund/sgb_10/para/3" and rel.detail["following"] == "ff"
 
 
 def test_unknown_act_is_unresolved_not_guessed():
@@ -125,7 +126,7 @@ def test_database_rejects_parser_legal_effect_relations():
 
 
 @pytest.mark.parametrize("text,land,expected", [
-    ("nach § 45 SGB X. Danach", None, ["de/bund/sgb10/para/45"]),           # Roman book before a full stop
+    ("nach § 45 SGB X. Danach", None, ["de/bund/sgb_10/para/45"]),           # Roman book before a full stop
     ("Art. 42 Abs. 1 Satz 1 Buchst. h VO (EU) Nr. 604/2013", None, ["eu/32013R0604/art/42/abs/1/satz/1/buchst/h"]),
     ("Art. 101 BV", "by", ["de/by/bv/art/101"]),                            # Bavarian constitution in a Bavarian court
     ("Art. 101 BV", "nw", [None]),                                          # elsewhere "BV" stays unresolved
@@ -149,3 +150,25 @@ def test_trailing_annotation_is_not_part_of_the_docket():
 def test_court_ids_of_new_laender(name, court_id):
     from courts.courtids import resolve
     assert resolve(name).court_id == court_id
+
+
+@pytest.mark.parametrize("text,target,basis", [
+    ("§ 5 SÜG", "de/bund/s_g/para/5", "gii_catalog"),        # GII writes umlauts as '_' (not Soldatengesetz 'sg')
+    ("§ 7 SG", "de/bund/sg/para/7", "gii_catalog"),
+    ("§ 24 AsylG", "de/bund/asylvfg_1992/para/24", "alias"),  # renamed act, same work
+    ("§ 35 BauGB", "de/bund/bbaug/para/35", "alias"),
+    ("§ 1 AÜG", "de/bund/a_g/para/1", "act_index"),
+])
+def test_norms_resolve_through_lexgraphs_canonical_resolver(text, target, basis):
+    rel = extract_norms(text, "p")[0]
+    assert (rel.target_id, rel.detail["act_resolution"]) == (target, basis)
+
+
+def test_missing_lexgraph_data_fails_loudly(monkeypatch, tmp_path):
+    from courts.acts import LexgraphDataUnavailable, lexgraph_data_dir
+    import courts.acts as acts
+    monkeypatch.setenv("LEXGRAPH_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(acts, "ROOT", tmp_path)
+    monkeypatch.setattr(acts.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
+    with pytest.raises(LexgraphDataUnavailable):
+        lexgraph_data_dir()

@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 
-from .acts import ActRef, long_name_key, resolve_act
+from .acts import ActIdentity, long_name_abbreviation, resolve_act
 from .casenumbers import case_key, clean as clean_az, id_component
 from .courtids import resolve as resolve_court
 
@@ -150,7 +150,7 @@ def _expand(values: list[str], is_range: bool) -> tuple[list[str], bool]:
     return values, False
 
 
-def _act_at(text: str, pos: int, land: str | None = None) -> tuple[ActRef | None, str, int] | None:
+def _act_at(text: str, pos: int, land: str | None = None) -> tuple[ActIdentity | None, str, int] | None:
     eu = EU_ACT_RE.match(text, pos)
     if eu:
         a, b = eu.group("a"), eu.group("b")
@@ -159,12 +159,12 @@ def _act_at(text: str, pos: int, land: str | None = None) -> tuple[ActRef | None
         if len(year) == 2:
             year = ("19" if int(year) > 50 else "20") + year
         celex = f"3{year}{kind}{int(number):04d}"
-        return ActRef(f"eu/{celex}", celex, "eu_citation"), eu.group(0).strip(), eu.end()
+        return ActIdentity(f"eu/{celex}", "eu_citation"), eu.group(0).strip(), eu.end()
     long = LONG_NAME_RE.match(text, pos)
     if long:
-        key = long_name_key(" ".join(long.group("name").split()))
-        if key:
-            return resolve_act(key.upper() if len(key) <= 5 else key), long.group(0).strip(), long.end()
+        abbreviation = long_name_abbreviation(" ".join(long.group("name").split()))
+        if abbreviation:
+            return resolve_act(abbreviation, land), long.group(0).strip(), long.end()
     m = ACT_TOKEN_RE.match(text, pos)
     if not m:
         return None
@@ -183,7 +183,7 @@ def _act_at(text: str, pos: int, land: str | None = None) -> tuple[ActRef | None
     candidates.append((token, m.end("act")))
     for raw, end in candidates:
         ref = resolve_act(" ".join(raw.split()), land)
-        if ref.base or raw == token:
+        if ref.prefix or raw == token:
             year_end = m.end("year") if m.group("year") and end == m.end("act") else end
             return ref, " ".join(text[m.start("act"):year_end].split()), year_end
     return None
@@ -259,7 +259,7 @@ def extract_norms(text: str, paragraph_id: str | None = None, *, land: str | Non
         chain_start = head.start()
         chain_no += 1
         pending: list[tuple[_Item, int, int]] = []
-        resolved: list[tuple[_Item, int, int, ActRef | None, str]] = []
+        resolved: list[tuple[_Item, int, int, ActIdentity | None, str]] = []
         cursor = head.start()
         in_conjunction = False
         while True:
@@ -305,7 +305,7 @@ def extract_norms(text: str, paragraph_id: str | None = None, *, land: str | Non
     return relations
 
 
-def _item_relations(item: _Item, ref: ActRef | None, raw_act: str, text: str, start: int, end: int,
+def _item_relations(item: _Item, ref: ActIdentity | None, raw_act: str, text: str, start: int, end: int,
                     chain_text: str, paragraph_id: str | None, chain_no: int, in_conjunction: bool,
                     quoted: bool) -> list[Relation]:
     level_values = []
@@ -319,13 +319,13 @@ def _item_relations(item: _Item, ref: ActRef | None, raw_act: str, text: str, st
     out = []
     for combo in combos:
         values = dict(combo)
-        target = _norm_id(ref.base, item.unit_type, values) if ref and ref.base else None
+        target = _norm_id(ref.prefix, item.unit_type, values) if ref and ref.prefix else None
         raw = f"{'§' if item.unit_type == 'para' else 'Art.'} {values['unit']}" + "".join(
             f" {lbl} {values[lv]}" for lv, lbl in (("abs", "Abs."), ("satz", "Satz"), ("nr", "Nr."),
                                                    ("buchst", "Buchst.")) if values.get(lv)) + f" {raw_act}"
-        detail = {"act": raw_act, "act_key": ref.key if ref else None,
-                  "act_resolution": ref.resolution if ref else "unresolved",
-                  "gii_slug": ref.gii_slug if ref else None, "unit_type": item.unit_type,
+        detail = {"act": raw_act, "act_prefix": ref.prefix if ref else None,
+                  "act_resolution": ref.basis if ref else "unresolved",
+                  "lexgraph_act_id": ref.act_id if ref else None, "unit_type": item.unit_type,
                   "chain": chain_text, "chain_no": chain_no}
         if item.following:
             detail["following"] = item.following

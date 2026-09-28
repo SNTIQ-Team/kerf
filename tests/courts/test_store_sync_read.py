@@ -173,7 +173,7 @@ def test_get_decision_paragraph_and_citing(conn, fixture):
     p = get_paragraph(db, f"{ECLI}#rn-10")
     assert p["status"] == "ok" and len(p["evidence"][0]["blocks"]) == 3
     assert any(r["target_id"] == "de/bund/vwgo/para/75" for r in p["evidence"][0]["relations"])
-    cites = citing_decisions(db, "de/bund/asylg/para/24")
+    cites = citing_decisions(db, "de/bund/asylvfg_1992/para/24")
     assert cites["total"] >= 5 and all(r["evidence"]["legal_effect_verified"] is False for r in cites["relations"])
     assert {r["relation"] for r in cites["relations"]} <= {"mentions", "quotes", "procedural_reference"}
     assert get_decision(db, "does-not-exist")["status"] == "not_in_corpus"

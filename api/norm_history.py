@@ -43,6 +43,7 @@ from api.law_structure import (
     sentence_units,
 )
 from api.norm_identity import (
+    ActResolver,
     NormIdentityError,
     act_slug,
     designator_unit,
@@ -320,18 +321,29 @@ class NormHistoryStore:
                 "invalid_argument",
                 "use a canonical id (de/bund/<act>/para/<n>) or a citation "
                 "such as '§ 37 SGB XIV'")
-        keys = exact_act_aliases(citation["act"])
-        candidates = [row for row in self.act_index()
-                      if keys & (exact_act_aliases(row.get("jurabk") or "")
-                                 | exact_act_aliases(row.get("id") or ""))]
-        if not candidates:
-            # GII disambiguates reissued acts with a year ("AufenthG 2004");
-            # accept the bare abbreviation only when it stays unique.
+        # The canonical act resolver (api.norm_identity.ActResolver), shared with the
+        # courts corpus: exact jurabk aliases (with and without GII's year suffix),
+        # SGB Roman/Arabic books, renamed acts (AsylG -> asylvfg_1992).
+        identity = self._resolver().resolve_act(citation["act"])
+        if identity.basis == "ambiguous":
             candidates = [row for row in self.act_index()
-                          if keys & exact_act_aliases(re.sub(
-                              r"\s+\d{4}$", "", str(row.get("jurabk") or "")))]
+                          if row.get("id") in set(identity.candidates)]
+        elif identity.in_corpus:
+            candidates = [row for row in self.act_index()
+                          if row.get("id") == identity.act_id]
+        else:
+            keys = exact_act_aliases(citation["act"])
+            candidates = [row for row in self.act_index()
+                          if keys & exact_act_aliases(row.get("id") or "")]
         return self._one(candidates, value, citation["unit"],
                          citation["number"], citation["sub"])
+
+    def _resolver(self) -> ActResolver:
+        index = self.act_index()
+        if getattr(self, "_act_resolver_source", None) is not index:
+            self._act_resolver = ActResolver(index)
+            self._act_resolver_source = index
+        return self._act_resolver
 
     def resolve_act_norm(self, act_id: str, designator: str
                          ) -> dict[str, Any]:
