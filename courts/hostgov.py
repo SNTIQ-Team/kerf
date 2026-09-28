@@ -133,6 +133,8 @@ class HostGovernor:
                 self._first.append(latency)
                 if len(self._first) >= BASELINE_SAMPLES:
                     self.baseline = max(MIN_BASELINE, _p95(self._first))
+                    self.window, self.window_errors = [], 0   # later windows judge against it
+                return
             self.window.append(latency)
             self.recent.append(latency)
             if self.baseline is None:
@@ -144,6 +146,11 @@ class HostGovernor:
                                     f"{self.baseline:.2f}s", retry_after=None, block=False)
                 self.recent.clear()
                 return
+            if now - self.last_change >= INCREASE_EVERY and len(self.window) >= MIN_SAMPLES \
+                    and not self.window_errors:
+                # The baseline only ever tightens: the first answers of a run (TLS handshakes, every source
+                # starting at once) are slow, and a high baseline would make both rules toothless.
+                self.baseline = max(MIN_BASELINE, min(self.baseline, _p95(self.window)))
             if (now - self.last_change >= INCREASE_EVERY and now >= self.cooldown_until
                     and len(self.window) >= MIN_SAMPLES and not self.window_errors
                     and _p95(self.window) < GROW_BELOW * self.baseline and self.limit < self.maximum):

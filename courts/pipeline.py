@@ -137,6 +137,8 @@ class Writer:
             self.busy += elapsed
             self.jobs += 1
             self.commit_times.append(elapsed)
+            if len(self.commit_times) > 4000:
+                del self.commit_times[:2000]
             problems = self.maintenance.tick()
             if problems and not self.stop.is_set():
                 self.halt("space/WAL guard stopped the run: " + "; ".join(problems))
