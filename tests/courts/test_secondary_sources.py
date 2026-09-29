@@ -274,3 +274,30 @@ def test_bverwg_capture_urls_and_ingest():
     assert reparse_source(get_adapter("bverwg"), conn, force=True)["failed"] == 0
     meta = json.loads(conn.execute("SELECT metadata FROM decisions WHERE id=?", (result["decision_id"],)).fetchone()[0])
     assert meta["capture_origin"] == "user_browser"
+
+
+def test_a_broken_shard_download_resumes_with_a_range_request(tmp_path, monkeypatch):
+    import requests
+    from courts.sources import old
+    calls = []
+
+    class Response:
+        def __init__(self, status, chunks, broken=False):
+            self.status_code, self.chunks, self.broken, self.headers = status, chunks, broken, {}
+        def __enter__(self):
+            return self
+        def __exit__(self, *exc):
+            return False
+        def iter_content(self, size):
+            yield from self.chunks
+            if self.broken:
+                raise requests.exceptions.ChunkedEncodingError("IncompleteRead")
+
+    def get(url, headers, stream, timeout):
+        calls.append(headers.get("Range"))
+        return Response(200, [b"abc"], broken=True) if len(calls) == 1 else Response(206, [b"def"])
+    monkeypatch.setattr(requests, "get", get)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    target = tmp_path / "shard.parquet"
+    old._download("https://x/shard", target, "tok")
+    assert target.read_bytes() == b"abcdef" and calls == [None, "bytes=3-"]
