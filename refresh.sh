@@ -98,6 +98,19 @@ step "16/24" "GVBl/BayMBl promulgation events (RSS)"       python3 pipeline/fetc
 step "17/24" "Bayerischer Landtag WP19 pipeline"           python3 pipeline/fetch_bay_landtag.py
 step "18/24" "EU layer: curated corpus + transpositions"   python3 pipeline/fetch_eu_layer.py
 step "19/24" "EU breadth index (all directives + basic regulations)" python3 pipeline/fetch_eu_index.py
+# Article texts of the curated EU corpus, the EMRK and the Bavarian acts that
+# BAYERN.RECHT's challenge now blocks (archived official copies).  These texts
+# change rarely: refresh at most every LEXGRAPH_TEXT_REFRESH_DAYS days (7).
+stale() { [ -z "$(find "data/snapshots/$1" -mindepth 1 -maxdepth 1 -type d -mtime "-${LEXGRAPH_TEXT_REFRESH_DAYS:-7}" 2>/dev/null)" ]; }
+if stale eu_texts; then
+    step "19a/24" "EU article texts (CELLAR Formex/XHTML)"    python3 pipeline/fetch_eu_texts.py
+fi
+if stale emrk; then
+    step "19b/24" "EMRK German text (archived CoE PDF)"      python3 pipeline/fetch_emrk.py
+fi
+if stale bayern_recht_archive; then
+    step "19c/24" "Bavarian acts from archived official copies" python3 pipeline/fetch_bayern_archive.py
+fi
 echo "==> [20/24] Länder discovery monitor"
 if [ "${LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL:-0}" = "1" ]; then
     python3 pipeline/fetch_parlamentsspiegel.py || echo "[warn] step degraded — continuing"

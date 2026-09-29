@@ -837,3 +837,16 @@ def test_specialized_pinpoint_labels_preserve_trailing_alias():
     assert len(rows) == 1
     assert rows[0]["target_act"] == "fed_bgb"
     assert rows[0]["target_pinpoint"] == text.removesuffix(" BGB")
+
+
+def test_an_act_from_another_snapshot_family_names_its_own_snapshot():
+    """Archived Bavarian and EU acts are not from their jurisdiction's feed:
+    their rows carry the act's own snapshot (publish validation rejects NULL)."""
+    acts = _acts()
+    acts[0] = {**acts[0], "juris": "DE-BY", "source_snapshot": "bayern_recht_archive/2026-09-29"}
+    eu = {**_acts()[0], "id": "eu_x", "juris": "EU", "jurabk": "XVO"}
+    index = build_citation_index([acts[0], eu], built_at="2026-09-29T00:00:00+00:00",
+                                 source_snapshots={"DE-BY": "2026-09-17", "EU": "2026-09-29"})
+    snapshots = {row["source_act"]: row["source_snapshot"] for row in index["citations"]}
+    assert snapshots["fed_alpha"] == "bayern_recht_archive/2026-09-29"
+    assert snapshots["eu_x"] == "2026-09-29"

@@ -24,6 +24,16 @@ Numbering must continue a monotone sequence (1, 1a, 2 …; a, b, c …), which
 rejects ordinals, dates and years that merely look like markers.  Bavarian
 texts carry explicit sentence numbers (``1Zuständige ...  2Die ...``); those
 are used as sentence boundaries instead of the punctuation heuristic.
+
+EU texts (``eu=True``; EUR-Lex/Formex articles, the EMRK) keep one line per
+Unterabsatz: a line break inside an Absatz starts an ``unterabsatz`` node
+(``abs/1/uabs/2``), list points (``a)``, ``1.``) stay on the line of their
+lead-in, and points may hang directly off a sentence (``abs/1/satz/1/buchst/a``,
+short ``abs/1/buchst/a``).  Sentences are counted across the whole Absatz, as
+German courts cite them ("Art. 12 Abs. 5 Satz 2 DSGVO").  An article without
+numbered paragraphs whose body has several Unterabsätze gets one implicit
+Absatz per Unterabsatz, flagged ``counted_subparagraph`` ("Art. 267 Abs. 3
+AEUV").
 """
 from __future__ import annotations
 
@@ -34,6 +44,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 STRUCTURE_PARSER_VERSION = "law-structure/1"
+EU_STRUCTURE_PARSER_VERSION = "law-structure/1+eu-1"
 
 _ABSATZ = re.compile(r"\((\d{1,3})([a-z]?)\)\s*")
 _NUMMER = re.compile(r"(?<![§\d])(\d{1,3})([a-z]{0,2})\.(?=[A-Za-zÄÖÜäöüß„»\"(])")
@@ -87,14 +98,16 @@ class Node:
         if self.flags:
             payload["flags"] = list(self.flags)
         if self.children:
-            payload["children"] = [child.as_dict(text, locator)
+            # Sentences keep their Absatz-wide numbering under an Unterabsatz.
+            inner = prefix if self.type == "unterabsatz" else locator
+            payload["children"] = [child.as_dict(text, inner)
                                    for child in self.children]
         return payload
 
 
 _LOCATOR_KEY = {
     "absatz": "abs", "satz": "satz", "nummer": "nr", "buchstabe": "buchst",
-    "doppelbuchstabe": "buchst", "text_block": "text",
+    "doppelbuchstabe": "buchst", "text_block": "text", "unterabsatz": "uabs",
 }
 
 
@@ -297,7 +310,7 @@ def _is_sentence_end(text: str, dot: int, end: int) -> bool:
 
 
 def _sentences(text: str, start: int, end: int, items: list[Node],
-               *, bavarian: bool) -> list[Node]:
+               *, bavarian: bool, closing: bool = True) -> list[Node]:
     """Sentence nodes of one Absatz body, lists kept inside their Satz."""
     if bavarian:
         numbered = _bavarian_sentences(text, start, end)
@@ -333,7 +346,7 @@ def _sentences(text: str, start: int, end: int, items: list[Node],
         sentences.append(Node("satz", None, cursor, end))
     for index, sentence in enumerate(sentences, start=1):
         sentence.number = str(index)
-        _attach_items(text, sentence, items)
+        _attach_items(text, sentence, items, closing=closing)
     return sentences
 
 
@@ -360,7 +373,8 @@ def _bavarian_sentences(text: str, start: int, end: int) -> list[Node]:
     return nodes
 
 
-def _attach_items(text: str, sentence: Node, items: list[Node]) -> None:
+def _attach_items(text: str, sentence: Node, items: list[Node],
+                  *, closing: bool = True) -> None:
     inner = [item for item in items
              if sentence.start <= item.start < sentence.end]
     if not inner:
@@ -373,7 +387,9 @@ def _attach_items(text: str, sentence: Node, items: list[Node]) -> None:
     for item in inner:
         item.end = min(item.end, sentence.end)
     blocks.extend(inner)
-    tail = _closing_words(text, inner[-1], sentence.end)
+    # EU texts put words that close a whole list on their own Unterabsatz
+    # line, so ", sofern …" inside the last point belongs to that point.
+    tail = _closing_words(text, inner[-1], sentence.end) if closing else None
     if tail is not None:
         inner[-1].end = tail.start
         _trim_children(inner[-1])
@@ -400,23 +416,81 @@ def _trim_children(node: Node) -> None:
 
 # ----------------------------------------------------------------- public
 
+def _lines(text: str, start: int, end: int) -> list[tuple[int, int]]:
+    """Non-empty line spans of ``text[start:end]`` (EU Unterabsätze)."""
+    spans, cursor = [], start
+    for match in re.finditer(r"\n", text[start:end]):
+        stop = start + match.start()
+        if text[cursor:stop].strip():
+            spans.append((cursor, stop))
+        cursor = start + match.end()
+    if text[cursor:end].strip():
+        spans.append((cursor, end))
+    return spans
+
+
+def _eu_items(text: str, start: int, end: int, *, spaced: bool
+              ) -> list[Node]:
+    """Nummern, or points (``a)``) that hang directly off the sentence."""
+    items = _items(text, start, end, spaced=spaced)
+    return items or _letters(text, start, end, double=False)
+
+
+def _counted_subparagraphs(text: str) -> list[Node]:
+    nodes = []
+    for index, (start, end) in enumerate(_lines(text, 0, len(text)), start=1):
+        node = Node("absatz", str(index), start, end)
+        node.flags = ["counted_subparagraph"]
+        nodes.append(node)
+    return nodes if len(nodes) > 1 else []
+
+
+def _eu_children(body: str, start: int, end: int, *, spaced: bool
+                 ) -> list[Node]:
+    blocks = _lines(body, start, end)
+    if len(blocks) <= 1:
+        items = _eu_items(body, start, end, spaced=spaced)
+        return _sentences(body, start, end, items, bavarian=False,
+                          closing=False)
+    children, counter = [], 0
+    for index, (block_start, block_end) in enumerate(blocks, start=1):
+        items = _eu_items(body, block_start, block_end, spaced=spaced)
+        sentences = _sentences(body, block_start, block_end, items,
+                               bavarian=False, closing=False)
+        for sentence in sentences:
+            counter += 1
+            sentence.number = str(counter)
+        node = Node("unterabsatz", str(index), block_start, block_end)
+        node.children = sentences
+        children.append(node)
+    return children
+
+
 def parse_norm_structure(text: str, *, bavarian: bool = False,
-                         annex: bool = False) -> dict[str, Any]:
+                         annex: bool = False, eu: bool = False
+                         ) -> dict[str, Any]:
     """Parse one canonical norm body into typed legal units.
 
     The result counts legal units only; offsets always refer to ``text`` so a
     caller can render or diff the canonical bytes without re-tokenizing.
     Annexes (Anlage/Anhang) are usually tables or forms whose "(2)(5)(7)"
     are column references, not Absätze: they get sentence units only.
+    ``eu`` enables Unterabsätze and direct points (module docstring).
     """
     body = text or ""
     absaetze = [] if annex else _absatz_nodes(body)
+    if eu and not annex and not absaetze:
+        absaetze = _counted_subparagraphs(body)
     spaced = bavarian or bool(re.search(r"\b1\.[  ]+\S", body)) and \
         not re.search(r"\b1\.(?=[A-Za-zÄÖÜäöüß„])", body)
     containers = absaetze or [Node("absatz", None, 0, len(body))]
     for absatz in containers:
         content_start = absatz.marker_end if absatz.marker_end is not None \
             else absatz.start
+        if eu and not annex:
+            absatz.children = _eu_children(body, content_start, absatz.end,
+                                           spaced=spaced)
+            continue
         items = [] if annex else _items(body, content_start, absatz.end,
                                         spaced=spaced)
         absatz.children = _sentences(body, content_start, absatz.end, items,
@@ -424,6 +498,8 @@ def parse_norm_structure(text: str, *, bavarian: bool = False,
     units = [node.as_dict(body) for node in containers]
     counts = {"absatz": len(absaetze), "satz": 0, "nummer": 0,
               "buchstabe": 0, "doppelbuchstabe": 0, "text_block": 0}
+    if eu:
+        counts["unterabsatz"] = 0
 
     def count(node: dict[str, Any]) -> None:
         if node["type"] in counts and node["type"] != "absatz":
@@ -434,7 +510,8 @@ def parse_norm_structure(text: str, *, bavarian: bool = False,
     for unit in units:
         count(unit)
     return {
-        "parser_version": STRUCTURE_PARSER_VERSION,
+        "parser_version": (EU_STRUCTURE_PARSER_VERSION if eu
+                           else STRUCTURE_PARSER_VERSION),
         "mode": "annex_sentences_only" if annex else "legal_units",
         "numbered_absaetze": bool(absaetze),
         "counts": counts,
@@ -457,20 +534,32 @@ def normalize_sentence(value: str) -> str:
     return " ".join(text.split())
 
 
+def _satz_nodes(absatz: dict[str, Any]) -> list[dict[str, Any]]:
+    out = []
+    for child in absatz.get("children") or []:
+        if child["type"] == "unterabsatz":
+            out.extend(child.get("children") or [])
+        else:
+            out.append(child)
+    return out
+
+
 def sentence_units(text: str, *, bavarian: bool = False,
-                   annex: bool = False) -> list[dict[str, Any]]:
+                   annex: bool = False, eu: bool = False
+                   ) -> list[dict[str, Any]]:
     """Leaf sentences with structural locators, in document order.
 
     A sentence that carries a list is one unit (its list items are reported
     as ``items`` with their own locators) because legal amendments and
     citations address the whole Satz as well as its Nummern.
     """
-    structure = parse_norm_structure(text, bavarian=bavarian, annex=annex)
+    structure = parse_norm_structure(text, bavarian=bavarian, annex=annex,
+                                     eu=eu)
     result = []
     for absatz in structure["units"]:
-        for satz in absatz.get("children") or []:
+        for satz in _satz_nodes(absatz):
             items = [child for child in satz.get("children") or []
-                     if child["type"] == "nummer"]
+                     if child["type"] in {"nummer", "buchstabe"}]
             full = text[satz["start"]:satz["end"]]
             result.append({
                 "locator": satz["locator"],
@@ -490,12 +579,57 @@ def sentence_units(text: str, *, bavarian: bool = False,
 
 def _short_locator(absatz: dict[str, Any], item: dict[str, Any]) -> str:
     prefix = absatz.get("locator") or ""
-    return f"{prefix}/nr/{item['number']}" if prefix else f"nr/{item['number']}"
+    key = "buchst" if item.get("type") == "buchstabe" else "nr"
+    return (f"{prefix}/{key}/{item['number']}" if prefix
+            else f"{key}/{item['number']}")
+
+
+def find_unit(structure: dict[str, Any], sub: str) -> dict[str, Any] | None:
+    """The unit a sub-unit path names, as courts and citations write it.
+
+    Accepts the exact locator, the short form without the Satz of a list
+    item (``abs/2/nr/3`` for ``abs/2/satz/1/nr/3``), an Unterabsatz-qualified
+    point (``abs/1/uabs/1/buchst/f``) and, for an article whose Absätze are
+    counted Unterabsätze, ``uabs/<n>`` for ``abs/<n>``.
+    """
+    def short(locator: str) -> str:
+        return re.sub(r"/?satz/\d+(?=/(?:nr|buchst)/)", "", locator)
+
+    def search(units, wanted: str):
+        stack = list(reversed(units))
+        while stack:
+            node = stack.pop()
+            locator = node["locator"]
+            if locator == wanted or (node["type"] in {
+                    "nummer", "buchstabe", "doppelbuchstabe"}
+                    and short(locator).lstrip("/") == wanted):
+                return node
+            stack.extend(reversed(node.get("children") or []))
+        return None
+
+    units = structure.get("units") or []
+    found = search(units, sub)
+    if found is not None:
+        return found
+    match = re.fullmatch(r"((?:abs/[^/]+/)?)uabs/(\d+)(/.+)?", sub)
+    if not match:
+        return None
+    parent_path, number = match.group(1).rstrip("/"), match.group(2)
+    rest = match.group(3) or ""
+    if not parent_path and any("counted_subparagraph" in (u.get("flags") or [])
+                               for u in units):
+        return search(units, f"abs/{number}{rest}")
+    holder = search(units, (f"{parent_path}/" if parent_path else "")
+                    + f"uabs/{number}")
+    if holder is None or not rest:
+        return holder
+    return search(holder.get("children") or [],
+                  f"{parent_path}{rest}".lstrip("/"))
 
 
 def human_locator(locator: str) -> str:
     """Render ``abs/2/satz/3/nr/1`` as ``Abs. 2 Satz 3 Nr. 1``."""
-    labels = {"abs": "Abs.", "satz": "Satz", "nr": "Nr.",
+    labels = {"abs": "Abs.", "uabs": "UAbs.", "satz": "Satz", "nr": "Nr.",
               "buchst": "Buchst.", "text": ""}
     parts = [part for part in (locator or "").split("/") if part]
     out = []

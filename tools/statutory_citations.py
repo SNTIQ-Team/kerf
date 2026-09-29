@@ -646,6 +646,7 @@ def _act_inventory(acts: Iterable[dict], reader_directory: Path | None = None,
             "jurabk": jurabk,
             "juris": _clean(source.get("juris")),
             "title": _clean(source.get("title")),
+            "source_snapshot": _clean(source.get("source_snapshot")) or None,
             "norms": norms,
             "norm_order": norm_order,
             "norm_set": norm_set,
@@ -830,7 +831,11 @@ def build_citation_index(acts: Iterable[dict], *, built_at: str,
                             "source_jurabk": source_act["jurabk"],
                             "source_norm": source_norm_row["norm"],
                             "source_excerpt": excerpt,
-                            "source_snapshot": (source_snapshots or {}).get(
+                            # an act from another snapshot family than
+                            # its jurisdiction's feed names its own
+                            "source_snapshot": source_act.get(
+                                "source_snapshot") or (
+                                source_snapshots or {}).get(
                                 source_act["juris"]),
                             "date_basis": (
                                 "current_consolidated_snapshot_observation_"

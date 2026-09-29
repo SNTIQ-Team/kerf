@@ -46,6 +46,7 @@ from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from tools.reader_blocks import refresh_cached_sidecars  # noqa: E402
 from tools.archived_reader_store import publish_archived_readers  # noqa: E402
 from tools.bavarian_states import publish_states as publish_bavarian_states  # noqa: E402
+from tools import by_archive_history, eu_history  # noqa: E402
 from legacy_bgbl_history import load_reviewed_candidates  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
 from tools.decision_passages import build_index as build_decision_passages
@@ -631,6 +632,29 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
         }
         if decs:
             details[aid]["decisions"] = decs
+        if BY_ALIASES.get(jb):
+            idx[-1]["aliases"] = details[aid]["aliases"] = BY_ALIASES[jb]
+
+    # Bavarian acts outside the live feed, from archived official copies
+    # (pipeline/fetch_bayern_archive.py); the live feed wins when both exist.
+    archive_snapshot = latest_snapshot("bayern_recht_archive")
+    for row in load("bayern_recht_archive", "acts.jsonl"):
+        detail = by_archive_history.build(row)
+        if detail["id"] in details:
+            continue
+        detail["source_snapshot"] = f"bayern_recht_archive/{archive_snapshot.name}"
+        detail["aliases"] = BY_ALIASES.get(detail["jurabk"], [])
+        idx.append(by_archive_history.index_row(detail))
+        details[detail["id"]] = detail
+    # EU acts, treaties and the EMRK with article texts and version history
+    # (pipeline/fetch_eu_texts.py, pipeline/fetch_emrk.py).
+    eu_rows = load("eu_texts", "acts.jsonl") + load("emrk", "acts.jsonl")
+    eu_history.link_extensions(eu_rows)
+    for row in eu_rows:
+        detail = eu_history.build(
+            row, juris="INT" if row["act_id"].startswith("int_") else "EU")
+        idx.append(eu_history.index_row(detail))
+        details[detail["id"]] = detail
 
     # norms in one pass per corpus (files are big)
     for src, prefix in (("gii", "fed_"), ("bayern_recht", "by_")):
@@ -643,6 +667,14 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
                      "glied": n.get("gliederung") or ""})
     return idx, details
 
+
+# Further official/customary short forms of Bavarian acts (resolver aliases):
+# "BayPAG" and "BayVwZVG" are how many decisions cite PAG and VwZVG.
+BY_ALIASES = {
+    "DVAsyl": ["AsylDV"], "VwZVG": ["BayVwZVG"], "PAG": ["BayPAG"],
+    "AGSG": ["BayAGSG"], "AGVwGO": ["BayAGVwGO"], "LStVG": ["BayLStVG"],
+    "AufnG": ["BayAufnG"], "BayLTGeschO": ["GeschO BayLT", "BayLTGO"],
+}
 
 _BY_NEEDLES = {
     "AufnG": "aufnahmegesetz", "DVAsyl": "asyldurchführungsverordnung",
@@ -1011,6 +1043,10 @@ def build_hierarchy(wiki_idx: list[dict]) -> dict:
     } for i in instruments]
     bund_acts = [a for a in wiki_idx if a["juris"] == "DE"]
     bayern_acts = [a for a in wiki_idx if a["juris"] == "DE-BY"]
+    eu_text_acts = [a for a in wiki_idx if a["juris"] in {"EU", "INT"}]
+    texted = {str(a.get("celex") or "") for a in eu_text_acts}
+    primary_refs = [{**ref, "in_corpus": ref["celex"].split("/")[0] in texted}
+                    for ref in EU_PRIMARY_REFERENCES]
     return {
         "meta": {
             "schema_version": 2,
@@ -1030,9 +1066,12 @@ def build_hierarchy(wiki_idx: list[dict]) -> dict:
             # honest external references; secondary law below is the indexed
             # curated layer.
             "primary": {
-                "indexed": False,
-                "references": EU_PRIMARY_REFERENCES,
+                "indexed": any(ref["in_corpus"] for ref in primary_refs),
+                "references": primary_refs,
             },
+            # Acts with German article texts and version history (the curated
+            # EU corpus, treaties, the Charter and the EMRK).
+            "texts": eu_text_acts,
             "secondary": {
                 "directives": [i for i in eu_instruments
                                if i["kind"] == "directive"],
@@ -1706,7 +1745,8 @@ def main() -> int:
         previous_directory=ROOT / "data" / "reader")
     print("reader structure:", json.dumps(reader_refresh, ensure_ascii=False))
     citation_snapshots = {}
-    for juris, family in (("DE", "gii"), ("DE-BY", "bayern_recht")):
+    for juris, family in (("DE", "gii"), ("DE-BY", "bayern_recht"),
+                          ("EU", "eu_texts"), ("INT", "emrk")):
         snapshot = latest_snapshot(family)
         if snapshot:
             citation_snapshots[juris] = snapshot.name

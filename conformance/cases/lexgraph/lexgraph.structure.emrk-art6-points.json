@@ -1,0 +1,33 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.structure.emrk-art6-points",
+  "module": "lexgraph",
+  "kind": "norm_structure",
+  "description": "Art. 6 EMRK (Council of Europe German text): three Absätze; Abs. 3 lists the rights of the accused as points a)-e) ('Art. 6 Abs. 3 Buchst. c EMRK').",
+  "origin": "pipeline/fetch_emrk.py; api/law_structure.py eu mode",
+  "status": "active",
+  "input": {
+    "fixture": "conformance/fixtures/eu_texts/norm_texts.json",
+    "key": "emrk_art6",
+    "eu": true
+  },
+  "expected": {
+    "counts": {
+      "absatz": 3,
+      "buchstabe": 5
+    },
+    "locators": {
+      "buchstabe": [
+        "abs/3/satz/1/buchst/a",
+        "abs/3/satz/1/buchst/b",
+        "abs/3/satz/1/buchst/c",
+        "abs/3/satz/1/buchst/d",
+        "abs/3/satz/1/buchst/e"
+      ]
+    },
+    "texts": {
+      "abs/3/satz/1/buchst/c": "sich selbst zu verteidigen, sich durch einen Verteidiger ihrer Wahl verteidigen zu lassen oder, falls ihr die Mittel zur Bezahlung fehlen, unentgeltlich den Beistand eines Verteidigers zu erhalten, wenn dies im Interesse der Rechtspflege erforderlich ist;"
+    }
+  },
+  "match": "subset"
+}
