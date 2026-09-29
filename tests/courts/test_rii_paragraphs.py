@@ -49,8 +49,11 @@ def test_rn6_absorbs_three_unnumbered_blocks(paragraphs):
 def test_unnumbered_heading_before_first_rn_gets_stable_positional_id(paragraphs):
     assert paragraphs["gruende-u1"].text == "I"
     assert paragraphs["gruende-u1"].rn is None
-    # "II" between Rn 2 and Rn 3 continues Rn 2 (spec: unnumbered blocks continue the previous Rn)
-    assert paragraphs["rn-2"].blocks[-1].text == "II"
+    # Heading II is a distinct structural unit, not quoted as part of Rn. 2.
+    assert paragraphs["gruende-u2"].text == "II"
+    assert paragraphs["gruende-u2"].rn is None
+    assert not paragraphs["rn-2"].text.endswith("II")
+    assert len(paragraphs["rn-2"].blocks) == 1
 
 
 def test_rn_sequence_complete(paragraphs):

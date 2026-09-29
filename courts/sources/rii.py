@@ -94,11 +94,18 @@ def section_blocks(node: ET.Element, xml_path: str) -> list[Block]:
                 label = squash("".join(dt.itertext())) if dt is not None else ""
                 anchors = [a.get("name") for a in dt.iter("a") if a.get("name")] if dt is not None else []
                 heading = len(dd) > 0 and all(c.tag in {"h1", "h2", "h3", "h4", "h5", "h6"} for c in dd)
+                # RII also encodes standalone section labels as <dd><p>II</p>.
+                # Keep them separate, while ordinary empty-dt text still extends
+                # the previous Rn (including quoted multi-block questions).
+                outline = squash(text_content(dd))
+                if not label and re.fullmatch(r"[IVXLCDM]{1,12}\.?", outline):
+                    heading = True
                 blocks.append(Block(text=text_content(dd), label=label or None,
                                     kind="heading" if heading else "text",
                                     locator=cpath + "/dd[1]" + (f"#{anchors[0]}" if anchors else "")))
             elif child.tag in BLOCK_TAGS:
-                blocks.append(Block(text=text_content(child), locator=cpath))
+                blocks.append(Block(text=text_content(child), locator=cpath,
+                                    kind="heading" if child.tag in {"h1", "h2", "h3", "h4", "h5", "h6"} else "text"))
             else:
                 visit(child, cpath)
     visit(node, xml_path)
