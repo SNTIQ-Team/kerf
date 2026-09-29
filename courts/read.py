@@ -187,11 +187,13 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
         st = states[sid]
         available = st["status"] not in UNAVAILABLE
         unavailable |= not available
-        if available and ((st["pending_items"] or 0) > 0 or not st["listing_complete"]):
+        if available and ((st["pending_items"] or 0) > 0 or (st["failed_items"] or 0) > 0
+                          or not st["listing_complete"] or st["status"] != "ok"):
             incomplete = True
             upstream = st["upstream_listed"]
             warnings.append(f"{sid}: local corpus holds {st['decisions']} decisions; backfill incomplete "
-                            f"({st['pending_items']} listed but not synced; upstream total "
+                            f"({st['pending_items']} listed but not synced; {st['failed_items']} failed items; "
+                            f"source status {st['status']}; upstream total "
                             f"{upstream if upstream is not None else 'unknown'})")
         if not available:
             failed.append({"source": sid, "status": st["status"], "reason": st["status_reason"]})

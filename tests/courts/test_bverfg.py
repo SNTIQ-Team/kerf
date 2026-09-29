@@ -91,9 +91,10 @@ def test_randnummern_new_template(kammer):
     assert [p.rn for p in paras if p.rn] == [str(n) for n in range(1, 28)]
     assert locate_quote(paras, "Die Durchsuchung erfolgte am 27. April 2022.") == [f"{e}#rn-4"]
     assert locate_quote(paras, "Diese Entscheidung ist unanfechtbar.") == [f"{e}#rn-27"]
-    # The heading "II." sits between Rn 5 and the marker of Rn 6: it continues Rn 5.
+    # The source heading is separate; an unnumbered heading does not get an invented Rn.
     rn5 = next(p for p in paras if p.rn == "5")
-    assert rn5.blocks[-1].kind == "heading" and rn5.blocks[-1].text == "II."
+    assert all(b.kind != "heading" for b in rn5.blocks)
+    assert any(p.rn is None and p.text == "II." for p in paras)
     # "I." precedes the first marker: positional id, not a Randnummer.
     assert paras[3].id == f"{e}#gruende-u1" and paras[3].rn is None
 

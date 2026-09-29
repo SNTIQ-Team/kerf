@@ -2,7 +2,8 @@
 
 Rules (spec, "Identity: Paragraph"):
 * A Randnummer runs until the next explicitly numbered block.
-* Unnumbered blocks continue the previous Rn of the same section.
+* Unnumbered text blocks continue the previous Rn of the same section.
+* Explicit unnumbered headings are separate positional paragraphs, not Rn text.
 * Page breaks never create a Rn (and never split one).
 * A section's unnumbered blocks before its first Rn, and sections without any
   explicit numbers, get stable positional ids.
@@ -82,6 +83,12 @@ def assemble(decision_id: str, sections: list[Section]) -> tuple[list[Paragraph]
                 if pid in used:
                     raise ValueError(f"Randnummer {label} appears twice in section {section.name}")
                 current = add(pid, section, label, block)
+            elif block.kind == "heading":
+                # A source-labelled heading is not part of the preceding Rn.
+                # A numbered heading was already handled above and keeps its Rn.
+                current = None
+                leading[section.name] = leading.get(section.name, 0) + 1
+                add(f"{decision_id}#{section.name}-u{leading[section.name]}", section, None, block)
             elif current is not None:
                 current.blocks.append(block)
             else:

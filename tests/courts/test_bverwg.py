@@ -85,10 +85,11 @@ def test_randnummern_assembly_and_quote(urteil):
     assert locate_quote(paragraphs, "Die Kostenentscheidung folgt aus § 154 Abs. 1 VwGO.") == [urteil.ecli + "#rn-16"]
     assert locate_quote(paragraphs, "Seit 1975 zahlt die Klägerin jeweils jährlich festgesetzte Beiträge "
                                     "zur Insolvenzsicherung") == [urteil.ecli + "#rn-2"]
-    # The Rn marker itself is not part of the text; the heading "II" continues Rn 7 (no own Rn).
+    # The Rn marker and the following standalone heading are not part of Rn text.
     assert ids[urteil.ecli + "#rn-2"].text.startswith("Seit 1975")
     rn7 = ids[urteil.ecli + "#rn-7"]
-    assert [b.kind for b in rn7.blocks] == ["text", "heading"] and rn7.blocks[1].text == "II"
+    assert [b.kind for b in rn7.blocks] == ["text"]
+    assert any(p.rn is None and p.text == "II" for p in paragraphs)
     assert ids[urteil.ecli + "#gruende-u1"].text == "I"
     assert [p.id.split("#")[1] for p in paragraphs[:4]] == ["titel-1", "leitsatz-1", "tenor-1", "tenor-2"]
 
@@ -267,7 +268,7 @@ def test_store_roundtrip(urteil):
     decision_id, changed = store_decision(conn, urteil, content_hash="x", capture_path="raw/x", media_type="text/html")
     assert changed and decision_id == urteil.ecli
     row = conn.execute("SELECT numbering, paragraph_count FROM decisions WHERE id=?", (decision_id,)).fetchone()
-    assert row["numbering"] == "rn" and row["paragraph_count"] == 21
+    assert row["numbering"] == "rn" and row["paragraph_count"] == 22
     rel = conn.execute("SELECT origin, detail FROM relations WHERE decision_id=? AND relation='procedural_reference'"
                        " AND target_kind='decision'", (decision_id,)).fetchall()
     assert len(rel) == 2 and {r["origin"] for r in rel} == {"source_metadata"}

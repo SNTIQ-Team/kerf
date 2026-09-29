@@ -43,8 +43,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
-STRUCTURE_PARSER_VERSION = "law-structure/1"
-EU_STRUCTURE_PARSER_VERSION = "law-structure/1+eu-1"
+STRUCTURE_PARSER_VERSION = "law-structure/1.1"
+EU_STRUCTURE_PARSER_VERSION = "law-structure/1.1+eu-1"
 
 _ABSATZ = re.compile(r"\((\d{1,3})([a-z]?)\)\s*")
 _NUMMER = re.compile(r"(?<![§\d])(\d{1,3})([a-z]{0,2})\.(?=[A-Za-zÄÖÜäöüß„»\"(])")
@@ -217,7 +217,14 @@ def _items(text: str, start: int, end: int, *, spaced: bool
         before = text[start:match.start()].rstrip()
         # GII glues "sowie6.die"; accept a letter directly before the number
         # only in unspaced (flattened) text, otherwise demand a separator.
-        if spaced and before and before[-1].isalnum():
+        if spaced and match.start() > start and text[match.start() - 1].isalnum():
+            continue
+        # Whitespace is a separator, not a reason to reject "und 1. ...".
+        # Dates/ordinals and explicit citation numbers are still not list items.
+        next_word = re.match(r"([\wÄÖÜäöüß]+)", text[match.end():end])
+        if next_word and next_word.group(1).casefold() in _ORDINAL_NOUNS:
+            continue
+        if re.search(r"(?:§{1,2}|\b(?:Abs|Art|Nr|S|Satz|Nummer|Artikel|Absatz)\.?)[ \u00a0]*$", before, re.I):
             continue
         candidates.append((match, number))
     items: list[Node] = []
@@ -286,9 +293,10 @@ def _is_sentence_end(text: str, dot: int, end: int) -> bool:
     stripped = after.lstrip("  \t\n")
     if not stripped:
         return True
-    if stripped[0] in "(":
-        return False
-    if not (stripped[0].isupper() or stripped[0] in "„»\""):
+    # A sentence may start with a norm reference, a number, or a quoted /
+    # parenthesized statement. Abbreviation/ordinal guards below still apply.
+    opener = stripped.lstrip('(„»" ')
+    if not opener or not (opener[0].isupper() or opener[0] == "§" or opener[0].isdigit()):
         return False
     if text[dot] in "?!":
         return True
@@ -316,7 +324,11 @@ def _sentences(text: str, start: int, end: int, items: list[Node],
         numbered = _bavarian_sentences(text, start, end)
         if numbered:
             for sentence in numbered:
-                _attach_items(text, sentence, items)
+                # Each explicitly numbered sentence starts its own Nr. 1 list.
+                # Parsing the whole Absatz once loses subsequent lists.
+                own_items = _items(text, sentence.marker_end or sentence.start,
+                                   sentence.end, spaced=True)
+                _attach_items(text, sentence, own_items)
             return numbered
     protected = [(item.start, item.end) for item in items]
     boundaries: list[int] = []
