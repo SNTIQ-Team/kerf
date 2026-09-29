@@ -116,21 +116,37 @@ def wanted_row(row: dict, lands: set[str], keys: set, eclis: set) -> str | None:
     return None
 
 
-def _download(url: str, path: Path, tok: str) -> None:
+def _download(url: str, path: Path, tok: str, *, attempts: int = 6) -> None:
+    """One shard, resumed with a Range request when the connection breaks mid-file (a 250 MB shard over
+    huggingface.co's CDN does break: IncompleteRead) - a broken shard must not fail the whole run."""
+    import time as _time
     import requests
-    with requests.get(url, headers={"User-Agent": USER_AGENT, "Authorization": f"Bearer {tok}"}, stream=True,
-                      timeout=300) as response:
-        if response.status_code in (401, 403):
-            raise UpstreamFailure("login", f"{DATASET} is gated: the operator's Hugging Face account must "
-                                  f"request access ({response.headers.get('x-error-code', response.status_code)})",
-                                  url=url, status=response.status_code)
-        if response.status_code != 200:
-            raise UpstreamFailure("http_error", f"HTTP {response.status_code}", url=url, status=response.status_code)
-        tmp = path.with_name(path.name + ".part")
-        with open(tmp, "wb") as handle:
-            for chunk in response.iter_content(1 << 20):
-                handle.write(chunk)
-        os.replace(tmp, path)
+    tmp = path.with_name(path.name + ".part")
+    tmp.unlink(missing_ok=True)
+    for attempt in range(1, attempts + 1):
+        have = tmp.stat().st_size if tmp.exists() else 0
+        headers = {"User-Agent": USER_AGENT, "Authorization": f"Bearer {tok}"}
+        if have:
+            headers["Range"] = f"bytes={have}-"
+        try:
+            with requests.get(url, headers=headers, stream=True, timeout=300) as response:
+                if response.status_code in (401, 403):
+                    raise UpstreamFailure("login", f"{DATASET} is gated: the operator's Hugging Face account must "
+                                          f"request access ({response.headers.get('x-error-code', response.status_code)})",
+                                          url=url, status=response.status_code)
+                if response.status_code not in (200, 206):
+                    raise UpstreamFailure("http_error", f"HTTP {response.status_code}", url=url,
+                                          status=response.status_code)
+                with open(tmp, "ab" if response.status_code == 206 else "wb") as handle:
+                    for chunk in response.iter_content(1 << 20):
+                        handle.write(chunk)
+            os.replace(tmp, path)
+            return
+        except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout):
+            if attempt == attempts:
+                raise
+            _time.sleep(min(60, 5 * attempt))
 
 
 def shard_rows(path: Path):
