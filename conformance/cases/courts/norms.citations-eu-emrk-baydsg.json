@@ -1,0 +1,23 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.norms.citations-eu-emrk-baydsg",
+  "module": "courts",
+  "kind": "norm_citations",
+  "description": "Courts citations to the EU/treaty/Bavarian acts of the Lexgraph text corpus get the same ids /norms/resolve answers (eu/<CELEX>, int/emrk, de/by/<slug>).",
+  "origin": "operating principle 1 (one identity); Lexgraph EU/BY corpus 2026-09",
+  "status": "active",
+  "input": {
+    "text": "Der Anspruch folgt aus Art. 15 Abs. 3 Satz 1 DSGVO, Art. 5 RL 2001/55/EG und Art. 20 BayDSG; ferner Art. 6 Abs. 1 EMRK und Art. 47 GRCh.",
+    "land": "by"
+  },
+  "expected": {
+    "targets": [
+      "eu/32016R0679/art/15/abs/3/satz/1",
+      "eu/32001L0055/art/5",
+      "de/by/baydsg/art/20",
+      "int/emrk/art/6/abs/1",
+      "eu/12016P/art/47"
+    ]
+  },
+  "match": "subset"
+}

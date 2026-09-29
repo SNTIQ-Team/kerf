@@ -1,0 +1,47 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.structure.eu-aeuv-art267-counted-subparagraphs",
+  "module": "lexgraph",
+  "kind": "norm_structure",
+  "description": "Art. 267 AEUV has no numbered paragraphs; its four Unterabsätze are counted as Absätze (German practice: 'Art. 267 Abs. 3 AEUV' is the duty to refer), each flagged counted_subparagraph.",
+  "origin": "EU text corpus; api/law_structure.py counted subparagraphs",
+  "status": "active",
+  "input": {
+    "fixture": "conformance/fixtures/eu_texts/norm_texts.json",
+    "key": "aeuv_art267",
+    "eu": true
+  },
+  "expected": {
+    "counts": {
+      "absatz": 4,
+      "buchstabe": 2
+    },
+    "locators": {
+      "absatz": [
+        "abs/1",
+        "abs/2",
+        "abs/3",
+        "abs/4"
+      ]
+    },
+    "flags": {
+      "abs/1": [
+        "counted_subparagraph"
+      ],
+      "abs/2": [
+        "counted_subparagraph"
+      ],
+      "abs/3": [
+        "counted_subparagraph"
+      ],
+      "abs/4": [
+        "counted_subparagraph"
+      ]
+    },
+    "texts": {
+      "abs/3": "Wird eine derartige Frage in einem schwebenden Verfahren bei einem einzelstaatlichen Gericht gestellt, dessen Entscheidungen selbst nicht mehr mit Rechtsmitteln des innerstaatlichen Rechts angefochten werden können, so ist dieses Gericht zur Anrufung des Gerichtshofs verpflichtet.",
+      "abs/1/satz/1/buchst/b": "über die Gültigkeit und die Auslegung der Handlungen der Organe, Einrichtungen oder sonstigen Stellen der Union,"
+    }
+  },
+  "match": "subset"
+}

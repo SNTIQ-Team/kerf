@@ -1300,9 +1300,26 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
     act_id = str(act["id"])
     prefix = act_prefix(act)
     findings: list[dict[str, Any]] = []
+    if act_id.startswith(("eu_", "int_")):
+        history = act.get("history") or {}
+        return build_bavarian_bundle_act(
+            writer, act, as_of,
+            {kind: list(history.get(kind) or [])
+             for kind in ("version", "change", "finding")},
+            states=list(history.get("states") or []),
+            event_status="official_metadata")
     if act_id.startswith("by_") and act_id in BAVARIAN_RECORDS:
         return build_bavarian_bundle_act(writer, act, as_of,
                                          BAVARIAN_RECORDS[act_id])
+    if act_id.startswith("by_") and (act.get("history") or {}).get("version"):
+        # archived official copies (tools/by_archive_history.py)
+        history = act["history"]
+        return build_bavarian_bundle_act(
+            writer, act, as_of,
+            {kind: list(history.get(kind) or [])
+             for kind in ("version", "change", "finding")},
+            states=list(history.get("states") or []),
+            event_status="archived_captures")
     if act_id.startswith("by_") and not _bundle_has(bundle, act_id):
         return build_bavarian_archive_act(writer, act, as_of)
     if act_id.startswith("by_"):
@@ -1602,20 +1619,24 @@ def load_bavarian_records(path: Path | None) -> int:
 
 def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
                               as_of: str,
-                              records: dict[str, list[dict[str, Any]]]
+                              records: dict[str, list[dict[str, Any]]],
+                              *, states: list[dict[str, Any]] | None = None,
+                              event_status: str = "gvbl_dated"
                               ) -> dict[str, Any]:
     """Bavarian versions and GVBl-dated change records (archive worker build).
 
     tools/bavarian_history.py already chains archived BAYERN.RECHT captures
     and daily snapshots per norm and dates every change from the GVBl
-    document; this writes them into the common schema.
+    document; this writes them into the common schema.  EU and treaty acts
+    (tools/eu_history.py) use the same record shape and pass their own
+    edition ``states``.
     """
     act_id = str(act["id"])
     versions_by_norm: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in records["version"]:
         versions_by_norm[str(row["canonical_id"])].append(row)
     vseq_of: dict[str, tuple[str, int]] = {}
-    states: dict[tuple[str, str], dict[str, Any]] = {}
+    states_seen: dict[tuple[str, str], dict[str, Any]] = {}
     norm_rows = []
     total = 0
     for norm_id, rows in versions_by_norm.items():
@@ -1645,7 +1666,7 @@ def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
                         "stand": att.get("stand")}.items() if v}]})
                 if att.get("kind") == "full" and att.get("sha256"):
                     key = (str(att.get("sha256")), str(att.get("known_at")))
-                    states.setdefault(key, {
+                    states_seen.setdefault(key, {
                         "source": ("wayback_bayern" if att.get("role") ==
                                    "archived_capture" else "bayern_recht"),
                         "role": att.get("role") or "archived_capture",
@@ -1669,7 +1690,9 @@ def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
                     "valid_until_status": temporal.get("valid_until_status"),
                     "change_ids": [change["change_id"]]
                     if change.get("change_id") else [],
-                    "attribution": ({"status": "bracketed_by_captures",
+                    "attribution": (temporal["attribution"]
+                                    if "attribution" in temporal else
+                                    {"status": "bracketed_by_captures",
                                      "verification": "bracketed_by_captures"}
                                     if temporal.get("valid_from") and
                                     change.get("change_id") else None),
@@ -1727,24 +1750,29 @@ def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
              change["sort_date"],
              "in_force" if change_effective_date(change) else "unknown",
              pack_json(change)))
-    ordered = sorted(states.values(), key=lambda s: str(s["known_from"]))
-    head = {"source": "bayern_recht", "role": "official_consolidation",
-            "known_from": None, "known_until": None,
-            "url": act.get("permalink"), "archive_url": None, "sha256": None,
-            "stand": None}
-    build = str(act.get("build") or "")
-    if m := re.fullmatch(r"(\d{2})\.(\d{2})\.(\d{4})", build):
-        head["known_from"] = head["known_until"] = \
-            f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-    ordered.append(head)
+    if states is not None:
+        ordered = [{"archive_url": None, **state} for state in states]
+    else:
+        ordered = sorted(states_seen.values(),
+                         key=lambda s: str(s["known_from"]))
+        head = {"source": "bayern_recht", "role": "official_consolidation",
+                "known_from": None, "known_until": None,
+                "url": act.get("permalink"), "archive_url": None,
+                "sha256": None, "stand": None}
+        build = str(act.get("build") or "")
+        if m := re.fullmatch(r"(\d{2})\.(\d{2})\.(\d{4})", build):
+            head["known_from"] = head["known_until"] = \
+                f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+        ordered.append(head)
     for seq, state in enumerate(ordered):
         writer.db.execute(
             "INSERT INTO states VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (act_id, seq, f"{act_id}:{state['sha256'] or 'head'}:{seq}",
              state["source"], state["role"], state["known_from"],
              state["known_until"], state["url"], state["archive_url"],
-             state["sha256"], state["stand"], _json({}), 1, None, None, None,
-             None, None))
+             state["sha256"], state["stand"], _json({}), 1,
+             state.get("valid_from"), state.get("valid_from_status"),
+             state.get("valid_from_basis"), state.get("valid_until"), None))
     for finding in records["finding"]:
         writer.db.execute(
             "INSERT INTO findings(act_id, norm_id, kind, detail_json) "
@@ -1772,7 +1800,7 @@ def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
         "event_history_start": min((c["sort_date"] for c in changes
                                     if c["sort_date"] > "0000"),
                                    default=None),
-        "event_history_status": "gvbl_dated",
+        "event_history_status": event_status,
     }
     writer.db.execute("INSERT INTO acts VALUES (?,?,?,?,?,?)",
                       (act_id, act_prefix(act), act.get("jurabk"),
@@ -1971,7 +1999,7 @@ def main(argv: list[str] | None = None) -> int:
             act_id = path.stem
             if wanted and act_id not in wanted:
                 continue
-            if not (act_id.startswith("fed_") or act_id.startswith("by_")):
+            if not act_id.startswith(("fed_", "by_", "eu_", "int_")):
                 continue
             act = json.loads(path.read_text(encoding="utf-8"))
             if not (act.get("norms") or act.get("official_states")):

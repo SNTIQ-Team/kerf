@@ -149,7 +149,8 @@ def norm_chain(store: LawHistoryStore, resolved: dict[str, Any],
         act=_act_summary(act), prefix=f"{juris}/{slug}", states=states,
         norms={}, events=[], history_start=info.get("event_history_start"),
         bavarian=bavarian, warnings=[], retrospective_status="ok",
-        snapshot={"law_history": True})
+        snapshot={"law_history": True},
+        eu=act_id.startswith(("eu_", "int_")))
     chain.law_history = info  # type: ignore[attr-defined]
     return chain, versions, changes
 

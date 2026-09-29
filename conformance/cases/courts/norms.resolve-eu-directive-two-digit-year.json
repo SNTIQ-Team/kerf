@@ -1,0 +1,18 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "courts.norms.resolve-eu-directive-two-digit-year",
+  "module": "courts",
+  "kind": "act_resolution",
+  "description": "canonical act resolution: a directive with a two-digit year is year/number",
+  "origin": "api.norm_identity.eu_act_from_citation / ActResolver",
+  "status": "active",
+  "input": {
+    "abbreviation": "Richtlinie 64/221/EWG",
+    "land": "by"
+  },
+  "expected": {
+    "prefix": "eu/31964L0221",
+    "basis": "eu_citation"
+  },
+  "match": "subset"
+}

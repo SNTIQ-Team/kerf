@@ -77,17 +77,19 @@ def _yaml(value: Any) -> str:
     return json.dumps(str(value), ensure_ascii=False)
 
 
-def render_body(text: str, *, bavarian: bool, annex: bool = False
-                ) -> list[str]:
+def render_body(text: str, *, bavarian: bool, annex: bool = False,
+                eu: bool = False) -> list[str]:
     """One legal sentence per line; Absätze separated by a blank line."""
-    structure = parse_norm_structure(text, bavarian=bavarian, annex=annex)
+    from api.law_structure import _satz_nodes
+    structure = parse_norm_structure(text, bavarian=bavarian, annex=annex,
+                                     eu=eu)
     lines: list[str] = []
     for absatz in structure["units"]:
         if lines:
             lines.append("")
         marker = absatz.get("marker")
         first = True
-        for satz in absatz.get("children") or []:
+        for satz in _satz_nodes(absatz):
             prefix = f"{marker} " if (marker and first) else ""
             first = False
             children = satz.get("children") or []
@@ -518,13 +520,15 @@ def _history_front_matter(act: dict[str, Any], prefix: str, norm_id: str,
     unit, number = norm_id.split("/")[-2:]
     number = number.split("~")[0]
     bavarian = prefix.startswith("de/by")
-    if bavarian:
+    eu = prefix.startswith(("eu/", "int/"))
+    if bavarian or eu:
         url = {"url": None, "status": "not_resolved",
-               "act_url": act.get("permalink")}
+               "act_url": act.get("permalink") or act.get("source_url")}
     else:
         url = gii_norm_url(toc, prefix.split("/")[2], unit, number)
     structure = parse_norm_structure(version.text, bavarian=bavarian,
-                                     annex=unit in {"anlage", "anhang"})
+                                     annex=unit in {"anlage", "anhang"},
+                                     eu=eu)
     dates = (change or {}).get("dates") or {}
     amending = (change or {}).get("amending_act") or {}
 
@@ -583,7 +587,7 @@ def _history_front_matter(act: dict[str, Any], prefix: str, norm_id: str,
     lines.append(f"# {heading}")
     lines.append("")
     lines.extend(render_body(version.text, bavarian=bavarian,
-                             annex=unit in {"anlage", "anhang"}))
+                             annex=unit in {"anlage", "anhang"}, eu=eu))
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -886,7 +890,8 @@ def export(repo: Path, commits: list[PlannedCommit]) -> dict[str, Any]:
 def default_acts(data_dir: Path) -> list[str]:
     rows = json.loads((data_dir / "wiki.json").read_text(encoding="utf-8"))
     return sorted(str(row["id"]) for row in rows
-                  if str(row.get("id", "")).startswith(("fed_", "by_")))
+                  if str(row.get("id", "")).startswith(
+                      ("fed_", "by_", "eu_", "int_")))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -896,7 +901,8 @@ def main(argv: list[str] | None = None) -> int:
                             "LEXGRAPH_DATA", ROOT / "web" / "data")))
     parser.add_argument("--repo", type=Path, default=DEFAULT_REPO)
     parser.add_argument("--acts", default="",
-                        help="comma-separated act ids (default: all fed_/by_)")
+                        help="comma-separated act ids (default: all fed_/by_/"
+                             "eu_/int_)")
     parser.add_argument("--report", type=Path, default=None)
     parser.add_argument("--legacy-chain", action="store_true",
                         help="plan from the per-state chain instead of "
@@ -929,8 +935,10 @@ def main(argv: list[str] | None = None) -> int:
         "repo": str(args.repo.expanduser()),
         **result,
         "acts": report,
-        "eu": {"status": "not_in_corpus",
-               "reason": "Lexgraph's EU layer is metadata only"},
+        "eu": {"status": "exported" if any(
+                   a.startswith(("eu_", "int_")) for a in acts) else "none",
+               "reason": "EU/treaty acts with German article texts "
+                         "(pipeline/fetch_eu_texts.py, fetch_emrk.py)"},
     }
     report_path = args.report or args.repo.expanduser().with_name(
         args.repo.expanduser().name + ".export.json")

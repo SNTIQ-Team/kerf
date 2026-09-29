@@ -1,0 +1,47 @@
+{
+  "format": "sntiq-conformance/1",
+  "id": "lexgraph.structure.eu-dsgvo-art6-unterabsatz",
+  "module": "lexgraph",
+  "kind": "norm_structure",
+  "description": "Art. 6 DSGVO (CELLAR consolidated Formex): Abs. 1 has two Unterabsätze, the points a)-f) hang off Satz 1 and 'Unterabsatz 1 Buchstabe f gilt nicht ...' is UAbs. 2 = Satz 2 (sentences counted across the Absatz, as courts cite 'Art. 6 Abs. 1 Satz 2 DSGVO'). ', sofern nicht ...' inside point f) is not a Schlussteil of the list.",
+  "origin": "EU text corpus (pipeline/fetch_eu_texts.py); api/law_structure.py eu mode",
+  "status": "active",
+  "input": {
+    "fixture": "conformance/fixtures/eu_texts/norm_texts.json",
+    "key": "dsgvo_art6",
+    "eu": true
+  },
+  "expected": {
+    "mode": "legal_units",
+    "numbered_absaetze": true,
+    "counts": {
+      "absatz": 4,
+      "satz": 8,
+      "nummer": 0,
+      "buchstabe": 13,
+      "doppelbuchstabe": 0,
+      "text_block": 3,
+      "unterabsatz": 4
+    },
+    "locators": {
+      "absatz": [
+        "abs/1",
+        "abs/2",
+        "abs/3",
+        "abs/4"
+      ],
+      "unterabsatz": [
+        "abs/1/uabs/1",
+        "abs/1/uabs/2",
+        "abs/3/uabs/1",
+        "abs/3/uabs/2"
+      ]
+    },
+    "texts": {
+      "abs/1/uabs/2": "Unterabsatz 1 Buchstabe f gilt nicht für die von Behörden in Erfüllung ihrer Aufgaben vorgenommene Verarbeitung.",
+      "abs/1/satz/2": "Unterabsatz 1 Buchstabe f gilt nicht für die von Behörden in Erfüllung ihrer Aufgaben vorgenommene Verarbeitung.",
+      "abs/1/satz/1/buchst/f": "die Verarbeitung ist zur Wahrung der berechtigten Interessen des Verantwortlichen oder eines Dritten erforderlich, sofern nicht die Interessen oder Grundrechte und Grundfreiheiten der betroffenen Person, die den Schutz personenbezogener Daten erfordern, überwiegen, insbesondere dann, wenn es sich bei der betroffenen Person um ein Kind handelt."
+    }
+  },
+  "match": "subset"
+}

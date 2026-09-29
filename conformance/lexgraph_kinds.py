@@ -55,7 +55,8 @@ def norm_structure(inp: dict[str, Any]) -> dict[str, Any]:
     """Legal units of one canonical norm body (api.law_structure)."""
     text = _text(inp, "text")
     options = {"bavarian": bool(inp.get("bavarian")),
-               "annex": bool(inp.get("annex"))}
+               "annex": bool(inp.get("annex")),
+               "eu": bool(inp.get("eu"))}
     structure = parse_norm_structure(text, **options)
     units = list(iter_units(structure))
     locators: dict[str, list[str]] = {}

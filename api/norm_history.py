@@ -17,9 +17,11 @@ Bavaria (BAYERN.RECHT)
     backwards from the current consolidated text.  Chains stop at the first
     missing or inconsistent link rather than guessing.
 
-EU
-    Lexgraph holds no versioned EU texts (the EU layer is metadata only);
-    callers receive ``not_in_corpus`` with that reason.
+EU and treaties
+    German article texts of the curated EU corpus and the EMRK
+    (pipeline/fetch_eu_texts.py, tools/eu_history.py) are served from the
+    law history store only; other EU instruments are metadata only and
+    answer ``not_in_corpus``.
 """
 from __future__ import annotations
 
@@ -236,6 +238,7 @@ class ActChain:
     warnings: list[str] = field(default_factory=list)
     retrospective_status: str = "ok"
     snapshot: dict[str, Any] = field(default_factory=dict)
+    eu: bool = False   # EU/treaty text: Unterabsätze (api.law_structure)
 
     def versions_of(self, norm_id: str) -> list[NormVersion]:
         rows = self.norms.get(norm_id) or []
@@ -298,13 +301,22 @@ class NormHistoryStore:
         value = (raw or "").strip()
         if not value:
             raise EnvelopeError("invalid_argument", "empty norm identifier")
-        if value.startswith("eu/"):
-            raise EnvelopeError(
-                "not_in_corpus",
-                "Lexgraph holds EU instruments as metadata only; no versioned "
-                "EU article text is in the corpus",
-                searched=[{"source": "eu_layer", "status": "ok",
-                           "count": 0}])
+        if value.startswith(("eu/", "int/")):
+            try:
+                juris, slug, unit, number, sub = split_norm_id(value)
+            except NormIdentityError as exc:
+                raise EnvelopeError("invalid_argument", str(exc)) from exc
+            candidates = [row for row in self.act_index()
+                          if act_slug(row) == (juris, slug)]
+            if not candidates:
+                raise EnvelopeError(
+                    "not_in_corpus",
+                    f"{juris}/{slug} is not in Lexgraph's text corpus (EU "
+                    "instruments outside the curated corpus are metadata "
+                    "only)",
+                    searched=[{"source": "act_index", "status": "ok",
+                               "count": 0}])
+            return self._one(candidates, value, unit, number, sub)
         if value.startswith("de/"):
             try:
                 juris, slug, unit, number, sub = split_norm_id(value)
@@ -384,6 +396,13 @@ class NormHistoryStore:
                 self._chains.move_to_end(key)
                 return self._chains[key]
         act = self._load_act(act_id)
+        if act_id.startswith(("eu_", "int_")):
+            raise EnvelopeError(
+                "unavailable",
+                f"{act_id}: EU and treaty texts are served from the law "
+                "history store, which this data generation lacks",
+                failed_components=[{"component": "law_history",
+                                    "reason": "source_unavailable"}])
         if act_id.startswith("by_"):
             chain = self._bavarian_chain(act)
         else:
@@ -891,9 +910,16 @@ def version_evidence(chain: ActChain, version: NormVersion,
                      include_structure: bool = False) -> dict[str, Any]:
     unit, number = version.norm_id.split("/")[-2:]
     number = number.split("~")[0]
-    juris, slug = chain.prefix.split("/")[0:2], chain.prefix.split("/")[2]
+    slug = chain.prefix.split("/")[-1]
     first = version.first_state
-    if chain.bavarian:
+    if chain.eu:
+        link = {"url": first.source_url, "act_url": chain.act.get("source_url"),
+                "status": "publication_item",
+                "basis": "CELLAR item of the edition that carries this "
+                         "wording; EUR-Lex per-article URLs are not "
+                         "constructed from numbers"}
+        role = first.source_role
+    elif chain.bavarian:
         link = {"url": None, "act_url": chain.act.get("permalink"),
                 "status": "not_resolved",
                 "basis": "per-norm BAYERN.RECHT URLs are not constructed "
@@ -942,7 +968,8 @@ def version_evidence(chain: ActChain, version: NormVersion,
     if include_structure:
         item["structure"] = parse_norm_structure(version.text,
                                                  bavarian=chain.bavarian,
-                                                 annex=version.annex)
+                                                 annex=version.annex,
+                                                 eu=chain.eu)
     return item
 
 
@@ -978,8 +1005,18 @@ def select_version(versions: list[NormVersion], on: str,
                     "official_verified": "verified_interval",
                     "official_archived_version_date":
                         "archived_official_interval",
+                    "official_eu_consolidation": "official_eu_interval",
+                    "official_archived_in_force_at_latest":
+                        "archived_in_force_at_latest",
                 }.get(status, "commencement_attributed_interval")
+                if status == "official_archived_in_force_at_latest":
+                    weak = False
+                    note = (f"in force at the latest from {start} (the archived "
+                            "official page's version date); the wording may be "
+                            "older")
                 extra = {"attribution": attribution} if attribution else {}
+                if status == "official_archived_in_force_at_latest":
+                    extra["note"] = note
                 if weak:
                     extra["note"] = (
                         "future wording reconstructed from the promulgated "
@@ -996,6 +1033,20 @@ def select_version(versions: list[NormVersion], on: str,
                     "consolidated_version_valid_until_exclusive": end,
                     "valid_from": version.first_state.valid_from,
                     "valid_until_exclusive": version.last_state.valid_until}
+    # An EU act (or article) repealed before ``on``: the last wording with
+    # its evidenced end, never as the text in force.
+    last = versions[-1] if versions else None
+    if chain.eu and last is not None and last.last_state.valid_until and \
+            last.last_state.valid_until_status != "unresolved" and \
+            on >= last.last_state.valid_until:
+        return "temporally_unresolved", last, {
+            "resolution": "after_verified_end",
+            "valid_until_exclusive": last.last_state.valid_until,
+            "valid_until_basis": last.last_state.valid_until_basis,
+            "note": f"not in force on {on}: validity ended before "
+                    f"{last.last_state.valid_until} "
+                    f"({last.last_state.valid_until_basis}); the last "
+                    "wording is returned for transitional cases only"}
     # Bounded by a verified end only: "valid until D" with unknown start.
     for version in versions:
         end = version.last_state.valid_until
@@ -1056,11 +1107,12 @@ def select_version(versions: list[NormVersion], on: str,
 
 
 def sentence_diff(old_text: str, new_text: str, *, bavarian: bool,
-                  annex: bool = False) -> list[dict[str, Any]]:
+                  annex: bool = False, eu: bool = False
+                  ) -> list[dict[str, Any]]:
     """Sentence-level diff with structure-aware locators on both sides."""
-    left = (sentence_units(old_text, bavarian=bavarian, annex=annex)
+    left = (sentence_units(old_text, bavarian=bavarian, annex=annex, eu=eu)
             if old_text else [])
-    right = (sentence_units(new_text, bavarian=bavarian, annex=annex)
+    right = (sentence_units(new_text, bavarian=bavarian, annex=annex, eu=eu)
              if new_text else [])
     matcher = difflib.SequenceMatcher(
         a=[row["text"] for row in left], b=[row["text"] for row in right],
@@ -1112,7 +1164,7 @@ def word_diff(old: str, new: str) -> list[dict[str, str]]:
 
 
 def blame(versions: list[NormVersion], target: NormVersion,
-          events: list[dict[str, Any]], *, bavarian: bool
+          events: list[dict[str, Any]], *, bavarian: bool, eu: bool = False
           ) -> list[dict[str, Any]]:
     """Attribute each sentence of ``target`` to the version introducing it.
 
@@ -1124,11 +1176,11 @@ def blame(versions: list[NormVersion], target: NormVersion,
     history = versions[:versions.index(target) + 1]
     units_by_version = [
         {row["text"] for row in sentence_units(v.text, bavarian=bavarian,
-                                               annex=target.annex)}
+                                               annex=target.annex, eu=eu)}
         for v in history]
     rows = []
     for unit in sentence_units(target.text, bavarian=bavarian,
-                               annex=target.annex):
+                               annex=target.annex, eu=eu):
         text = unit["text"]
         index = len(history) - 1
         while index > 0 and text in units_by_version[index - 1]:

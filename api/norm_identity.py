@@ -4,6 +4,8 @@ Identity grammar (see the SNTIQ legal MCP spec):
 
 ``de/bund/<gii-slug>/<unit>/<number>[/abs/<n>[/satz/<n>][/nr/<n>][/buchst/<x>]]``
 ``de/by/<act-slug>/<unit>/<number>[...]``
+``eu/<CELEX>/art/<number>[...]`` (EU acts, e.g. ``eu/32016R0679/art/15/abs/3``)
+``int/<name>/art/<number>[...]`` (treaties, e.g. ``int/emrk/art/6/abs/1``)
 
 with explicit unit types ``para`` (§), ``art`` (Art./Artikel), ``anlage``,
 ``anhang`` and ``text/<slug>`` for unnumbered blocks such as the
@@ -22,7 +24,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
-_SUB_UNITS = ("abs", "satz", "nr", "buchst")
+_SUB_UNITS = ("abs", "uabs", "satz", "nr", "buchst")
 _UNITS = ("para", "art", "anlage", "anhang", "text")
 
 _ROMAN = {1: "i", 2: "ii", 3: "iii", 4: "iv", 5: "v", 6: "vi", 7: "vii",
@@ -79,6 +81,10 @@ def act_slug(act: dict[str, Any]) -> tuple[str, str]:
     juris = str(act.get("juris") or "")
     if juris == "DE-BY" or act_id.startswith("by_"):
         return "de/by", act_id.removeprefix("by_")
+    if juris == "EU" or act_id.startswith("eu_"):
+        return "eu", str(act.get("celex") or act_id.removeprefix("eu_").upper())
+    if juris == "INT" or act_id.startswith("int_"):
+        return "int", act_id.removeprefix("int_")
     url = str(act.get("source_url") or "")
     match = re.fullmatch(
         r"https://www\.gesetze-im-internet\.de/([a-z0-9][a-z0-9_.-]*)/?", url)
@@ -115,14 +121,24 @@ def norm_rows_with_ids(act: dict[str, Any], norms: list[dict[str, Any]]
 
 
 def split_norm_id(value: str) -> tuple[str, str, str, str, str]:
-    """``de/bund/sgb_14/para/37/abs/2`` → (juris, slug, unit, number, sub)."""
+    """``de/bund/sgb_14/para/37/abs/2`` → (juris, slug, unit, number, sub).
+
+    EU and treaty ids have a one-part jurisdiction:
+    ``eu/32016R0679/art/15/abs/3`` → ("eu", "32016R0679", "art", "15", …).
+    """
     raw = (value or "").strip().strip("/")
     parts = raw.split("/")
-    if len(parts) < 5 or parts[0] != "de" or parts[1] not in {"bund", *LAND_CODES}:
+    if len(parts) >= 4 and parts[0] in {"eu", "int"}:
+        if not re.fullmatch(r"[0-9A-Za-z_()]+", parts[1]):
+            raise NormIdentityError(f"invalid act segment {parts[1]!r}")
+        parts = [parts[0], "", *parts[1:]]
+        juris = parts[0]
+    elif len(parts) < 5 or parts[0] != "de" or parts[1] not in {"bund", *LAND_CODES}:
         raise NormIdentityError(
             "norm id must look like de/bund/<act>/<para|art|anlage|anhang|"
-            "text>/<number>[/abs/<n>…]")
-    juris = f"{parts[0]}/{parts[1]}"
+            "text>/<number>[/abs/<n>…] or eu/<CELEX>/art/<n>[…]")
+    else:
+        juris = f"{parts[0]}/{parts[1]}"
     slug, unit, number = parts[2], parts[3], parts[4]
     if unit not in _UNITS:
         raise NormIdentityError(f"unknown unit type {unit!r}; use one of "
@@ -137,7 +153,7 @@ def split_norm_id(value: str) -> tuple[str, str, str, str, str]:
             raise NormIdentityError(f"invalid sub-unit {key}/{sub}")
         order.append(key)
     if order != sorted(order, key=_SUB_UNITS.index):
-        raise NormIdentityError("sub-units must follow abs/satz/nr/buchst")
+        raise NormIdentityError("sub-units must follow abs/uabs/satz/nr/buchst")
     return juris, slug, unit, number, "/".join(rest)
 
 
@@ -159,6 +175,7 @@ def exact_act_aliases(value: str) -> set[str]:
 _CITATION = re.compile(
     r"^\s*(?P<unit>§+|Art(?:ikel|\.)?)\s*(?P<num>\d+(?-i:[a-z]{0,3})\b)"
     r"(?:\s+(?:Abs(?:atz|\.)?)\s*(?P<abs>\d+[a-z]?))?"
+    r"(?:\s+(?:UAbs\.?|Unterabs(?:atz|\.)?)\s*(?P<uabs>\d+))?"
     r"(?:\s+(?:S(?:atz|\.)?)\s*(?P<satz>\d+))?"
     r"(?:\s+(?:Nr\.?|Nummer)\s*(?P<nr>\d+[a-z]?))?"
     r"(?:\s+(?:Buchst(?:abe|\.)?|lit\.?)\s*(?P<buchst>[a-z]{1,2}))?"
@@ -172,7 +189,7 @@ def parse_citation(value: str) -> dict[str, str] | None:
         return None
     unit = "para" if match.group("unit").startswith("§") else "art"
     sub = []
-    for key in ("abs", "satz", "nr", "buchst"):
+    for key in ("abs", "uabs", "satz", "nr", "buchst"):
         if match.group(key):
             sub.extend([key, match.group(key).casefold()])
     return {"unit": unit,
@@ -249,14 +266,57 @@ FEDERAL_ALIASES = {
     "egstgb": "stgbeg", "eggvg": "gvgeg", "eghgb": "hgbeg", "soldg": "sg",
 }
 EU_ACTS = {
-    "dsgvo": "32016R0679", "eudsgvo": "32016R0679", "aeuv": "12016E", "euv": "12016M",
+    "dsgvo": "32016R0679", "eudsgvo": "32016R0679", "gdpr": "32016R0679",
+    "datenschutzgrundverordnung": "32016R0679", "aeuv": "12016E", "euv": "12016M",
     "grch": "12016P", "grc": "12016P", "eugrch": "12016P", "dublinivo": "32013R0604",
     "dublin3vo": "32013R0604", "dublinverordnung": "32013R0604", "aufnahmerl": "32013L0033",
     "qualifikationsrl": "32011L0095", "asylverfahrensrl": "32013L0032",
     "rueckfuehrungsrl": "32008L0115", "unionsbuergerrl": "32004L0038",
     "freizuegigkeitsrl": "32004L0038", "eugvvo": "32012R1215", "brueiavo": "32019R1111",
+    "dublin3": "32013R0604", "dubliniii": "32013R0604", "dublinivverordnung": "32013R0604",
+    "dublin3verordnung": "32013R0604", "dubliniiiverordnung": "32013R0604", "dublinvo": "32013R0604",
+    "aufnahmerichtlinie": "32013L0033", "verfahrensrl": "32013L0032",
+    "verfahrensrichtlinie": "32013L0032", "asylverfahrensrichtlinie": "32013L0032",
+    "qualifikationsrichtlinie": "32011L0095", "qrl": "32011L0095", "anerkennungsrl": "32011L0095",
+    "massenzustromrl": "32001L0055", "massenzustromrichtlinie": "32001L0055",
+    "temporaryprotectionrichtlinie": "32001L0055", "temporaryprotectiondirective": "32001L0055",
+    "grundrechtecharta": "12016P",
 }
-INTERNATIONAL_ACTS = {"emrk": "int/emrk", "gfk": "int/gfk", "unbrk": "int/unbrk", "brk": "int/unbrk"}
+INTERNATIONAL_ACTS = {"emrk": "int/emrk", "mrk": "int/emrk", "gfk": "int/gfk", "unbrk": "int/unbrk",
+                      "brk": "int/unbrk"}
+# EU act by its official number: "RL 2001/55/EG", "Richtlinie 2013/33/EU", "VO (EU) 2016/679",
+# "Verordnung (EU) Nr. 604/2013", "Durchführungsbeschluss (EU) 2022/382".
+EU_NUMBERED_RE = re.compile(
+    r"^(?P<name>[\wÄÖÜäöüß-]*?(?:Richtlinie|richtlinie|Verordnung|verordnung|RL|VO|Beschluss|beschluss|"
+    r"Beschl))\.?\s*(?:\((?P<fam>EU|EG|EWG|Euratom)\)\s*)?(?P<nr>Nr\.?\s*)?"
+    r"(?P<a>\d{1,4})/(?P<b>\d{1,4})(?:/(?P<suffix>EU|EG|EWG))?\s*$")
+
+
+def eu_celex(name: str, a: str, b: str, *, numbered: bool = False) -> str:
+    """CELEX of an EU act cited by type and number (shared with the courts parser).
+
+    Directives and decisions are ``year/number`` ("64/221/EWG", "2001/55/EG"); regulations
+    before 2015 ``number/year`` ("Nr. 604/2013", "Nr. 1408/71"), since 2015 ``year/number``
+    ("(EU) 2016/679"); two-digit years are 19xx above 50.
+    """
+    low = name.casefold()
+    kind = "L" if re.search(r"richtlinie|rl$", low) else "D" if "beschl" in low else "R"
+    if kind in {"L", "D"}:
+        year, number = a, b
+    else:
+        year, number = (a, b) if (len(a) == 4 and a[:2] in ("19", "20")
+                                  and not (len(b) == 4 and b[:2] in ("19", "20") and numbered)) else (b, a)
+    if len(year) == 2:
+        year = ("19" if int(year) > 50 else "20") + year
+    return f"3{year}{kind}{int(number):04d}"
+
+
+def eu_act_from_citation(text: str) -> str | None:
+    match = EU_NUMBERED_RE.match(" ".join((text or "").split()))
+    if not match:
+        return None
+    return eu_celex(match.group("name"), match.group("a"), match.group("b"),
+                    numbered=bool(match.group("nr")))
 LAND_PREFIXES = {"bay": "by", "bln": "be", "bbg": "bb", "brem": "hb", "hmb": "hh", "hess": "he",
                  "nds": "ni", "saechs": "sn", "thuer": "th", "saarl": "sl", "nrw": "nw", "lsa": "st"}
 LAND_SUFFIXES = {"nrw": "nw", "nw": "nw", "bw": "bw", "bln": "be", "be": "be", "bbg": "bb", "lsa": "st",
@@ -340,11 +400,26 @@ class ActResolver:
     def __init__(self, act_index: Iterable[dict[str, Any]] = (), catalog: Iterable[dict[str, Any]] = ()):
         self.act_index = [row for row in act_index if isinstance(row, dict)]
         self._by_alias: dict[str, list[dict[str, Any]]] = {}
+        self._by_prefix: dict[str, dict[str, Any]] = {}
         for row in self.act_index:
+            if str(row.get("juris") or "") in {"EU", "INT"}:
+                # EU/treaty rows are reached through EU_ACTS, the official number and
+                # their own aliases below, never through the German abbreviation index.
+                self._by_prefix[act_prefix(row)] = row
+                continue
             for value in (row.get("jurabk") or "", re.sub(r"\s+\d{4}$", "", str(row.get("jurabk") or ""))):
                 for key in exact_act_aliases(value) | {act_key(value)}:
                     if key and row not in self._by_alias.setdefault(key, []):
                         self._by_alias[key].append(row)
+        # Additional official short forms of an act (act index ``aliases``): EU acts ("DS-GVO",
+        # "Massenzustrom-Richtlinie") and Bavarian acts ("AsylDV" for DVAsyl).
+        self._by_extra_alias: dict[str, dict[str, Any]] = {}
+        for row in self.act_index:
+            for value in [row.get("jurabk") if str(row.get("juris") or "") in {"EU", "INT"} else None,
+                          *(row.get("aliases") or [])]:
+                key = act_key(str(value or ""))
+                if key:
+                    self._by_extra_alias.setdefault(key, row)
         self._by_slug: dict[str, dict[str, Any]] = {}
         for row in self.act_index:
             juris, slug = act_slug(row)
@@ -372,14 +447,28 @@ class ActResolver:
                                row.get("id"), row.get("jurabk"), True)
         return ActIdentity(f"de/bund/{slug}", basis)
 
+    def _in_corpus(self, prefix: str, basis: str) -> ActIdentity:
+        row = self._by_prefix.get(prefix)
+        if row is None:
+            return ActIdentity(prefix, basis)
+        return ActIdentity(prefix, basis, row.get("id"), row.get("jurabk"), True)
+
     def resolve_act(self, abbreviation: str, *, land: str | None = None) -> ActIdentity:
         key = act_key(abbreviation)
         if not key:
             return ActIdentity(None, "unresolved")
         if key in EU_ACTS:
-            return ActIdentity(f"eu/{EU_ACTS[key]}", "eu")
+            return self._in_corpus(f"eu/{EU_ACTS[key]}", "eu")
         if key in INTERNATIONAL_ACTS:
-            return ActIdentity(INTERNATIONAL_ACTS[key], "international")
+            return self._in_corpus(INTERNATIONAL_ACTS[key], "international")
+        celex = eu_act_from_citation(abbreviation)
+        if celex:
+            return self._in_corpus(f"eu/{celex}", "eu_citation")
+        extra = self._by_extra_alias.get(key)
+        if extra is not None and not self._by_alias.get(key):
+            juris, slug = act_slug(extra)
+            basis = "eu" if juris == "eu" else "international" if juris == "int" else "act_index"
+            return ActIdentity(f"{juris}/{slug}", basis, extra.get("id"), extra.get("jurabk"), True)
         # 1. Lexgraph's deep corpus (federal and Bavarian acts with a jurabk).
         rows = self._by_alias.get(key, [])
         if len(rows) == 1:

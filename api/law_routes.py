@@ -26,8 +26,8 @@ from api.evidence import (CACHE_KEY_ARGUMENTS, EnvelopeError, envelope,
                           error_envelope, response)
 from api.law_structure import (
     STRUCTURE_PARSER_VERSION,
+    find_unit,
     human_locator,
-    iter_units,
     parse_norm_structure,
 )
 from api.norm_history import (
@@ -272,7 +272,8 @@ def create_router(data_dir: Callable[[], Path],
             statuses = {left_res["status"], right_res["status"]}
             status = "ok" if statuses == {"ok"} else "temporally_unresolved"
             ops = sentence_diff(left.text, right.text,
-                                bavarian=chain.bavarian, annex=left.annex)
+                                bavarian=chain.bavarian, annex=left.annex,
+                                eu=chain.eu)
             sub = resolved["sub"]
             if sub:
                 ops = [op for op in ops if _op_in_sub(op, sub)]
@@ -328,7 +329,8 @@ def create_router(data_dir: Callable[[], Path],
             events = (events_from_changes(_changes_of(chain))
                       if _is_lh(chain) else
                       amendment_events(chain, unit, number))
-            lines = blame(versions, target, events, bavarian=chain.bavarian)
+            lines = blame(versions, target, events, bavarian=chain.bavarian,
+                          eu=chain.eu)
             if resolved["sub"]:
                 lines = [row for row in lines
                          if _locator_in_sub(row["locator"], resolved["sub"])]
@@ -724,14 +726,10 @@ def _op_in_sub(op: dict[str, Any], sub: str) -> bool:
 
 def _sub_text(version: NormVersion, sub: str, chain: ActChain) -> str | None:
     structure = parse_norm_structure(version.text, bavarian=chain.bavarian,
-                                     annex=version.annex)
-    for unit in iter_units(structure):
-        short = re.sub(r"/satz/\d+(?=/nr/)", "", unit["locator"])
-        if unit["locator"] == sub or (unit["type"] in {
-                "nummer", "buchstabe", "doppelbuchstabe"} and short == sub):
-            # The marker ("3.", "(2)") is a locator, not wording.
-            return unit["text"]
-    return None
+                                     annex=version.annex, eu=chain.eu)
+    # The marker ("3.", "(2)") is a locator, not wording.
+    unit = find_unit(structure, sub)
+    return unit["text"] if unit is not None else None
 
 
 def _collapse_by_sub(versions: list[NormVersion], sub: str,
