@@ -24,3 +24,6 @@ __pycache__/
 .claude/
 .tmp/
 hf_export/
+
+# quarantined snapshot inputs (kept as evidence, never read by the build)
+data/quarantine/

@@ -258,6 +258,22 @@ def load(source: str, name: str) -> list[dict]:
     return list(read_jsonl(snap / name))
 
 
+def load_legacy_candidates() -> list[dict]:
+    """Pre-2023 candidates of the newest *usable* legacy snapshot.
+
+    An empty or test-sized snapshot (``dip_procedures`` below the floor in
+    ``backfill_legacy_bgbl_history``) is never a build input: reading it
+    closed every legacy event, and the restored rows could then never be
+    re-asserted ("a closed assertion cannot be silently reactivated").
+    """
+    from backfill_legacy_bgbl_history import latest_legacy_snapshot
+
+    snap = latest_legacy_snapshot()
+    if snap is None or not (snap / "candidates.jsonl").is_file():
+        return []
+    return list(read_jsonl(snap / "candidates.jsonl"))
+
+
 def load_decisions() -> list[dict]:
     """Manual high-value cases plus the cumulative official RII snapshot.
 
@@ -1689,8 +1705,7 @@ def main() -> int:
     )
     retrospective_candidates = load(
         "bgbl_history_backfill", "candidates.jsonl")
-    retrospective_candidates.extend(load(
-        "bgbl_legacy_history_backfill", "candidates.jsonl"))
+    retrospective_candidates.extend(load_legacy_candidates())
     from backfill_legacy_bgbl_history import attestation_notice
     notice = attestation_notice()
     if notice:
