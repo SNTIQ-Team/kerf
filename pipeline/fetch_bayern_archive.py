@@ -87,6 +87,10 @@ def zip_captures(key: str, *, offline: bool) -> list[dict]:
     rows = json.loads(index.read_text()) if index.is_file() else None
     if not offline:
         body = _get(CDX.format(key=key), delay=3.0)
+        if not body:
+            # main retains the last complete act; only explicit offline mode
+            # may use a cached index without claiming a successful refresh.
+            raise RuntimeError(f"{key}: archive index refresh failed")
         if body:
             fresh = json.loads(body)[1:]
             if fresh:
@@ -273,7 +277,7 @@ def main() -> int:
     out = snapshot_dir("bayern_recht_archive")
     write_jsonl(out / "acts.jsonl", rows)
     print(f"{len(rows)} acts -> {out}")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

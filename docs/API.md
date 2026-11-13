@@ -742,7 +742,7 @@ database.
 | Method & path | Serves | Notes |
 |---|---|---|
 | `GET /` | service index | operator, dataset, endpoint list; browsers (`Accept: text/html`) get an HTML landing page |
-| `GET /health` | liveness | `{status, built_at, data_dir}`; 503 if data missing |
+| `GET /health` | liveness + source freshness | `{status, data_integrity, source_freshness, built_at, data_dir}`; 503 if data missing |
 | `GET /version` | build id | `dataset`, `version`, `built_at` |
 | `GET /stats` | `summary.json` | the dashboard counts, verbatim |
 | `GET /data-policy` | `data_policy.json` | public-build mode and excluded source families |
@@ -785,6 +785,35 @@ endpoints below add a thin envelope.
 ```
 
 Returns **503** if `summary.json` is missing (run `tools/build_web_data.py`).
+
+`built_at` is a release construction time, not a source retrieval time. Each
+tracked source in `source_freshness.sources` exposes its latest retained
+snapshot directory (`observed_on`), last fetch attempt/result/exit code, last
+successful fetch, and degradation reasons. A failed fetch retains the previous
+success and complete snapshot. HTTP 200 with `status: "degraded"` and
+`data_integrity: "ok"` means the release is readable but source freshness needs
+attention. Missing tracking is `unknown`, never inferred fresh from `built_at`.
+The health handler re-evaluates fetch age at request time (daily sources: two
+days; weekly text sources: fourteen days). These are fetch-operation outcomes,
+not a claim that every upstream record was available or ingested.
+
+`refresh.sh` records attempts atomically in `data/source_freshness.json` using
+`tools/source_freshness.py`; the web-data builder includes this metadata in the
+release summary. Existing releases remain explicitly untracked until a normal
+refresh and publication. No previous success or failure is fabricated during
+the migration.
+
+For operational visibility before the next corpus build, configure
+`LEXGRAPH_FRESHNESS` for the API and refresh job to point to a public JSON
+sidecar outside the immutable generation. The metadata-only command
+`python3 tools/source_freshness.py export --output PATH` inventories existing
+snapshot directory dates and real tracked outcomes; it neither fetches nor
+rebuilds legal data. Health declares `origin: "operational_sidecar"`,
+`operational_as_of`, and `observation_scope`; these observations describe the
+pipeline and may postdate the published corpus. A missing/invalid configured
+sidecar falls back to the published summary with degraded tracking. The
+`record` subcommand accepts an independently verified fetch outcome and its
+actual RFC3339 timestamp for migration; unknown successes must remain absent.
 
 ## `GET /version`
 

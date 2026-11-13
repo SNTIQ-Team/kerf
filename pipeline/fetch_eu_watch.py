@@ -23,6 +23,10 @@ from common import Http, snapshot_dir, write_jsonl
 ROOT = Path(__file__).resolve().parent.parent
 WATCHLIST = ROOT / "data" / "procedure_watchlist.json"
 WATCH_STATE = ROOT / "data" / "procedure_watch_state.json"
+# Exit status when a watch kept its last evidence because EUR-Lex was unreachable:
+# not success (source freshness records a failed fetch), but distinguishable from a
+# crash (1), so refresh-procedure-watch.sh can degrade instead of failing the run.
+EX_TEMPFAIL = 75
 CELEX_RE = re.compile(r"\b[35]\d{4}[A-Z]{1,3}\d{4,}\b")
 ADOPTED_DECISION_RE = re.compile(r"^3\d{4}D\d{4,}$")
 ADOPTION_EVENT_RE = re.compile(
@@ -684,7 +688,8 @@ def main() -> int:
               f" — terminal={row['terminal']}"
               f" stale={bool(row.get('source_stale'))}")
     print(f"eu-watch: {len(rows)} polled / {len(skipped)} archived -> {out}")
-    return 0
+    # Retaining evidence is useful, but a fallback is not a successful poll.
+    return EX_TEMPFAIL if any(row.get("source_stale") for row in rows) else 0
 
 
 if __name__ == "__main__":

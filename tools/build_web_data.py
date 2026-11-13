@@ -43,6 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
+from api.source_freshness import build_freshness  # noqa: E402
 from tools.reader_blocks import refresh_cached_sidecars  # noqa: E402
 from tools.archived_reader_store import publish_archived_readers  # noqa: E402
 from tools.bavarian_states import publish_states as publish_bavarian_states  # noqa: E402
@@ -1925,6 +1926,8 @@ def main() -> int:
     ]
     summary = {
         "built_at": built_at,
+        "source_freshness": build_freshness(
+            SNAPSHOTS, ROOT / "data" / "source_freshness.json", built_at),
         "acts_fed": sum(1 for a in wiki_idx if a["juris"] == "DE"),
         "acts_by": sum(1 for a in wiki_idx if a["juris"] == "DE-BY"),
         "patches": sts,

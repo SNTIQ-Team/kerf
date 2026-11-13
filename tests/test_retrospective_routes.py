@@ -313,7 +313,9 @@ def test_health_is_a_retrospective_integrity_gate(
     _configure(monkeypatch, data)
 
     healthy = main.health()
-    assert healthy["status"] == "ok"
+    assert healthy["status"] == "degraded"  # fixture predates source tracking
+    assert healthy["data_integrity"] == "ok"
+    assert healthy["source_freshness"]["status"] == "unknown"
     assert healthy["retrospective"]["status"] == "ok"
     assert healthy["retrospective"]["built_at"] == \
         "2026-07-16T12:00:00Z"

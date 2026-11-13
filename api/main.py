@@ -77,6 +77,7 @@ except ImportError:  # optional component; /capabilities still declares it
 from api.gii_catalog import GiiCatalogIndex
 from api.citation_store import CitationStoreError, query_citations
 from api.search_engine import SearchEngine, normalize_search_text
+from api.source_freshness import source_health
 from api.procedure_search import ProcedureSearchIndex
 from api.official_state_store import OfficialStateError, load_observed_state
 from api.markdown_layout import source_paragraph_layouts
@@ -101,6 +102,8 @@ DATA_DIR = Path(os.environ.get(
     Path(__file__).resolve().parent.parent / "web" / "data")).resolve()
 READER_DIR = Path(os.environ.get(
     "LEX_READER_DIR", Path(__file__).resolve().parent.parent / "data" / "reader"))
+FRESHNESS_PATH = (Path(os.environ["LEXGRAPH_FRESHNESS"])
+                  if os.environ.get("LEXGRAPH_FRESHNESS") else None)
 
 app = FastAPI(title="Lexgraph", version="1.5")
 app.include_router(decision_passages_router(lambda: DATA_DIR))
@@ -412,7 +415,28 @@ def health():
     except HTTPException as exc:
         raise HTTPException(503, exc.detail)
     retrospective = _retrospective_manifest(optional=True)
-    return {"status": "ok", "built_at": summary.get("built_at"),
+    freshness = source_health(summary.get("source_freshness"))
+    freshness['origin'] = 'published_summary'
+    if FRESHNESS_PATH is not None:
+        try:
+            if FRESHNESS_PATH.stat().st_size > 256 * 1024:
+                raise ValueError('operational freshness metadata too large')
+            report = json.loads(FRESHNESS_PATH.read_text())
+            if not isinstance(report, dict) or report.get('schema_version') != 1 \
+                    or not isinstance(report.get('sources'), dict) \
+                    or not isinstance(report.get('operational_as_of'), str):
+                raise ValueError('invalid operational freshness metadata')
+            if datetime.fromisoformat(report['operational_as_of'].replace('Z', '+00:00')).tzinfo is None:
+                raise ValueError('operational freshness timestamp requires timezone')
+            freshness = {**source_health(report), 'origin': 'operational_sidecar',
+                         'operational_as_of': report['operational_as_of'],
+                         'observation_scope': report.get('observation_scope')}
+        except (OSError, ValueError):
+            freshness['status'] = 'degraded'
+            freshness['operational_tracking'] = 'unavailable'
+    return {"status": "ok" if freshness["status"] == "ok" else "degraded",
+            "data_integrity": "ok", "source_freshness": freshness,
+            "built_at": summary.get("built_at"),
             "data_dir": str(DATA_DIR),
             "retrospective": ({
                 "status": "ok",
