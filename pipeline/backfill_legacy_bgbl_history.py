@@ -798,7 +798,13 @@ MIN_DIP_PROCEDURES = 100
 
 
 def usable_legacy_snapshot(path: Path) -> bool:
-    """Whether a dated snapshot may be read as published legacy input."""
+    """Whether a dated snapshot may be read as published legacy input.
+
+    A signed archive worker attestation admits the snapshot (its rows are
+    verified separately by ``attested_rows``); an unattested snapshot must
+    come from a real discovery run."""
+    if (Path(path) / "attestation.json").is_file():
+        return True
     try:
         summary = json.loads((Path(path) / "summary.json").read_text(
             encoding="utf-8"))
@@ -830,7 +836,7 @@ def attestation_notice(root: Path | None = None) -> str | None:
     current = parser_identity(ROOT)["sha256"]
     attested = (summary.get("parser") or {}).get("sha256")
     if attested == current:
-        return (f"legacy candidates {latest.name}: archive attestation, "
+        return (f"legacy candidates {latest.name}: archive worker attestation, "
                 f"parser {current[:12]}")
     return (f"legacy candidates {latest.name}: attested by parser "
             f"{str(attested)[:12]}, deployed parser {current[:12]}; run "
@@ -850,7 +856,7 @@ def validate_legacy_candidate(candidate: dict, *, archive: LegacyArchive | None 
         if row_digest(candidate) in rows:
             return
         raise SourceIntegrityError(
-            "legacy candidate is not in the archive attestation")
+            "legacy candidate is not in the archive worker attestation")
     archive = archive or LegacyArchive()
     try:
         evidence = archive.read(candidate["legacy_document_object"],
@@ -1007,9 +1013,9 @@ def main() -> int:
     parser.add_argument("--capture-only", action="store_true",
                         help="VPS mode: discover and capture new sources, keep the "
                              "checkpoint, but do not publish candidates (the "
-                             "archive rebuilds and attests them)")
+                             "archive worker rebuilds and attests them)")
     parser.add_argument("--archive-root", type=Path, default=ARCHIVE_ROOT,
-                        help="legacy source store (archive: the pulled archive)")
+                        help="legacy source store (archive worker: the pulled archive)")
     parser.add_argument("--snapshot-root", type=Path, default=SNAPSHOT_ROOT,
                         help="where the rebuilt candidate snapshot is written")
     args = parser.parse_args()
@@ -1070,7 +1076,7 @@ def main() -> int:
                           "stopped": stopped,
                           "captured_documents": len(state["documents"]),
                           "archive_bytes": archive.size_bytes(),
-                          "publication": "archive rebuild + attestation"},
+                          "publication": "archive worker rebuild + attestation"},
                          ensure_ascii=False, sort_keys=True))
         return 0
     summary = _publish(archive, state, start=args.start, end=args.end,
