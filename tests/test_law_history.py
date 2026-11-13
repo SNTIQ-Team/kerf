@@ -229,6 +229,21 @@ def test_log_at_diff_blame_through_law_history(built):
     assert blame["status"] == "ok" and blame["lines"]
 
 
+def test_log_reports_latest_state_presence_from_law_history(built):
+    # law_history chains carry no per-state norm rows; the presence flag must
+    # come from the builder's norms.present_in_latest, not default to false.
+    store = LawHistoryStore(built / "law_history.sqlite")
+    client = _client(built)
+    assert store.norm(P29A)["present_in_latest"] == 1
+    log = client.get(f"/norms/{P29A}/log").json()
+    assert log["norm"]["present_in_latest_state"] is True
+    with sqlite3.connect(built / "law_history.sqlite") as db:
+        db.execute("UPDATE norms SET present_in_latest=0 WHERE norm_id=?",
+                   (P29A,))
+    log = _client(built).get(f"/norms/{P29A}/log").json()
+    assert log["norm"]["present_in_latest_state"] is False
+
+
 def test_change_records_and_summary_contract(built):
     client = _client(built)
     body = client.get(f"/norms/{P29A}/changes").json()

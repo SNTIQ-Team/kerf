@@ -239,6 +239,9 @@ class ActChain:
     retrospective_status: str = "ok"
     snapshot: dict[str, Any] = field(default_factory=dict)
     eu: bool = False   # EU/treaty text: Unterabsätze (api.law_structure)
+    # Chains without per-state norm rows (law_history.sqlite) carry the
+    # builder's verdict instead: norm_id -> present in the act's latest state.
+    latest_presence: dict[str, bool] = field(default_factory=dict)
 
     def versions_of(self, norm_id: str) -> list[NormVersion]:
         rows = self.norms.get(norm_id) or []
@@ -261,6 +264,8 @@ class ActChain:
         return versions
 
     def present_in_last_state(self, norm_id: str) -> bool:
+        if norm_id in self.latest_presence:
+            return self.latest_presence[norm_id]
         rows = self.norms.get(norm_id) or []
         return bool(rows) and rows[-1][0] == len(self.states) - 1
 
