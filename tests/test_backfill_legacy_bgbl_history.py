@@ -187,6 +187,45 @@ def test_publish_reports_conflict_and_retains_but_does_not_project_cached_docume
     assert summary["verified_documents"] == 0
     assert document["document_id"] in legacy.load_checkpoint(archive)["documents"]
     assert (archive.root / document["pdf_object"]).is_file()
+    # the patched root is honoured: the empty test snapshot never lands in
+    # the real data/snapshots tree (it once became the build's latest input)
+    [written] = (tmp_path / "snapshots").iterdir()
+    assert (written / "summary.json").is_file()
+
+
+def _snapshot(root: Path, day: str, dip_procedures: int | None) -> Path:
+    path = root / day
+    path.mkdir(parents=True)
+    (path / "candidates.jsonl").write_text("")
+    if dip_procedures is not None:
+        (path / "summary.json").write_text(json.dumps(
+            {"schema_version": 1, "dip_procedures": dip_procedures}))
+    return path
+
+
+def test_latest_legacy_snapshot_skips_empty_or_test_sized_runs(tmp_path):
+    real = _snapshot(tmp_path, "2026-09-27", 2380)
+    _snapshot(tmp_path, "2026-09-28", 0)          # leaked test publish
+    _snapshot(tmp_path, "2026-09-29", 3)          # below the sane floor
+    _snapshot(tmp_path, "2026-09-30", None)       # no summary at all
+    (tmp_path / ".writing-x").mkdir()
+    assert legacy.latest_legacy_snapshot(tmp_path) == real
+    assert not legacy.usable_legacy_snapshot(tmp_path / "2026-09-28")
+    newer = _snapshot(tmp_path, "2026-10-01", 5521)
+    assert legacy.latest_legacy_snapshot(tmp_path) == newer
+    assert legacy.latest_legacy_snapshot(tmp_path / "missing") is None
+
+
+def test_web_build_reads_legacy_candidates_only_from_a_usable_snapshot(
+        tmp_path, monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import build_web_data
+
+    real = _snapshot(tmp_path, "2026-09-27", 2380)
+    (real / "candidates.jsonl").write_text('{"id": "kept"}\n')
+    _snapshot(tmp_path, "2026-09-28", 0)
+    monkeypatch.setattr(legacy, "SNAPSHOT_ROOT", tmp_path)
+    assert build_web_data.load_legacy_candidates() == [{"id": "kept"}]
 
 
 def test_request_budget_and_stream_limit_stop_before_excess_is_buffered():

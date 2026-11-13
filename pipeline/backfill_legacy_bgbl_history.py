@@ -791,12 +791,31 @@ def build_legacy_inventory(documents: list[dict], archive: LegacyArchive,
     return sorted(inventory, key=lambda row: (row["publication_date"], row["id"]))
 
 
+# A real publication covers thousands of DIP procedures (2380-5521 so far).
+# A snapshot below this floor is a test-sized or failed run; using it as the
+# latest input would withdraw every legacy event from the public history.
+MIN_DIP_PROCEDURES = 100
+
+
+def usable_legacy_snapshot(path: Path) -> bool:
+    """Whether a dated snapshot may be read as published legacy input."""
+    try:
+        summary = json.loads((Path(path) / "summary.json").read_text(
+            encoding="utf-8"))
+        procedures = int(summary.get("dip_procedures") or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    return procedures >= MIN_DIP_PROCEDURES
+
+
 def latest_legacy_snapshot(root: Path | None = None) -> Path | None:
+    """The newest usable snapshot; empty or test-sized runs are skipped."""
     root = Path(root or SNAPSHOT_ROOT)
     days = sorted(path for path in Path(root).iterdir()
                   if path.is_dir() and not path.name.startswith(".")) \
         if Path(root).is_dir() else []
-    return days[-1] if days else None
+    usable = [path for path in days if usable_legacy_snapshot(path)]
+    return usable[-1] if usable else None
 
 
 def attestation_notice(root: Path | None = None) -> str | None:
@@ -902,7 +921,11 @@ def _publish(archive: LegacyArchive, state: dict, *, start: str, end: str,
              selected: list[dict], procedures: list[dict], http: BoundedHttp,
              stats: dict, stopped: str | None,
              selection_conflicts: dict | None = None,
-             snapshot_root: Path = SNAPSHOT_ROOT) -> dict:
+             snapshot_root: Path | None = None) -> dict:
+    # Resolve the root at call time: a default bound at import ignored a
+    # patched SNAPSHOT_ROOT, so a unit test published an empty snapshot into
+    # the real tree, which the next web build then read as its latest input.
+    snapshot_root = Path(snapshot_root or SNAPSHOT_ROOT)
     selection_conflicts = selection_conflicts or {}
     # Keep immutable evidence in the checkpoint, but do not publish an identity
     # contradicted by the discovery inputs for this run.
