@@ -62,7 +62,7 @@ from fetch_bgbl_documents import (
 )
 from fetch_dip import BASE as DIP_BASE
 from fetch_dip import current_key
-from patch_parser import _split_items, parse_command
+from patch_parser import _split_labelled_items, item_number, parse_command
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -968,7 +968,11 @@ def parse_amendment_commands(section: dict) -> tuple[list[dict], list[str]]:
                 parent_scope = _compact(header)
     parsed: list[dict] = []
     affected: set[str] = set()
-    for item, raw in enumerate(_split_items(body), start=1):
+    # ``item`` is the printed number (1, 1a, 16a …), not the position: an
+    # inserted item must not shift every later "Nr. N" by one.
+    for ordinal, (label, raw) in enumerate(
+            _split_labelled_items(body), start=1):
+        item = item_number(label, ordinal)
         command = parse_command(raw)
         ref = command.get("ref") or {}
         if parent_ref:

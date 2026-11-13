@@ -510,10 +510,17 @@ def annotate_commands(commands: list[dict], section: dict, *,
     for leaf in leaves:
         counts[leaf["top_level_index"]] = counts.get(
             leaf["top_level_index"], 0) + 1
+    # ``item`` is the printed number (``1a``), not the position; locate the
+    # command's top-level position by its label.  An unnumbered body has the
+    # single command 1.
+    ordinal_of = {str(label): index for index, (label, _text)
+                  in enumerate(labelled, start=1) if label is not None}
     rows = []
     for command in commands:
         row = dict(command)
-        index = int(command.get("item") or 0)
+        item = command.get("item")
+        index = ordinal_of.get(str(item), 0) if ordinal_of else (
+            1 if str(item) == "1" else 0)
         aligned = 0 < index <= len(labelled) and len(labelled) == len(plain) \
             and labelled[index - 1][1].strip() == str(command.get("raw") or
                                                       "").strip()

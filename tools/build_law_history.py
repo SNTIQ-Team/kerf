@@ -501,6 +501,12 @@ def _letters(raw: str) -> list[str]:
     return found
 
 
+def _item_label(command: dict[str, Any]) -> str:
+    """Printed item number of a command (``0``, ``1a``, ``16a``) as text."""
+    item = command.get("item")
+    return "" if item is None or item == "" else str(item)
+
+
 def event_dates(event: dict[str, Any], item_key: str,
                 bgbl: dict[str, dict[str, Any]], dates: ChangeDates
                 ) -> dict[str, Any]:
@@ -508,8 +514,7 @@ def event_dates(event: dict[str, Any], item_key: str,
     document_id = str(event.get("document_id") or "")
     article = str(event.get("amending_article") or "")
     command = next((c for c in event.get("commands") or []
-                    if str(c.get("item") or "") == item_key.split(".")[0]),
-                   {})
+                    if _item_label(c) == item_key.split(".")[0]), {})
     resolved = dates.resolve(
         document_id, article, item_key,
         absatz=event.get("collective_subsection"),
@@ -701,7 +706,7 @@ def norm_changes(act: dict[str, Any], events: list[dict[str, Any]],
             groups: dict[str, list[tuple[dict[str, Any], str]]] = \
                 defaultdict(list)
             for command in own or [{}]:
-                item = str(command.get("item") or "")
+                item = _item_label(command)
                 letters = _letters(str(command.get("raw") or ""))
                 keys = [f"{item}.{letter}" for letter in letters] if \
                     letters else [item]
