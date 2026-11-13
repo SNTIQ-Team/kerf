@@ -145,12 +145,14 @@ def norm_chain(store: LawHistoryStore, resolved: dict[str, Any],
                 state.superseded_by_observation = bound
     juris, slug = act_slug(act)
     info = store.acts().get(act_id) or {}
+    norm_row = store.norm(norm_id) or {}
     chain = ActChain(
         act=_act_summary(act), prefix=f"{juris}/{slug}", states=states,
         norms={}, events=[], history_start=info.get("event_history_start"),
         bavarian=bavarian, warnings=[], retrospective_status="ok",
         snapshot={"law_history": True},
-        eu=act_id.startswith(("eu_", "int_")))
+        eu=act_id.startswith(("eu_", "int_")),
+        latest_presence={norm_id: bool(norm_row.get("present_in_latest"))})
     chain.law_history = info  # type: ignore[attr-defined]
     return chain, versions, changes
 
