@@ -25,7 +25,11 @@ FEED = "https://www.gesetze-im-internet.de/aktuDienst-rss-feed.xml"
 
 def main() -> int:
     http = Http(delay=0.3)
-    root = ET.fromstring(http.get(FEED, timeout=60).content)
+    response = http.get(FEED, timeout=60)
+    response.raise_for_status()
+    root = ET.fromstring(response.content)
+    if root.tag != "rss" or root.find("channel") is None:
+        raise RuntimeError("promulgation source did not return an RSS feed")
     events = []
     for item in root.iter("item"):
         title = (item.findtext("title") or "").strip()
@@ -53,6 +57,8 @@ def main() -> int:
             "fetched_at": datetime.now(timezone.utc).isoformat(
                 timespec="seconds"),
         })
+    if not events:
+        raise RuntimeError("empty promulgation feed; retained snapshot unchanged")
     out = snapshot_dir("bgbl_events")
     write_jsonl(out / "events.jsonl", events)
     print(f"{len(events)} promulgation events -> {out}")

@@ -10,6 +10,7 @@ StartLimitBurst=2
 Type=oneshot
 WorkingDirectory=/srv/sntiq-lexgraph
 EnvironmentFile=-/etc/sntiq/lexgraph.env
+Environment=LEXGRAPH_FRESHNESS=/srv/sntiq-lexapi/data/source-freshness.json
 ExecStart=/srv/sntiq-lexgraph/deploy/refresh-procedure-watch.sh
 # Step [4/5] is the SAME full build_web_data.py the daily refresh runs, and on
 # this host that build needs ~250M resident plus a swap-backed working set of

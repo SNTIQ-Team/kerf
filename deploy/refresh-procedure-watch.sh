@@ -26,11 +26,44 @@ else
     PYTHON=python3
 fi
 
+# Freshness observations are independent of whether changed evidence requires a
+# corpus publication. Export on ordinary success, no-change and failed fetches.
+finish_freshness() {
+    local status=$?
+    trap - EXIT
+    if [ -n "${LEXGRAPH_FRESHNESS:-}" ]; then
+        if ! "$PYTHON" tools/source_freshness.py export --output "$LEXGRAPH_FRESHNESS"; then
+            echo "[warn] operational freshness export failed" >&2
+            [ "$status" -ne 0 ] || status=1
+        fi
+    fi
+    exit "$status"
+}
+trap finish_freshness EXIT
+
+fetch_source() {
+    local source="$1"
+    shift
+    "$PYTHON" tools/source_freshness.py run --source "$source" -- "$@"
+}
+
 echo "==> [1/5] Bundestag DIP procedures"
-"$PYTHON" pipeline/fetch_dip.py
+fetch_source dip "$PYTHON" pipeline/fetch_dip.py
 
 echo "==> [2/5] active EUR-Lex procedure watches"
-"$PYTHON" pipeline/fetch_eu_watch.py
+# 75 (EX_TEMPFAIL): EUR-Lex was unreachable and the watch kept its last evidence;
+# source freshness has recorded the failed fetch. As in refresh.sh, the watch state
+# is then not advanced (diffing fallback against live evidence produced false
+# evidence_changed rebuilds) and the run ends without failing. Any other non-zero
+# status is a real failure and still fails the run.
+eu_status=0
+fetch_source eu_watch "$PYTHON" pipeline/fetch_eu_watch.py || eu_status=$?
+if [ "$eu_status" -eq 75 ]; then
+    echo "[warn] EUR-Lex unreachable, stale fallback retained — watch state not advanced"
+    exit 0
+elif [ "$eu_status" -ne 0 ]; then
+    exit "$eu_status"
+fi
 
 echo "==> [3/5] persistent watch state + change-only history"
 "$PYTHON" tools/update_procedure_watch.py

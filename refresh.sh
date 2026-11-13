@@ -10,14 +10,22 @@ cd "$(dirname "$0")"
 
 step() { echo "==> [$1] $2"; shift 2; "$@" || echo "[warn] step degraded — continuing"; }
 
+# Record fetch outcomes independently of the release timestamp. Never capture
+# command output or credentials; a failed fetch keeps the last complete data.
+fetch_source() {
+    local source="$1"
+    shift
+    python3 tools/source_freshness.py run --source "$source" -- "$@"
+}
+
 WATCH_SOURCES_OK=1
 echo "==> [ 1/24] DIP legislative pipeline (Bund, intraday)"
-python3 pipeline/fetch_dip.py || {
+fetch_source dip python3 pipeline/fetch_dip.py || {
     echo "[warn] DIP refresh degraded — watch state will not be advanced"
     WATCH_SOURCES_OK=0
 }
 echo "==> [ 2/24] explicit EUR-Lex procedure watches"
-python3 pipeline/fetch_eu_watch.py || {
+fetch_source eu_watch python3 pipeline/fetch_eu_watch.py || {
     echo "[warn] EUR-Lex watch refresh degraded — watch state will not be advanced"
     WATCH_SOURCES_OK=0
 }
@@ -27,10 +35,10 @@ if [ "$WATCH_SOURCES_OK" -eq 1 ]; then
 else
     echo "==> [ 3/24] watch state skipped (one official refresh failed)"
 fi
-step " 4/24" "BGBl promulgation events (daily feed)"       python3 pipeline/fetch_bgbl_events.py
-step " 5/24" "GII corpus HEAD (lags days-weeks)"           python3 pipeline/fetch_gii.py --budget-mib 64
+step " 4/24" "BGBl promulgation events (daily feed)"       fetch_source bgbl_events python3 pipeline/fetch_bgbl_events.py
+step " 5/24" "GII corpus HEAD (lags days-weeks)"           fetch_source gii python3 pipeline/fetch_gii.py --budget-mib 64
 step " 6/24" "archive complete official GII states"       python3 tools/archive_gii_states.py
-step " 7/24" "final BGBl documents + integrity/text"       python3 pipeline/fetch_bgbl_documents.py
+step " 7/24" "final BGBl documents + integrity/text"       fetch_source bgbl_documents python3 pipeline/fetch_bgbl_documents.py
 # Complete recht.bund.de issue index (FNA of every amended act): the 2023+
 # inventory also captures amendments that were never an act's latest
 # "zuletzt geändert" note.  Daily: the current year's tail (+ previous year
@@ -65,7 +73,7 @@ else
     echo "    skipped by data policy (use NeuRIS; legacy RII is explicit opt-in)"
 fi
 step "9b/24" "retained official decision sources"          python3 pipeline/fetch_decision_sources.py
-step "10/24" "NeuRIS changelog + expiring ZIP capture"     python3 pipeline/fetch_neuris_changelog.py
+step "10/24" "NeuRIS changelog + expiring ZIP capture"     fetch_source neuris_changelog python3 pipeline/fetch_neuris_changelog.py
 step "10b/24" "bounded resumable NeuRIS archive backfill" \
     python3 pipeline/fetch_neuris_changelog.py --backfill-archive \
         --limit 25 --max-downloads 25 --max-bytes 134217728 --delay 0.75
@@ -93,23 +101,23 @@ else
 fi
 rm -f "$BRLOG"
 
-step "15/24" "BAYERN.RECHT corpus HEAD + BayRS chains"     python3 pipeline/fetch_bayern_recht.py
-step "16/24" "GVBl/BayMBl promulgation events (RSS)"       python3 pipeline/fetch_gvbl_events.py
-step "17/24" "Bayerischer Landtag WP19 pipeline"           python3 pipeline/fetch_bay_landtag.py
-step "18/24" "EU layer: curated corpus + transpositions"   python3 pipeline/fetch_eu_layer.py
-step "19/24" "EU breadth index (all directives + basic regulations)" python3 pipeline/fetch_eu_index.py
+step "15/24" "BAYERN.RECHT corpus HEAD + BayRS chains"     fetch_source bayern_recht python3 pipeline/fetch_bayern_recht.py
+step "16/24" "GVBl/BayMBl promulgation events (RSS)"       fetch_source gvbl_events python3 pipeline/fetch_gvbl_events.py
+step "17/24" "Bayerischer Landtag WP19 pipeline"           fetch_source bay_landtag python3 pipeline/fetch_bay_landtag.py
+step "18/24" "EU layer: curated corpus + transpositions"   fetch_source eu_layer python3 pipeline/fetch_eu_layer.py
+step "19/24" "EU breadth index (all directives + basic regulations)" fetch_source eu_index python3 pipeline/fetch_eu_index.py
 # Article texts of the curated EU corpus, the EMRK and the Bavarian acts that
 # BAYERN.RECHT's challenge now blocks (archived official copies).  These texts
 # change rarely: refresh at most every LEXGRAPH_TEXT_REFRESH_DAYS days (7).
 stale() { [ -z "$(find "data/snapshots/$1" -mindepth 1 -maxdepth 1 -type d -mtime "-${LEXGRAPH_TEXT_REFRESH_DAYS:-7}" 2>/dev/null)" ]; }
 if stale eu_texts; then
-    step "19a/24" "EU article texts (CELLAR Formex/XHTML)"    python3 pipeline/fetch_eu_texts.py
+    step "19a/24" "EU article texts (CELLAR Formex/XHTML)"    fetch_source eu_texts python3 pipeline/fetch_eu_texts.py
 fi
 if stale emrk; then
-    step "19b/24" "EMRK German text (archived CoE PDF)"      python3 pipeline/fetch_emrk.py
+    step "19b/24" "EMRK German text (archived CoE PDF)"      fetch_source emrk python3 pipeline/fetch_emrk.py
 fi
 if stale bayern_recht_archive; then
-    step "19c/24" "Bavarian acts from archived official copies" python3 pipeline/fetch_bayern_archive.py
+    step "19c/24" "Bavarian acts from archived official copies" fetch_source bayern_recht_archive python3 pipeline/fetch_bayern_archive.py
 fi
 echo "==> [20/24] Länder discovery monitor"
 if [ "${LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL:-0}" = "1" ]; then
@@ -122,6 +130,11 @@ if [ "${LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL_BULK:-0}" = "1" ]; then
     python3 pipeline/fetch_laender_bills.py || echo "[warn] step degraded — continuing"
 else
     echo "    quarantined by data policy (no republication permission for the portal database)"
+fi
+
+if [ -n "${LEXGRAPH_FRESHNESS:-}" ]; then
+    step "21c/24" "publish operational source metadata (no corpus mutation)" \
+        python3 tools/source_freshness.py export --output "$LEXGRAPH_FRESHNESS"
 fi
 
 # Preserve original bytes before aging snapshots out of the raw working set.
