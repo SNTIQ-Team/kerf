@@ -221,6 +221,27 @@ def _split_items(body: str) -> list[str]:
     against phantom items: the number must continue the 0, 0a, 1, 1a, 2 …
     sequence (a quoted "31. Juli 2025" at a line break is a date, not item
     31), and it must not sit inside a „…" quotation."""
+    return [text for _label, text in _split_labelled_items(body)]
+
+
+def item_number(label: str | None, ordinal: int) -> int | str:
+    """The official item number of a command, as printed.
+
+    Inserted items keep their letter (``16a``) and items before 1 keep their
+    own number (``0``, ``0a``), so "Art. 1 Nr. 16a" and an Inkrafttreten
+    clause naming "Nummer 27 Buchstabe b" address the printed item, never
+    the command's position in the article.  Plain numerals stay integers;
+    an unnumbered body is item ``ordinal`` (its single command, 1).
+    """
+    if label is None:
+        return ordinal
+    return int(label) if label.isdigit() else label
+
+
+def _split_labelled_items(body: str) -> list[tuple[str | None, str]]:
+    """``_split_items`` with each item's printed label: ``[(label, text)]``.
+
+    The label is ``None`` for a body without numbering."""
     spans = [m.span() for m in QUOTE_RE.finditer(body)]
     cuts, previous = [], None
     for m in re.finditer(r"(?m)^[ \t]{0,3}(\d{1,3}[a-z]?)\.[ \t]+", body):
@@ -231,11 +252,11 @@ def _split_items(body: str) -> list[str]:
         cuts.append(m)
         previous = m.group(1)
     if not cuts:
-        return [body] if _clean(body) else []
+        return [(None, body)] if _clean(body) else []
     out = []
     for i, m in enumerate(cuts):
         end = cuts[i + 1].start() if i + 1 < len(cuts) else len(body)
-        out.append(body[m.end():end])
+        out.append((m.group(1), body[m.end():end]))
     return out
 
 
