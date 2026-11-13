@@ -213,6 +213,10 @@ def test_latest_legacy_snapshot_skips_empty_or_test_sized_runs(tmp_path):
     assert not legacy.usable_legacy_snapshot(tmp_path / "2026-09-28")
     newer = _snapshot(tmp_path, "2026-10-01", 5521)
     assert legacy.latest_legacy_snapshot(tmp_path) == newer
+    # a signed workstation attestation is admitted on its own evidence
+    attested = _snapshot(tmp_path, "2026-10-02", None)
+    (attested / "attestation.json").write_text("{}")
+    assert legacy.latest_legacy_snapshot(tmp_path) == attested
     assert legacy.latest_legacy_snapshot(tmp_path / "missing") is None
 
 

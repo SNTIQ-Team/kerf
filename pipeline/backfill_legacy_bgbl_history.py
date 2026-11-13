@@ -798,7 +798,13 @@ MIN_DIP_PROCEDURES = 100
 
 
 def usable_legacy_snapshot(path: Path) -> bool:
-    """Whether a dated snapshot may be read as published legacy input."""
+    """Whether a dated snapshot may be read as published legacy input.
+
+    A signed workstation attestation admits the snapshot (its rows are
+    verified separately by ``attested_rows``); an unattested snapshot must
+    come from a real discovery run."""
+    if (Path(path) / "attestation.json").is_file():
+        return True
     try:
         summary = json.loads((Path(path) / "summary.json").read_text(
             encoding="utf-8"))
