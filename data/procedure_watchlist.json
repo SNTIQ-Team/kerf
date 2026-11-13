@@ -107,14 +107,14 @@
         "vorübergehender Schutz",
         "§ 24 AufenthG"
       ],
-      "scope": "Angenommen: Der Durchführungsbeschluss (EU) 2026/1912 des Rates verlängert den vorübergehenden Schutz des Durchführungsbeschlusses (EU) 2022/382 bis zum 4. März 2028; veröffentlicht im Amtsblatt L am 4. August 2026, in Kraft seit dem 5. August 2026. Die folgende Beschreibung gibt den Kommissionsvorschlag COM(2026) 345 wieder und ist noch nicht als angenommener Wortlaut bestätigt: Der operative Artikel 2 ist geschlechtsneutral und gilt nicht nur für Männer. Aus der kollektiven vorübergehenden Schutzregelung soll eine Person ausgeschlossen werden, die militärische Verpflichtungen nach ukrainischem Recht nicht erfüllt und gerade deshalb von den ukrainischen Behörden nicht zur Ausreise berechtigt ist. Personen, die beim Inkrafttreten bereits vorübergehenden Schutz genießen, sollen ausgenommen bleiben. Individuelles Asyl und andere Aufenthaltstitel werden nicht pauschal ausgeschlossen. Lexgraph gleicht den angenommenen Artikel 2 mit dem Vorschlag ab, bevor er als endgültige Regel dargestellt wird.",
-      "draft_only": true,
-      "scope_source": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:52026PC0345",
+      "scope": "Angenommen: Der Durchführungsbeschluss (EU) 2026/1912 des Rates verlängert den vorübergehenden Schutz des Durchführungsbeschlusses (EU) 2022/382 bis zum 4. März 2028 (die Verlängerung gilt ab dem 5. März 2027); veröffentlicht im Amtsblatt L am 4. August 2026, berichtigt durch ABl. L 2026/90680 vom 5. August 2026, in Kraft seit dem 5. August 2026. Artikel 2 gilt ab dem 5. August 2026 und weicht vom Kommissionsvorschlag COM(2026) 345 ab: Unbeschadet des Unionsrechts und der Grundrechte wird der vorübergehende Schutz nur denjenigen Personen gewährt, deren militärische Pflichten in der Ukraine eingehalten sind, gegebenenfalls nach Vorlage eines entsprechenden Nachweises. Die Regel ist geschlechtsneutral und gilt nicht nur für Männer. Anders als im Vorschlag ist keine Voraussetzung, dass die ukrainischen Behörden die Ausreise verweigert haben; nach Erwägungsgrund 18 belegen aber ein rechtmäßiger Grenzübertritt oder ein Ausreisestempel im Reisepass die Einhaltung, sonst ein leicht überprüfbares amtliches Dokument, und die Beweislast trägt die antragstellende Person. Ausgenommen sind Personen, die in einem bestimmten Mitgliedstaat vor dem oder am 4. August 2026 vorübergehenden Schutz genießen und diesen Status in dem betreffenden Mitgliedstaat nach diesem Tag fortlaufend beibehalten; nach dem Wortlaut gilt die Ausnahme also nicht nach einem Wechsel des Mitgliedstaats oder einer Unterbrechung des Status. Artikel 2 regelt nur den vorübergehenden Schutz, nicht Asyl oder andere Aufenthaltstitel.",
+      "draft_only": false,
+      "scope_source": "https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:02026D1912-20260804",
       "relevant_norms": [
         "Directive 2001/55/EC Art. 4(2)",
         "Implementing Decision (EU) 2022/382 Art. 2",
         "Implementing Decision (EU) 2025/1460",
-        "COM(2026) 345 Arts. 2–3",
+        "Implementing Decision (EU) 2026/1912 Arts. 1–3 (corrected by OJ L 2026/90680)",
         "AufenthG § 24"
       ],
       "council_documents": [
@@ -122,7 +122,32 @@
         "WK 9955/2026 INIT (not public)",
         "ST 11375/26 (not public at time of listing)"
       ],
-      "terminal_rule": "Stop frequent polling only after the adopted act is published in the Official Journal, its final CELEX is captured and the final Article 2 is compared with COM(2026) 345; political agreement alone is not terminal."
+      "terminal_rule": "Stop frequent polling only after the adopted act is published in the Official Journal, its final CELEX is captured and the final Article 2 is compared with COM(2026) 345; political agreement alone is not terminal.",
+      "final_text_review": {
+        "status": "passed",
+        "article_2_compared": true,
+        "compared_to": "52026PC0345",
+        "reviewed_celexes": [
+          "32026D1912",
+          "32026D1912R(01)"
+        ],
+        "outcome": "adopted_article_2_differs_from_proposal",
+        "differences": [
+          "Positive Voraussetzung statt Ausschluss: Schutz nur bei eingehaltenen militärischen Pflichten, gegebenenfalls mit Nachweis.",
+          "Die Voraussetzung einer von den ukrainischen Behörden verweigerten Ausreise entfällt; Grenzübertritt oder Ausreisestempel sind nach Erwägungsgrund 18 nur Nachweise.",
+          "Ausnahme enger: Schutz in einem bestimmten Mitgliedstaat am oder vor dem 4. August 2026 und dort fortlaufend beibehalten (Vorschlag: Schutz beim Inkrafttreten).",
+          "Berichtigung ABl. L 2026/90680: Stichtag der Ausnahme 4. statt 30. Juli 2026, Geltung von Artikel 2 ab 5. August statt 31. Juli 2026."
+        ],
+        "scope_updated": "scope beschreibt den angenommenen, berichtigten Wortlaut statt des Vorschlags.",
+        "sources": [
+          "https://eur-lex.europa.eu/legal-content/DE/TXT/HTML/?uri=CELEX:32026D1912",
+          "https://eur-lex.europa.eu/legal-content/DE/TXT/HTML/?uri=CELEX:32026D1912R%2801%29",
+          "https://eur-lex.europa.eu/legal-content/DE/TXT/HTML/?uri=CELEX:02026D1912-20260804",
+          "https://eur-lex.europa.eu/legal-content/DE/TXT/HTML/?uri=CELEX:52026PC0345"
+        ],
+        "reviewed_at": "2026-11-13",
+        "reviewer": "Claude (KI-Assistent) im Auftrag des Betreibers; EN- und DE-Fassung, HTML und PDF abgeglichen"
+      }
     },
     "322125": {
       "id": "stag-untaetigkeitsklage-amendment-fate",
