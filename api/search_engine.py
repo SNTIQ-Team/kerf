@@ -20,8 +20,9 @@ import unicodedata
 from pathlib import Path
 from typing import Iterable
 
+from api.norm_identity import FEDERAL_ALIASES, reader_designator
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 NORM_REF_RE = re.compile(
     r"(?P<kind>§+|\bArt(?:ikel)?\.?)[\s\u00a0]*"
@@ -40,6 +41,18 @@ CONCEPT_PRIORITY_STEP = 1_000
 # than a generic high-priority target.  It is still smaller than the entire
 # concept band, so curated meaning continues to precede unrelated body text.
 CONCEPT_CONTEXT_BONUS = 1_500
+
+
+def search_source(act: dict) -> str:
+    """Name the publisher of this act, including EU and treaty texts."""
+    metadata = act.get("source")
+    name = str(metadata.get("name") or "").casefold() if isinstance(metadata, dict) else ""
+    url = str(act.get("source_url") or act.get("permalink") or "")
+    if "cellar" in name or url.startswith("https://eur-lex.europa.eu/"):
+        return "eur_lex"
+    if "council of europe" in name or url.startswith("https://www.echr.coe.int/"):
+        return "council_of_europe"
+    return {"DE": "gii", "DE-BY": "bayern_recht", "EU": "eur_lex"}.get(str(act.get("juris")), "unknown")
 
 
 def normalize_search_text(value: object) -> str:
@@ -242,7 +255,7 @@ def build_search_database(details: dict[str, dict], output: Path,
         for act_id in sorted(details):
             act = details[act_id]
             juris = str(act.get("juris") or "")
-            source = "gii" if juris == "DE" else "bayern_recht"
+            source = search_source(act)
             jurabk = str(act.get("jurabk") or "")
             act_title = str(act.get("title") or jurabk)
             conn.execute(insert, (
@@ -258,19 +271,20 @@ def build_search_database(details: dict[str, dict], output: Path,
                                str(n.get("titel") or "")))
             for norm in norms:
                 enbez = str(norm.get("enbez") or "")
+                display_ref = reader_designator(enbez, norm.get("glied") or "")
                 norm_title = str(norm.get("titel") or "")
                 body = str(norm.get("text") or "")
                 conn.execute(insert, (
                     "norm", act_id, juris, source,
                     normalize_search_text(jurabk),
                     normalize_search_text(act_title),
-                    normalize_search_text(enbez),
+                    normalize_search_text(display_ref),
                     normalize_search_text(norm_title),
                     normalize_search_text(body),
                     " ".join(sorted(
                         list(norm_act_concepts.get(act_id, set())) +
                         norm_concepts.get((act_id, enbez), []))),
-                    jurabk, act_title, enbez, norm_title, body))
+                    jurabk, act_title, display_ref, norm_title, body))
                 norm_count += 1
         conn.executemany(
             "INSERT INTO search_meta(key, value) VALUES (?, ?)",
@@ -310,9 +324,12 @@ class SearchEngine:
         version = self.conn.execute(
             "SELECT value FROM search_meta WHERE key='schema_version'"
         ).fetchone()
-        if not version or version[0] != SCHEMA_VERSION:
+        # Version 3 adds qualified paragraph labels and corrected publisher
+        # metadata. Version 2 has the same physical schema during rollouts.
+        if not version or version[0] not in {"2", SCHEMA_VERSION}:
             self.conn.close()
             raise RuntimeError("unsupported Lexgraph search index schema")
+        self.legacy_sources = version[0] == "2"
         self.synonym_groups = self._load_synonyms()
         self.act_aliases = self._load_act_aliases()
 
@@ -338,6 +355,10 @@ class SearchEngine:
         for act_id, row in self.wiki.items():
             for alias in _jurabk_aliases(row.get("jurabk")):
                 aliases.setdefault(alias, set()).add(act_id)
+        for alias, slug in FEDERAL_ALIASES.items():
+            act_id = f"fed_{slug}"
+            if act_id in self.wiki:
+                aliases.setdefault(tuple(_tokens(alias)), set()).add(act_id)
         return aliases
 
     def _act_reference_constraint(
@@ -537,13 +558,17 @@ class SearchEngine:
             (" …" if end < len(value) else "")
 
     def _rows(self, expression: str, kind: str, limit: int,
-              act_ids: set[str] | None = None) -> tuple[int, list]:
+              act_ids: set[str] | None = None,
+              jurisdiction: str | None = None) -> tuple[int, list]:
         act_filter = ""
         params: list[object] = [expression, kind]
         if act_ids:
             placeholders = ",".join("?" for _ in act_ids)
             act_filter = f" AND act_id IN ({placeholders})"
             params.extend(sorted(act_ids))
+        if jurisdiction is not None:
+            act_filter += " AND juris = ?"
+            params.append(jurisdiction)
         total = self.conn.execute(
             "SELECT count(*) FROM search_fts WHERE search_fts MATCH ? "
             "AND kind = ?" + act_filter, params).fetchone()[0]
@@ -561,7 +586,7 @@ class SearchEngine:
         return total, rows
 
     def search(self, query: str, act_limit: int = 25,
-               norm_limit: int = 50) -> dict:
+               norm_limit: int = 50, *, jurisdiction: str | None = None) -> dict:
         expression, terms, concepts = self._match_expression(query)
         norm_act_ids, skip_indexes = self._act_reference_constraint(query)
         norm_expression, _, _ = self._match_expression(
@@ -571,13 +596,13 @@ class SearchEngine:
                     "result_total": 0, "act_total": 0, "norm_total": 0,
                     "act_matches": [], "norm_matches": []}
         act_total, act_rows = self._rows(
-            expression, "act", max(act_limit, len(self.wiki)))
+            expression, "act", max(act_limit, len(self.wiki)), jurisdiction=jurisdiction)
         # Re-rank a generous FTS candidate window by field usefulness.  The
         # corpus is small (~11.6k norms), so this stays cheap while avoiding
         # short title-only rows dominating meaningful full-text hits.
         norm_candidates = min(3000, max(500, norm_limit * 10))
         norm_total, norm_rows = self._rows(
-            norm_expression, "norm", norm_candidates, norm_act_ids)
+            norm_expression, "norm", norm_candidates, norm_act_ids, jurisdiction)
 
         direct = normalize_search_text(query)
         query_token_count = len(_tokens(query))
@@ -600,6 +625,11 @@ class SearchEngine:
                 -evaluate(row, kind)[1],
                 row["rank"], row["act_id"], row["enbez"], row["rowid"]))
 
+        def publisher(row: sqlite3.Row) -> str:
+            if self.legacy_sources and row["juris"] not in {"DE", "DE-BY"}:
+                return search_source(self.wiki.get(row["act_id"], {"juris": row["juris"]}))
+            return row["source"]
+
         act_rows = rerank(act_rows, "act")[:act_limit]
         norm_rows = rerank(norm_rows, "norm")[:norm_limit]
 
@@ -618,7 +648,7 @@ class SearchEngine:
                 "snippet": self._snippet(
                     display, terms, display, folded=str(display_n or "")),
                 "matched_fields": fields,
-                "source": row["source"],
+                "source": publisher(row),
                 "url": f"/acts/{row['act_id']}",
             })
             act_matches.append(base)
@@ -646,7 +676,7 @@ class SearchEngine:
                                          folded=str(snippet_folded or "")),
                 "score": score,
                 "matched_fields": fields,
-                "source": row["source"],
+                "source": publisher(row),
                 "url": f"/acts/{row['act_id']}",
             })
 

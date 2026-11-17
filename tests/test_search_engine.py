@@ -19,6 +19,31 @@ from api.search_engine import (  # noqa: E402
 SYNONYMS = ROOT / "data" / "search_synonyms.json"
 
 
+def test_filtered_rank_source_and_scoped_paragraphs(tmp_path):
+    sources = [
+        ("fed_bgbeg", "DE", "gii"), ("by_test", "DE-BY", "bayern_recht"),
+        ("eu_test", "EU", "eur_lex"), ("int_emrk", "INT", "council_of_europe"),
+    ]
+    acts = {key: {"id": key, "jurabk": key, "juris": juris, "title": "Gericht",
+                  "norms": [{"enbez": "§ 1", "glied": "Art 229", "text": "Gericht"}]}
+            for key, juris, _ in sources}
+    acts["int_emrk"]["source_url"] = "https://www.echr.coe.int/documents/d/echr/convention_deu"
+    path = tmp_path / "search.sqlite"
+    build_search_database(acts, path, tmp_path / "synonyms.json")
+    engine = SearchEngine(path, acts.values())
+    try:
+        citation = engine.search("Art. 229 § 1 EGBGB")
+        assert [row["act_id"] for row in citation["norm_matches"]] == ["fed_bgbeg"]
+        for _, juris, source in sources:
+            found = engine.search("Gericht", act_limit=1, norm_limit=1, jurisdiction=juris)
+            assert found["act_total"] == found["norm_total"] == 1
+            assert found["norm_matches"][0]["enbez"] == "Art. 229 § 1"
+            assert found["norm_matches"][0]["source"] == found["act_matches"][0]["source"] == source
+            assert found["norm_matches"][0]["juris"] == juris
+    finally:
+        engine.close()
+
+
 @pytest.fixture()
 def engine(tmp_path: Path) -> SearchEngine:
     details = {

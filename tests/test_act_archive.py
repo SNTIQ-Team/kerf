@@ -34,6 +34,20 @@ def _act(*, juris: str = "DE", norms: list[dict] | None = None,
     }
 
 
+def test_numbered_article_keeps_its_own_paragraph_in_export() -> None:
+    act = _act(norms=[
+        {"glied": "Art 224", "enbez": "§ 1", "text": "Abstammung"},
+        {"glied": "Art 229", "enbez": "§ 1", "text": "Fällige Zahlungen"},
+    ])
+    with pytest.raises(UnknownNormError, match=r"Art\. 224 § 1, Art\. 229 § 1"):
+        render_markdown_snapshot(act, norm="§ 1")
+    body = render_markdown_snapshot(act, norm="Art 229 § 1")["markdown"]
+    assert 'scope: "Art. 229 § 1"' in body
+    assert "## Art. 229 § 1" in body
+    assert "Fällige Zahlungen" in body and "Abstammung" not in body
+    assert "## Art. 224 § 1" in render_markdown_snapshot(act)["markdown"]
+
+
 def test_head_markdown_is_exact_and_supports_full_act_or_one_norm() -> None:
     act = _act()
     assert head_date_for(act, "2026-07-15T12:34:56+00:00") == "2026-07-15"

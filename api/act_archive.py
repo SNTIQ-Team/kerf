@@ -35,6 +35,7 @@ from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
 from api.markdown_layout import ParagraphLayouts, apply_paragraph_layout
+from api.norm_identity import reader_designator
 
 
 class ArchiveRequestError(ValueError):
@@ -149,7 +150,8 @@ def _norm_refs(norms: list[dict[str, Any]]) -> list[_NormRef]:
     for index, norm in enumerate(norms):
         label = str(norm.get("enbez") or "").strip()
         kind, number = _norm_key(label)
-        refs.append(_NormRef(index, label, kind, number))
+        name = reader_designator(label, norm.get("glied") or "")
+        refs.append(_NormRef(index, name, kind, number))
     return refs
 
 
@@ -189,7 +191,7 @@ def _historical_designators(act: dict[str, Any]) -> list[str]:
 
 def _resolve_norm(norms: list[dict[str, Any]], query: str,
                   historical: Iterable[str] = ()) -> _NormRef:
-    raw = query.strip()
+    raw = reader_designator(query)
     if not raw:
         raise UnknownNormError("norm must not be empty")
     refs = _norm_refs(norms)
@@ -198,6 +200,8 @@ def _resolve_norm(norms: list[dict[str, Any]], query: str,
     exact = [ref for ref in refs if ref.label.casefold() == raw.casefold()]
     if len(exact) == 1:
         return exact[0]
+    if "§" in raw and raw.startswith("Art. "):
+        raise UnknownNormError(f"unknown norm '{query}'")
 
     kind, number = _norm_key(raw)
     if number is None:
@@ -416,11 +420,12 @@ def build_archive_index(act: dict[str, Any], *, fallback_head: Any = None
     })
     gaps = _global_gaps(act, head_date)
     norms = [{
-        "id": str(norm.get("enbez") or ""),
-        "enbez": str(norm.get("enbez") or ""),
-        "label": str(norm.get("enbez") or ""),
+        "id": label,
+        "enbez": label,
+        "label": label,
         "title": str(norm.get("titel") or ""),
-    } for norm in act.get("norms") or [] if norm.get("enbez")]
+    } for norm in act.get("norms") or [] if norm.get("enbez")
+       for label in [reader_designator(norm["enbez"], norm.get("glied") or "")]]
     present = {_norm_key(norm["enbez"]) for norm in norms}
     for label in _historical_designators(act):
         kind, number = _norm_key(label)
@@ -795,6 +800,7 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         body = body.strip()
         if not label and not norm_title and not body:
             continue
+        label = reader_designator(label, norm.get("glied") or "")
         heading = label or norm_title or "Untitled norm"
         if label and norm_title:
             heading = f"{label} — {norm_title}"

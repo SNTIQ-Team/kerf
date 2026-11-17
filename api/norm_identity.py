@@ -36,6 +36,19 @@ class NormIdentityError(ValueError):
     """The requested identifier is malformed (``invalid_argument``)."""
 
 
+_SCOPED_PARAGRAPH = re.compile(
+    r"Art(?:ikel)?\.?\s*(\d+[a-z]*)\s+§\s*(\d+[a-z]*)", re.I)
+
+
+def reader_designator(label: str, parent: str = "") -> str:
+    """Keep the source article when a paragraph is numbered within it."""
+    text = f"{parent} {label}".strip() if parent else label.strip()
+    match = _SCOPED_PARAGRAPH.fullmatch(text)
+    if match:
+        return f"Art. {match[1].lower()} § {match[2].lower()}"
+    return label.strip()
+
+
 def _slug(value: str) -> str:
     text = unicodedata.normalize("NFKD", value or "")
     text = "".join(ch for ch in text if not unicodedata.combining(ch))

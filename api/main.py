@@ -76,7 +76,7 @@ except ImportError:  # optional component; /capabilities still declares it
     materials_router = None
 from api.gii_catalog import GiiCatalogIndex
 from api.citation_store import CitationStoreError, query_citations
-from api.search_engine import SearchEngine, normalize_search_text
+from api.search_engine import SearchEngine, normalize_search_text, search_source
 from api.source_freshness import source_health
 from api.procedure_search import ProcedureSearchIndex
 from api.official_state_store import OfficialStateError, load_observed_state
@@ -1493,7 +1493,8 @@ def search(q: str = Query(..., min_length=1),
            limit: int = Query(25, ge=1, le=200),
            norm_limit: int = Query(50, ge=1, le=200),
            procedure_limit: int = Query(20, ge=1, le=100),
-           catalog_limit: int = Query(25, ge=1, le=100)):
+           catalog_limit: int = Query(25, ge=1, le=100),
+           law_jurisdiction: str | None = None):
     """Ranked Unicode full-text search over acts and current norms.
 
     ``matches`` and ``total`` retain the original act-search contract.
@@ -1504,10 +1505,15 @@ def search(q: str = Query(..., min_length=1),
 
     If an old deployment has no FTS artifact yet, the endpoint degrades to the
     previous title/abbreviation substring search instead of failing.  Complete
-    GII catalogue matches are appended as metadata-only discovery results and
-    never masquerade as locally indexed full text.
+    GII catalogue matches are appended as metadata-only discovery results.
+    The optional law_jurisdiction limits the act and norm components before
+    ranking and pagination. Other components keep their independent scope.
     """
-    rows = _load("wiki")
+    if law_jurisdiction not in {None, "DE", "DE-BY", "EU", "INT"}:
+        raise HTTPException(422, "law_jurisdiction must be DE, DE-BY, EU or INT")
+    all_rows = _load("wiki")
+    rows = [row for row in all_rows if law_jurisdiction is None or
+            row.get("juris") == law_jurisdiction]
     # DIP has only a few hundred current procedures.  Count the full match set
     # first so ``procedure_total`` follows the act/norm total contract, then
     # expose only the requested page.
@@ -1529,7 +1535,7 @@ def search(q: str = Query(..., min_length=1),
             "query": q, "total": len(all_matches), "matches": matches,
             "result_total": len(all_matches) + procedure_total,
             "act_total": len(all_matches),
-            "norm_total": None, "act_matches": matches,
+            "norm_total": None, "act_matches": [dict(row, source=search_source(row)) for row in matches],
             "norm_matches": [],
             "procedure_total": procedure_total,
             "procedure_matches": procedure_matches,
@@ -1547,12 +1553,12 @@ def search(q: str = Query(..., min_length=1),
         if _SEARCH_ENGINE is None or _SEARCH_ENGINE.path != index_path:
             if _SEARCH_ENGINE is not None:
                 _SEARCH_ENGINE.close()
-            _SEARCH_ENGINE = SearchEngine(index_path, rows)
+            _SEARCH_ENGINE = SearchEngine(index_path, all_rows)
         # There are only dozens of curated acts.  Ask the engine for all act
         # candidates so the legacy substring union below has an exact count,
         # then apply the public limit after de-duplication.
         result = _SEARCH_ENGINE.search(q, act_limit=max(limit, len(rows)),
-                                       norm_limit=norm_limit)
+                                       norm_limit=norm_limit, jurisdiction=law_jurisdiction)
 
     # Preserve the old arbitrary-substring behavior for act abbreviations
     # (FTS prefix matching cannot find a query in the middle of one token).
@@ -1572,8 +1578,7 @@ def search(q: str = Query(..., min_length=1),
             "score": 0.0,
             "snippet": row.get("title") or row.get("jurabk") or "",
             "matched_fields": ["legacy_substring"],
-            "source": "gii" if row.get("juris") == "DE"
-            else "bayern_recht",
+            "source": search_source(row),
             "url": f"/acts/{row['id']}",
         })
         result["act_matches"].append(enriched)
