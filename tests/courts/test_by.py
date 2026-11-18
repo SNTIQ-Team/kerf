@@ -58,7 +58,7 @@ def test_justified_numbers_are_not_mistaken_for_rn():
 
 def test_lists(fixture):
     verfgh = parse_verfgh_list(fixture("by/verfgh_ausgewaehlte.html.gz").decode("utf-8"))
-    assert len(verfgh) == 121 and verfgh[0]["listed_date"] == "2026-07-31"
+    assert len(verfgh) == 245 and verfgh[0]["listed_date"] == "2026-07-31"
     assert verfgh[0]["url"] == "https://www.bayern.verfassungsgerichtshof.de/media/images/bayverfgh/15-vii-25_entscheidung.pdf"
     press = parse_vgh_press(fixture("by/vgh_pm_index.html.gz").decode("utf-8"), "bayvgh")
     assert press[0]["listed_court"] == "vgh-by" and press[0]["priority"] == 0
@@ -103,3 +103,15 @@ def test_wrong_list_date_is_tolerated_only_when_the_docket_matches_the_file(fixt
         parse_pdf_decision(fixture(PDF), wrong, "https://www.bayern.verfassungsgerichtshof.de/media/images/"
                                                 "bayverfgh/16-vii-25_entscheidung.pdf")
     assert err.value.kind == "identity_mismatch"
+
+
+def test_verfgh_dates_and_nested_citations_stay_in_source_entry():
+    from courts.sources.by import parse_verfgh_list
+    listing = """
+    <li class="pdf"><a href="/media/images/bayverfgh/one.pdf">First</a>
+      <span>1. August 1997<br>VerfGHE 50, 156</span></li>
+    <li class="pdf"><a href="/media/images/bayverfgh/two.pdf">Second</a>
+      <span>2. August 1997</span></li>
+    """
+    assert [(i["extra"]["title"], i["listed_date"]) for i in parse_verfgh_list(listing)] == [
+        ("First", "1997-08-01"), ("Second", "1997-08-02")]

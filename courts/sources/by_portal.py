@@ -1,9 +1,7 @@
-"""BAYERN.RECHT (www.gesetze-bayern.de) decision pages captured in the operator's own browser.
+"""BAYERN.RECHT decision pages supplied by browser capture or the public hit list.
 
-The portal answers automated requests with a Myra Security challenge.  It is never bypassed and never
-crawled: the operator opens ONE decision page in Chrome (solving the challenge there if it appears), and
-the saved page - HTML, or the portal's PDF of it - is handed to the corpus with
-``python -m courts ingest-capture`` (courts.capture).  This module only parses such a capture.
+The `by` adapter retains user-browser provenance. The separate `by-recht` adapter
+retrieves public HTTPS originals and matches each document against its listing.
 
 Decision URLs: ``https://www.gesetze-bayern.de/Content/Document/<doc id>`` (HTML) and
 ``/Content/Pdf/<doc id>?all=False`` (PDF), doc id ``Y-300-Z-BECKRS-B-<year>-N-<number>`` = the BeckRS
