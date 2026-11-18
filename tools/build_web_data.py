@@ -512,6 +512,14 @@ def _act_decisions(decisions: list[dict], aid: str) -> list[dict]:
     return rows
 
 
+def bavarian_publications() -> list[dict]:
+    # The RSS feed only retains 50 items per gazette. The official GVBl
+    # index preserves older references for the same exact BayRS numbers.
+    gazettes = {row["permalink"]: row for row in load("gvbl_index", "events.jsonl")}
+    gazettes.update({row["permalink"]: row for row in load("gvbl_events", "events.jsonl")})
+    return sorted(gazettes.values(), key=lambda row: row.get("time") or "", reverse=True)
+
+
 def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     idx, details = [], {}
     decisions = load_decisions()
@@ -523,11 +531,7 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     syn_by_key: dict[tuple, list] = {}
     for s in load("buzer_synopse", "synopse.jsonl"):
         syn_by_key[(s["act_id"], s["date"])] = _clean_changes(s.get("changes"))
-    # The RSS feed only retains 50 items per gazette. The official GVBl
-    # index preserves older references for the same exact BayRS numbers.
-    gazettes = {row["permalink"]: row for row in load("gvbl_index", "events.jsonl")}
-    gazettes.update({row["permalink"]: row for row in load("gvbl_events", "events.jsonl")})
-    gvbl = sorted(gazettes.values(), key=lambda row: row.get("time") or "", reverse=True)
+    gvbl = bavarian_publications()
     by_v = load("bayern_recht", "versions.jsonl")
     bay_bills = load("bay_landtag", "bills.jsonl")
     by_diffs = load_by_diffs()
@@ -2034,6 +2038,17 @@ def main() -> int:
         "git.json": dump("git.json", git),
     }
     sizes["citations.sqlite"] = (WEB / "citations.sqlite").stat().st_size
+    gazette_snapshot = latest_snapshot("gvbl_index")
+    if gazette_snapshot and (gazette_snapshot / "events.jsonl").is_file():
+        fields = ("event_id", "time", "ausfertigung_date", "title", "gliederungs_nr", "permalink")
+        rows = [{key: row.get(key) for key in fields}
+                for row in bavarian_publications() if row["gazette"] == "GVBl"]
+        sizes["bavarian_gvbl.json"] = dump("bavarian_gvbl.json", {
+            "source": "https://www.verkuendung-bayern.de/gvbl/", "index_date": gazette_snapshot.name,
+            "publications": rows,
+        })
+    else:
+        (WEB / "bavarian_gvbl.json").unlink(missing_ok=True)
     if eu_index:
         sizes["eu_index.json"] = dump("eu_index.json", eu_index)
     else:
