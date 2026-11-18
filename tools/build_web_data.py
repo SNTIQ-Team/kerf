@@ -50,6 +50,7 @@ from tools.bavarian_states import publish_states as publish_bavarian_states  # n
 from tools import by_archive_history, eu_history  # noqa: E402
 from legacy_bgbl_history import load_reviewed_candidates  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
+from tools.court_observations import attach as attach_court_observations
 from tools.decision_passages import build_index as build_decision_passages
 from api.search_engine import build_search_database       # noqa: E402
 from procedure_analysis import analyse_procedure           # noqa: E402
@@ -1782,6 +1783,7 @@ def main() -> int:
         official_transitions, transition_reviews, retrospective_candidates)
     decisions = load_decisions()
     build_decision_passages(decisions, ROOT / "data" / "cache" / "rii", WEB, observed_at=built_at)
+    attach_court_observations(ROOT / "data" / "court_observations.json", WEB)
     data_policy = {
         "schema_version": 1,
         "public_build": not include_quarantined_sources(),
