@@ -233,7 +233,12 @@ def parse_pdf_decision(pdf: bytes, item: dict, url: str) -> ParsedDecision:
         m = re.search(r"(Entscheidung|Beschluss|Urteil)\s+des\s+Bayerischen\s+Verfassungsgerichtshofs?\s+vom\s+"
                       r"(\d{1,2}\.\s*\w+\s+\d{4})", head)
         if not m:
-            raise UpstreamFailure("parse_error", "BayVerfGH PDF without decision date", url=url)
+            # Earlier originals may open with a short dated title and the docket.
+            # Match the title on the cover, never a cited decision in the reasons.
+            m = re.match(r"\s*(?:Vf\.\s*\d+[a-z]?-[IVX]+-\d{2}\s+)?"
+                         r"(Entscheidung)\s+vom\s+(\d{1,2}\.\s*\w+\s+\d{4})(?=\s|$)", head)
+            if not m or _german_date(m.group(2)) != item["listed_date"]:
+                raise UpstreamFailure("parse_error", "BayVerfGH PDF without decision date", url=url)
         decision_type, when = m.group(1), _german_date(m.group(2))
         if item["listed_date"] and item["listed_date"] != when:
             # The court's list dates are occasionally wrong (e.g. 2008 for a 2017 decision).  The PDF

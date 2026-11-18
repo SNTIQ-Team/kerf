@@ -115,3 +115,13 @@ def test_verfgh_dates_and_nested_citations_stay_in_source_entry():
     """
     assert [(i["extra"]["title"], i["listed_date"]) for i in parse_verfgh_list(listing)] == [
         ("First", "1997-08-01"), ("Second", "1997-08-02")]
+
+def test_historical_verfgh_short_title_must_match_directory_date(monkeypatch):
+    from courts.sources import by
+    text = "Vf. 2-VII-00\n\nEntscheidung vom 4. Juli 2001\n\nGründe:\n\nDie Popularklage ist zulässig."
+    monkeypatch.setattr(by, "pdf_text", lambda pdf, url: text)
+    item = dict(ITEM, listed_date="2001-07-04", source_doc_id="verfgh:/media/images/bayverfgh/2-vii-00.pdf")
+    url = by.VERFGH + "/media/images/bayverfgh/2-vii-00.pdf"
+    assert by.parse_pdf_decision(b"fixture", item, url).decision_date == "2001-07-04"
+    with pytest.raises(by.UpstreamFailure, match="without decision date"):
+        by.parse_pdf_decision(b"fixture", dict(item, listed_date="2001-07-05"), url)
