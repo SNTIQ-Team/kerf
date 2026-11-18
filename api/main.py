@@ -1319,7 +1319,7 @@ def bavarian_gazette(year: int | None = Query(None, ge=1945, le=9999),
     index = _load("bavarian_gvbl")
     rows = index["publications"]
     if year is not None:
-        rows = [row for row in rows if row["time"].startswith(f"{year}-")]
+        rows = [row for row in rows if (row.get("time") or "").startswith(f"{year}-")]
     if bayrs is not None:
         number = bayrs.strip().casefold()
         rows = [row for row in rows if number in {

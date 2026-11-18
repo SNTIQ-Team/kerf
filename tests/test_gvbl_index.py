@@ -34,3 +34,25 @@ def test_reject_skipped_page_and_foreign_source():
         page(listing(40), 1)
     with pytest.raises(ValueError):
         page(listing(None).replace('href="/gvbl/', 'href="https://example.org/gvbl/'), 1)
+
+
+def test_public_index_filters_whole_bayrs_number_and_publication_year(tmp_path, monkeypatch):
+    import json
+    from fastapi.testclient import TestClient
+    from api import main
+
+    def doc(date, refs):
+        return {"time": date, "gliederungs_nr": refs}
+
+    payload = {"source": "https://www.verkuendung-bayern.de/gvbl/",
+               "index_date": "2026-11-18", "publications": [
+                   doc("2024-10-01", "21-1-A, 13-2-B"), doc("2024-11-01", "21-1-AB"),
+                   doc("2023-12-01", "21-1-A"), doc(None, "21-1-A")]}
+    (tmp_path / "bavarian_gvbl.json").write_text(json.dumps(payload))
+    monkeypatch.setattr(main, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(main, "_CACHE", {})
+    with TestClient(main.app) as client:
+        response = client.get("/bavaria/gvbl", params={"year": 2024, "bayrs": "21-1-a"})
+        assert response.status_code == 200
+        assert response.json()["publications"] == payload["publications"][:1]
+        assert client.get("/bavaria/gvbl", params={"limit": 1, "offset": 2}).json()["total"] == 4
