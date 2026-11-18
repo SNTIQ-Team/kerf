@@ -47,6 +47,7 @@ from api.source_freshness import build_freshness  # noqa: E402
 from tools.reader_blocks import refresh_cached_sidecars  # noqa: E402
 from tools.archived_reader_store import publish_archived_readers  # noqa: E402
 from tools.bavarian_states import publish_states as publish_bavarian_states  # noqa: E402
+from tools.bavarian_guidance import migration_guidance
 from tools import by_archive_history, eu_history  # noqa: E402
 from legacy_bgbl_history import load_reviewed_candidates  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
@@ -2005,6 +2006,8 @@ def main() -> int:
     sizes = {
         "summary.json": dump("summary.json", summary),
         "data_policy.json": dump("data_policy.json", data_policy),
+        "bavarian_migration_guidance.json": dump(
+            "bavarian_migration_guidance.json", migration_guidance(ROOT / "data" / "bavarian_guidance")),
         "feed.json": dump("feed.json", feed),
         "wiki.json": dump("wiki.json", wiki_idx),
         "decisions.json": dump("decisions.json", decisions),

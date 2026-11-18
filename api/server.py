@@ -31,6 +31,7 @@ SERVICE_INDEX = {
         "/acts/{id}/history", "/acts/{id}/diff",
         "/acts/{id}/markdown", "/retrospective-history.sqlite",
         "/changes", "/changes.atom", "/acts/{id}/changes.atom",
+        "/bavaria/migration-guidance", "/bavaria/migration-guidance/{document_id}",
         "/amending-acts/{document_id}",
         "/decisions", "/decisions/{id}", "/decision-passages", "/decisions/{id}/relations",
         "/decisions/{id}/passages/{passage_id}", "/decisions/{id}/source",
