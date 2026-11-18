@@ -159,3 +159,25 @@ def test_partial_refresh_keeps_other_acts_pages_and_verified_zip():
     assert merged[0]["pages"] == old["pages"]
     assert merged[0]["zip_captures"] == [capture]
     assert merged[1] == untouched
+
+
+def test_verified_nested_quotation_keeps_its_legacy_version_link(tmp_path, monkeypatch):
+    monkeypatch.setattr(archive, "CACHE", tmp_path)
+    good = _zip(XML)
+    ts = "20230523085904"
+    (tmp_path / f"BayDSG-{ts}.zip").write_bytes(good)
+    capture = archive.fetch_zip("BayDSG", {"timestamp": ts, "digest": _digest(good)}, offline=True)
+    row = {"key": "BayDSG", "jurabk": "BayDSG", "title": "BayDSG",
+           "zip_captures": [capture], "pages": []}
+    detail = by_archive_history.build(row)
+    old = detail["history"]["version"][-1]
+    row["quoted_amendment_fragments"] = [{
+        "norm_id": old["canonical_id"], "identity": old["content_hash"]["identity"],
+        "citing_norm": "Art. 39b", "source_sha256": [capture["sha256"]]}]
+    marked = by_archive_history.build(row)
+    preserved = marked["history"]["version"][-1]
+    assert old["version_id"] == preserved["version_id"]
+    assert preserved["source_role"] == "quoted_amendment_fragment"
+    assert preserved["verification"]["citing_norm"] == "Art. 39b"
+    assert preserved["text"] == old["text"]
+    assert len(marked["norms"]) == len(detail["norms"]) - 1

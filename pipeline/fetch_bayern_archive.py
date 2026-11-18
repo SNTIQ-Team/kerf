@@ -310,6 +310,8 @@ def retain_observations(previous, fresh: list[dict]) -> list[dict]:
                               ("jurabk", "bayrs_nr", "title", "inkraft", "ausfertigung", "gvbl")},
                    "zip_captures": [captures[t] for t in sorted(captures)],
                    "pages": [pages[k] for k in sorted(pages)]}
+            if old.get("quoted_amendment_fragments"):
+                row["quoted_amendment_fragments"] = old["quoted_amendment_fragments"]
         acts[row["key"]] = row
     return list(acts.values())
 
