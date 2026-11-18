@@ -493,6 +493,58 @@ def test_public_assertion_ids_are_stable_across_reruns_and_input_order(
                for row in rerun_act["intervals"] + rerun_act["events"])
 
 
+@pytest.fixture
+def public_rebuild(evidence: dict):
+    states = evidence["states"]
+    history = materialize_history(evidence["observations"], states, evidence["reviews"])
+    objects = _objects(states)
+    previous = build_public_manifest(history, states, objects, [_candidate()],
+                                     built_at="2026-07-16T12:00:00Z")
+    stale_state = _state("orphan")
+    stale = _digest(stale_state)
+    previous["objects"].update(_objects({stale: stale_state}))
+
+    def rebuild():
+        return build_public_manifest(history, states, objects, [_candidate()],
+                                     built_at="2026-07-17T12:00:00Z", previous=previous)
+
+    return previous, objects, stale, rebuild
+
+
+def test_public_rebuild_drops_only_unreferenced_old_catalogue_entries(public_rebuild):
+    previous, objects, stale, rebuild = public_rebuild
+    current = rebuild()
+    assert stale in previous["objects"] and stale not in current["objects"]
+    assert current["objects"] == objects
+    assert current["counts"]["state_objects"] == len(objects)
+    assert current["acts"] == previous["acts"]
+
+
+@pytest.mark.parametrize("path", [
+    ("observations", 0, "state_sha256"),
+    ("intervals", 0, "state_sha256"),
+    ("intervals", 0, "previous_state_sha256"),
+    ("intervals", 0, "provenance", "anchor_state_sha256"),
+    ("events", 0, "evidence", 0, "state_sha256"),
+])
+def test_public_rebuild_rejects_missing_historical_state(public_rebuild, path):
+    previous, _, stale, rebuild = public_rebuild
+    row = previous["acts"]["fed_demog"]
+    for key in path[:-1]:
+        row = row[key]
+    row[path[-1]] = stale
+    with pytest.raises(RetrospectiveHistoryError, match=f"missing CAS state {stale}"):
+        rebuild()
+
+
+def test_public_rebuild_rejects_changed_metadata_for_published_state(public_rebuild):
+    previous, objects, _, rebuild = public_rebuild
+    digest = next(iter(objects))
+    previous["objects"][digest]["gzip_bytes"] += 1
+    with pytest.raises(RetrospectiveHistoryError, match=f"metadata changed for {digest}"):
+        rebuild()
+
+
 def test_public_correction_closes_old_knowledge_interval(evidence: dict) -> None:
     objects = _objects(evidence["states"])
     initial_history = materialize_history(
