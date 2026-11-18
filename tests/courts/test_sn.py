@@ -1,6 +1,7 @@
 """Sachsen adapter (Sächs. OVG Entscheidungssammlung + ESAMOSplus) on real captures, offline.
 
-Fixtures (tests/courts/fixtures/sn, exact bytes captured 2026-09-28):
+Fixtures in tests/courts/fixtures/sn were captured on 2026-09-28. The ESAMOS HTML
+pages contain synthetic form state (see conformance/fixtures/court-html-provenance.json).
   ovg-list-2026.html.gz        POST searchlist.phtml datum=2026 (197 hits, one page)
   ovg-list-empty.html          POST searchlist.phtml datum=01.01.1900-31.12.1990 (no hits)
   ovg-doc-8012.html            document.phtml?id=8012 (2 B 264/26)
@@ -320,7 +321,8 @@ def test_esamos_fetch_posts_search_then_row_button(fixture, es_item):
     search = fake.calls[1][2]
     assert (search["DV1_C33"], search["DV1_C34"], search["DV1_C35"], search["DV1_C24"]) == (
         "", "05.08.2026", "05.08.2026", "Suchen")
-    assert "__VIEWSTATE" in search and "__VIEWSTATE" in fake.calls[2][2]
+    assert search["__VIEWSTATE"] == "fixture-esamos-suchen-state"
+    assert fake.calls[2][2]["__VIEWSTATE"] == "fixture-esamos-treffer-az-4U374-26-state"
 
 
 def test_esamos_fetch_checks_the_delivered_file_name(fixture, es_item):

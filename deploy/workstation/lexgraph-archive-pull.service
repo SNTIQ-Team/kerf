@@ -1,14 +1,14 @@
 [Unit]
 Description=Pull Lexgraph source archives from the VPS, receipt them, prune the VPS
-Documentation=file://%h/.local/share/kerf/checkout/deploy/README.md
+Documentation=https://github.com/SNTIQ-Team/lexgraph/blob/main/deploy/README.md
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/.local/share/kerf/checkout
-Environment=PATH=%h/.local/share/kerf/checkout/.venv/bin:/usr/local/bin:/usr/bin
-ExecStart=%h/.local/share/kerf/checkout/deploy/archive-pull.sh
+WorkingDirectory=%h/.local/share/lexgraph-checkout
+Environment=PATH=%h/.local/share/lexgraph-checkout/.venv/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/.local/share/lexgraph-checkout/deploy/archive-pull.sh
 TimeoutStartSec=3h
 SuccessExitStatus=75
 Nice=10

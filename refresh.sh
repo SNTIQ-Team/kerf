@@ -157,7 +157,7 @@ step "21b/24" "reversible snapshot compaction (newest two remain raw)" \
 
 echo "==> [22/24] build arena"
 python3 tools/build_qfs.py
-VIS="${QFS_VISUALIZER_PUBLIC:-}"
+VIS="${LEXGRAPH_VISUALIZER_PUBLIC:-}"
 [ -d "$VIS" ] && cp data/lexgraph_de_wp21.qfs "$VIS/" && echo "deployed to qfs_visualizer"
 
 echo "==> [23/24] export web data (Wiki/Realtime/Hierarchie/Graph)"

@@ -153,7 +153,7 @@ def main() -> int:
     # re-attempt goes through .get() again and waits the full delay.
     http = Http(delay=30.0, retries=1)
     http.s.headers["User-Agent"] = (
-        "SNTIQ-lexgraph/0.1 (research; contact@sntiq.com)")
+        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)")
 
     rows: list[dict] = []
     reqs = cache_hits = pdf_ok = failed = over_budget = 0

@@ -140,7 +140,7 @@ def main() -> int:
         return 2
     http = Http(delay=1.0)
     http.s.headers["User-Agent"] = (
-        "SNTIQ-lexgraph/0.1 (research; contact@sntiq.com)")
+        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)")
     fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     events: list[dict] = []

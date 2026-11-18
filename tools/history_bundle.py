@@ -20,7 +20,7 @@ only this bundle:
 Usage:
     python3 tools/history_bundle.py export --archive <R> --out <dir>
         [--change-dates f.jsonl[.gz]] [--bavarian f.jsonl[.gz]]
-        [--key ~/.config/sntiq/lexgraph-archive-signing-key]
+        [--key <signing-key-path>]
     python3 tools/history_bundle.py verify <dir>
 """
 from __future__ import annotations

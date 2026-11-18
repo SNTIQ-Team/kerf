@@ -24,7 +24,7 @@ import requests
 from common import snapshot_dir, write_jsonl
 
 ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql"
-UA = "SNTIQ-lexgraph/0.1 (research; contact@sntiq.com)"
+UA = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
 PAGE = 1000
 
 TYPES = ["DIR", "DIR_DEL", "DIR_IMPL", "REG"]

@@ -14,9 +14,9 @@
 #                                 [--publish-now] [--dry-run]
 set -euo pipefail
 cd "$(dirname "$0")/.."
+REPO="$PWD"
 
 ARCHIVE="${LEXGRAPH_HISTORY_ARCHIVE:-$HOME/.local/share/sntiq-legal/lexgraph-archive/history}"
-KEY="${LEXGRAPH_ARCHIVE_KEY:-$HOME/.config/sntiq/lexgraph-archive-signing-key}"
 HOST="${LEXGRAPH_VPS:-sntiq}"
 REMOTE="${LEXGRAPH_VPS_ROOT:-/srv/sntiq-lexgraph}"
 PYTHON="${LEXGRAPH_PYTHON:-python3}"
@@ -30,6 +30,7 @@ while [ $# -gt 0 ]; do
         *) echo "unknown option $1" >&2; exit 2 ;;
     esac
 done
+source "$REPO/deploy/workstation/archive-signing-key.sh"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="$ARCHIVE/bundles/$STAMP"
 args=(export --archive "$ARCHIVE" --out "$OUT" --key "$KEY")

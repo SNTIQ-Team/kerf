@@ -18,6 +18,17 @@ conformance/
   runner.py                         Python implementation of every kind (dispatch table KINDS)
 ```
 
+### Archived court HTML fixtures
+
+Seven BAYERN.RECHT decision pages have empty request-verification fields.
+Four Saxon ESAMOS search/result pages use synthetic ASP.NET form values
+so offline tests exercise the two postbacks with distinct state.
+[The fixture manifest](fixtures/court-html-provenance.json) records SHA-256
+over the decompressed HTML for both the capture before redaction
+(`capture_sha256`) and the distributed derivative (`fixture_sha256`).
+The corresponding court cases and Sachsen adapter tests identify the source
+pages, timestamps or search parameters.
+
 ## Case format (version 1)
 
 ```json

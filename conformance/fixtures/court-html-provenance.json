@@ -1,0 +1,57 @@
+[
+  {
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10080.html.gz",
+    "capture_sha256": "cedf81fdf067facfd04eafa427ea00a378f3b665124dc7a933dde7859776d08f",
+    "fixture_sha256": "fe1bca8a1a4706d316881b4f8f88dab2caf0ced0440d60754bd39d8ccaa011c3"
+  },
+  {
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10142.html.gz",
+    "capture_sha256": "2f53e58ce1893b0a70afafbe78f8e1d71179186a23da292520533e0478158b4e",
+    "fixture_sha256": "716b12bde6a72c359963de66c7f751a435a57313145b85bccf82ca88d13c8b7f"
+  },
+  {
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2023-N-10253.html.gz",
+    "capture_sha256": "121c768661abddd6f290623f0ccc8da61109a5d2f440f1f1b7c9559a8d433aaa",
+    "fixture_sha256": "279c169ae58efd45b0f45ba1db1fc5c0602b8175d1292afe0868470485e4bf4e"
+  },
+  {
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2025-N-12316.html.gz",
+    "capture_sha256": "88556f15d284abdc5a170d420b5c6e31c99bc85433a065855036e858d6f00635",
+    "fixture_sha256": "54b2ce82bb9a8ace738f0de8c22c18c6d084c8a82eba7ac7781fdfbfbeeba44f"
+  },
+  {
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2025-N-13206.html.gz",
+    "capture_sha256": "61a07bcd75c16a7968302c01cbac0a887389201d7d013f7884b9cb0d0f74db99",
+    "fixture_sha256": "9cd880f29c6c06b93f0b63a3e058614f2d742e288d79d3105aeae36906467d54"
+  },
+  {
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2025-N-15010.html.gz",
+    "capture_sha256": "c91ac6a28b6b40a2f5043b8875643804445bc7d03aae98b0dfb002badf1dce6b",
+    "fixture_sha256": "8b1417b955bd375cb06073f71e14a35885adc1e7d04166ce48a0418ee5d0eab7"
+  },
+  {
+    "fixture": "conformance/fixtures/decisions/bayern-recht-B-2025-N-15353.html.gz",
+    "capture_sha256": "98a24b39c7e3548c80309f49f95395721a16e2d3c5b178724154fc72641316d6",
+    "fixture_sha256": "2bea00f74bcc070d9a1e5d662a3b3042f67fcb10ac3068b8cdef806667bc9ea9"
+  },
+  {
+    "fixture": "tests/courts/fixtures/sn/esamos-suchen.html.gz",
+    "capture_sha256": "9657884ca7d2facf05eb77842f1a2b45a1cc7212914f56282090b696d9586799",
+    "fixture_sha256": "32f546812b8fc2e7b786ca344c8305751ed5010fdfa3f70eabd404c8cd110a77"
+  },
+  {
+    "fixture": "tests/courts/fixtures/sn/esamos-treffer-1900-1999-p1.html.gz",
+    "capture_sha256": "199d6be3fe945dc91093ce6da8a0d1d3122f1faa117cb44be60fc6924c27d6be",
+    "fixture_sha256": "7e7225df27ac240c6fa5ef5cdefd4e6cb3c194b6a21004f40c76c91e0d7588b2"
+  },
+  {
+    "fixture": "tests/courts/fixtures/sn/esamos-treffer-2026-p1.html.gz",
+    "capture_sha256": "c1512a164e910e167f506ceea66554b94a0a3af95a7de0fb67f796c01a4795ec",
+    "fixture_sha256": "0a6a561f5ae98eb60c9d8286eeb984270c75254a65fb5ad546d1f1ed6df16da5"
+  },
+  {
+    "fixture": "tests/courts/fixtures/sn/esamos-treffer-az-4U374-26.html.gz",
+    "capture_sha256": "92a5c37bd27d77a487b32bd0d125f410c9f3247a60f05b4785c09399b4bd3119",
+    "fixture_sha256": "6ca3cd6cd40d03222d75e21b7d511bac6ac76599428f3f2ae18fe91b159a3026"
+  }
+]

@@ -66,10 +66,8 @@ except ImportError:  # pragma: no cover - exercised until that merge
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 ROOT = Path(__file__).resolve().parent.parent
-MAIN_CHECKOUT = Path(os.environ.get(
-    "LEXGRAPH_MAIN_CHECKOUT",
-    str(Path(__file__).resolve().parents[1])))
-UA = "SNTIQ-lexgraph/0.2 (research; contact@sntiq.com)"
+MAIN_CHECKOUT = Path(os.environ.get("LEXGRAPH_MAIN_CHECKOUT", ROOT))
+UA = "SNTIQ-lexgraph/0.2 (research; +https://sntiq.com/)"
 LEDGER_SCHEMA = "lexgraph-history-capture/1"
 PARSED_SCHEMA = "lexgraph-history-parsed/1"
 SOURCES = ("wayback_bayern", "bayern_recht", "gvbl")

@@ -101,7 +101,7 @@ garbage collection.
 
 ## Runnable commands
 
-Run from the repository root:
+Run these commands from the root of the Lexgraph checkout.
 
 ```sh
 # Read-only inventory and exact gzip budget calculation.
