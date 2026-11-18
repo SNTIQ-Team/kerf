@@ -38,3 +38,16 @@ def test_failed_ffn_or_zip_cannot_produce_snapshot_tables(tmp_path):
     with pytest.raises(ValueError, match="empty or ambiguous"):
         write_snapshot(tmp_path, ["GO"], lambda *_: b"<html>Security check</html>", "2026-11-18")
     assert not list(tmp_path.glob("*.jsonl"))
+
+
+def test_quoted_amendment_retains_text_inside_parent_only():
+    from pipeline.fetch_bayern_recht import parse_act_xml
+    xml = b"""<byrecht-norm><rumpf><gliederung><gliederung>
+      <einzelnorm><para.nr>Art. 1</para.nr><jurAbsatz>
+        <Aenderungsinhalt><einzelnorm><para.nr>Art. 77</para.nr>
+          <para.titel>Quoted title</para.titel><p>Quoted body</p>
+        </einzelnorm></Aenderungsinhalt></jurAbsatz></einzelnorm>
+      </gliederung></gliederung></rumpf></byrecht-norm>"""
+    _, norms, _, _ = parse_act_xml(xml, "law", "LAW", include_annexes=True)
+    assert [n["enbez"] for n in norms] == ["Art. 1"]
+    assert "Quoted body" in norms[0]["text"]
