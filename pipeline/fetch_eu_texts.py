@@ -89,6 +89,22 @@ CORPUS: list[dict[str, Any]] = [
      "base": "12008E", "aliases": []},
     {"celex": "12016M", "jurabk": "EUV", "family": "treaty", "articles": 55,
      "base": "12008M", "aliases": []},
+    {"celex": "32004R0883", "jurabk": "VO (EG) Nr. 883/2004", "family": "regulation",
+     "aliases": ["Grundverordnung zur Koordinierung der Systeme der sozialen Sicherheit"]},
+    {"celex": "32009R0987", "jurabk": "VO (EG) Nr. 987/2009", "family": "regulation",
+     "aliases": []},
+    {"celex": "32004L0038", "jurabk": "RL 2004/38/EG", "family": "directive",
+     "aliases": ["Freizügigkeitsrichtlinie", "Unionsbürgerrichtlinie"]},
+    {"celex": "32003L0109", "jurabk": "RL 2003/109/EG", "family": "directive",
+     "aliases": ["Daueraufenthaltsrichtlinie"]},
+    {"celex": "32003L0086", "jurabk": "RL 2003/86/EG", "family": "directive",
+     "aliases": ["Familienzusammenführungsrichtlinie"]},
+    {"celex": "32008L0115", "jurabk": "RL 2008/115/EG", "family": "directive",
+     "aliases": ["Rückführungsrichtlinie"]},
+    {"celex": "31996L0071", "jurabk": "RL 96/71/EG", "family": "directive",
+     "aliases": ["Entsenderichtlinie"]},
+    {"celex": "32011L0083", "jurabk": "RL 2011/83/EU", "family": "directive",
+     "aliases": ["Verbraucherrechterichtlinie"]},
 ]
 # Treaty consolidations are dated by the Treaty of Lisbon's entry into force (Cellar
 # metadata of 12007L/TXT); the per-article works carry the original treaty's date.

@@ -20,6 +20,8 @@ Usage::
 
     python3 pipeline/fetch_history_neuris.py [--acts fed_sgg] [--no-fetch]
         [--main-data /path/to/Gesetz/data]
+    python3 pipeline/fetch_history_neuris.py --mapped-acts --no-fetch
+    python3 pipeline/fetch_history_neuris.py --mapped-acts --acts fed_intv,fed_ozg
 """
 from __future__ import annotations
 
@@ -38,6 +40,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from history_archive import (  # noqa: E402
     CAPTURE_SCHEMA, REPO_ROOT, USER_AGENT, HistoryArchive, sha256_hex,
     utc_now)
+from fetch_neuris_changelog import WORK_ELI_RE, load_work_map  # noqa: E402
+from reader_source_cache import reader_act_id  # noqa: E402
 
 SOURCE = "neuris"
 BASE = "https://testphase.rechtsinformationen.bund.de"
@@ -268,11 +272,17 @@ def fetch_current(client: Client, archive: HistoryArchive, act_id: str,
         print(f"  [current] {act_id}: NeuRIS lists no expression for {work}")
     for wrapper in members:
         item = wrapper.get("item") or {}
+        expression = item.get("legislationIdentifier")
+        if not expression or (item.get("exampleOfWork") or {}).get("legislationIdentifier") != work:
+            continue
         for enc in item.get("encoding") or []:
             if enc.get("encodingFormat") != "application/zip":
                 continue
             url = BASE + enc["contentUrl"] if enc["contentUrl"].startswith("/") \
                 else enc["contentUrl"]
+            if not url.startswith(f"{BASE}/v1/legislation/{work}/") or \
+                    eli_parts(url).get("expression_eli") != expression:
+                continue
             if url in urls:
                 print(f"  [current] {act_id} already stored {url.rsplit('/', 5)[-5:]}")
                 continue
@@ -307,6 +317,9 @@ def fetch_current(client: Client, archive: HistoryArchive, act_id: str,
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--acts")
+    ap.add_argument("--mapped-acts", action="store_true",
+                    help="include GII acts with a resolved, unambiguous official "
+                         "work in the changelog map; --acts may select a subset")
     ap.add_argument("--archive")
     ap.add_argument("--main-data", default=str(REPO_ROOT / "data"),
                     help="checkout data dir with neuris_archive.jsonl (read-only)")
@@ -317,7 +330,24 @@ def main(argv: list[str] | None = None) -> int:
                     help="re-run work searches checked less than 7 days ago")
     args = ap.parse_args(argv)
     archive = HistoryArchive(args.archive)
-    acts = args.acts.split(",") if args.acts else list(PRIORITY_WORKS)
+    candidates = dict(PRIORITY_WORKS)
+    if args.mapped_acts:
+        mapping = load_work_map(Path(args.main_data) / "neuris_work_map.json")
+        for work, row in mapping["by_work"].items():
+            if not WORK_ELI_RE.fullmatch(work) or not isinstance(row, dict) or not row.get("jurabk"):
+                continue
+            reverse = mapping["by_slug"].get(row.get("slug")) or {}
+            if (reverse.get("eli_work"), reverse.get("jurabk")) != (work, row["jurabk"]):
+                continue
+            act_id = reader_act_id("fed", row["jurabk"])
+            existing = candidates.get(act_id)
+            if existing and existing[0] and existing[0] != work:
+                ap.error(f"conflicting official work mappings for {act_id}")
+            candidates[act_id] = (work, (row["jurabk"],), "")
+    acts = args.acts.split(",") if args.acts else list(candidates)
+    missing = sorted(set(acts) - candidates.keys())
+    if missing:
+        ap.error("no work mapping for " + ", ".join(missing))
     resolution_path = archive.root / "neuris_work_resolution.json"
     try:
         resolution = json.loads(resolution_path.read_text(encoding="utf-8"))
@@ -325,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
         resolution = {}
     works = {}
     for act_id in acts:
-        work = PRIORITY_WORKS[act_id][0] or (
+        work = candidates[act_id][0] or (
             resolution.get(act_id, {}).get("eli_work"))
         works[act_id] = work
     imported = import_existing(archive, Path(args.main_data), works)
@@ -334,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     client = Client(max_requests=args.max_requests)
     for act_id in acts:
-        work, abbrs, title = PRIORITY_WORKS[act_id]
+        work, abbrs, title = candidates[act_id]
         if not work:
             previous = resolution.get(act_id, {})
             if previous.get("status") == "resolved":

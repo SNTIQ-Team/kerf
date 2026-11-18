@@ -104,6 +104,21 @@ PRACTICE_EXPANSION_2026_09 = {
 }
 CORPUS |= PRACTICE_EXPANSION_2026_09
 
+# Procedure, access to justice, work, housing and household benefits.
+# Each identifier is the slug in the official GII catalogue.
+PRACTICE_EXPANSION_2026_11 = {
+    "anfg_1999", "berhfv", "bnoto", "brao", "eg-pkhvv", "eugewschvg",
+    "gbo", "gnotkg", "gvkostg", "insobekv", "mahnvordrv", "mediationsg",
+    "pkhfv", "rdv", "schufv", "schuvabdrv", "vbrinsvv", "zmv", "zvfv_2022",
+    "afbg", "alttzg_1996", "arbmedvv", "arbst_ttv_2004", "azav", "bfdg",
+    "betrsichv_2015", "kindarbschv", "lasthandhabv", "psa-bv", "winterbeschv",
+    "baf_g-einkommensv", "baf_gzuschlagsv", "darlehensv_2022", "h_rtev",
+    "minuhv", "betrkv", "erbbauv", "bkleingg", "wof_g", "bausparkg",
+    "bfsg", "bfsgv", "bgleisv", "bthg", "khv", "schwbav_1988", "schwbwv",
+    "vbd", "wmvo", "finsv", "pbefg", "umwrg", "vdug", "vvg-infov", "zkg",
+}
+CORPUS |= PRACTICE_EXPANSION_2026_11
+
 
 def strip_tags(el: ET.Element) -> str:
     """Flatten a textdaten subtree to plain text, keeping structure hints."""

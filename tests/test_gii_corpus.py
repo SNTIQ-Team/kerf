@@ -11,14 +11,17 @@ from fetch_gii import (  # noqa: E402
     CORPUS,
     PRACTICE_EXPANSION_2026_07,
     PRACTICE_EXPANSION_2026_09,
+    PRACTICE_EXPANSION_2026_11,
     require_complete_corpus,
 )
 
 
 def test_practice_expansion_is_large_and_not_silently_shrunk() -> None:
     assert len(PRACTICE_EXPANSION_2026_07) == 74
-    assert len(CORPUS) == 200
-    assert len(CORPUS - PRACTICE_EXPANSION_2026_07 - PRACTICE_EXPANSION_2026_09) == 51
+    assert len(PRACTICE_EXPANSION_2026_11) == 55
+    assert len(CORPUS) == 255
+    assert len(CORPUS - PRACTICE_EXPANSION_2026_07 - PRACTICE_EXPANSION_2026_09
+               - PRACTICE_EXPANSION_2026_11) == 51
 
 
 def test_september_expansion_keeps_social_rules_and_adds_everyday_domains() -> None:
