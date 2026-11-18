@@ -239,6 +239,12 @@ def parse_pdf_decision(pdf: bytes, item: dict, url: str) -> ParsedDecision:
                          r"(Entscheidung)\s+vom\s+(\d{1,2}\.\s*\w+\s+\d{4})(?=\s|$)", head)
             if not m or _german_date(m.group(2)) != item["listed_date"]:
                 raise UpstreamFailure("parse_error", "BayVerfGH PDF without decision date", url=url)
+            joined = re.search(r"Aktenzeichen:[ \t]*(Vf\.[ \t]*\d+[a-z]?-[IVX]+-\d{2}"
+                               r"(?:\n[ \t]*Vf\.[ \t]*\d+[a-z]?-[IVX]+-\d{2})+)", head)
+            if joined:
+                raw_az = ", ".join(squash(line) for line in joined[1].splitlines())
+                metadata["case_numbers_raw_constructed"] = "multiline Aktenzeichen on the cover"
+            text = re.sub(r"(?im)^([ \t]*Gründe)[ \t]+:([ \t]*)$", r"\1:\2", text)
         decision_type, when = m.group(1), _german_date(m.group(2))
         if item["listed_date"] and item["listed_date"] != when:
             # The court's list dates are occasionally wrong (e.g. 2008 for a 2017 decision).  The PDF
