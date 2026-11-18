@@ -673,12 +673,16 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
         if BY_ALIASES.get(jb):
             idx[-1]["aliases"] = details[aid]["aliases"] = BY_ALIASES[jb]
 
-    # Bavarian acts outside the live feed, from archived official copies
-    # (pipeline/fetch_bayern_archive.py); the live feed wins when both exist.
+    # Attach archived wording to live acts while retaining their FFN metadata
+    # and current norm rows. Archive-only acts keep their standalone detail.
     archive_snapshot = latest_snapshot("bayern_recht_archive")
-    for row in load("bayern_recht_archive", "acts.jsonl"):
-        detail = by_archive_history.build(row)
+    archive_rows = load("bayern_recht_archive", "acts.jsonl")
+    daily = by_archive_history.daily_editions(
+        SNAPSHOTS / "bayern_recht", {row["key"] for row in archive_rows})
+    for row in archive_rows:
+        detail = by_archive_history.build(row, daily=daily.get(row["key"]))
         if detail["id"] in details:
+            details[detail["id"]]["history"] = detail["history"]
             continue
         detail["source_snapshot"] = f"bayern_recht_archive/{archive_snapshot.name}"
         detail["aliases"] = BY_ALIASES.get(detail["jurabk"], [])

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,7 @@ for extra in (ROOT, ROOT / "pipeline"):
         sys.path.insert(0, str(extra))
 
 from tools import eu_history  # noqa: E402
+from common import read_jsonl  # noqa: E402
 
 ARCHIVED = "archived_capture"
 PAGE_STATUS = eu_history.AT_LATEST
@@ -67,13 +69,14 @@ def act_title(raw: str | None, jurabk: str) -> str:
 def intervals(row: dict[str, Any]) -> list[dict[str, Any]]:
     good = [c for c in row.get("zip_captures") or [] if c.get("status") == "ok"]
     out: list[dict[str, Any]] = []
-    for index, capture in enumerate(good):
-        following = good[index + 1] if index + 1 < len(good) else None
+    for capture in good:
         day = _day(capture["timestamp"])
         out.append({
             "edition": {"articles": capture["norms"], "label": f"ZIP {capture['timestamp']}",
-                        "items": [{"url": capture["archive_url"], "sha256": capture["sha256"]}],
-                        "builddate": capture.get("builddate"), "versions": capture.get("versions"),
+                        "items": [{"url": capture.get("original_url") or capture["archive_url"],
+                                   "archive_url": capture["archive_url"], "sha256": capture["sha256"]}],
+                        "builddate": capture.get("builddate"), "date": capture.get("inkraft"),
+                        "versions": capture.get("versions"),
                         "stand": f"BAYERN.RECHT export, builddate {capture.get('builddate')}"},
             "kind": "archived_zip", "role": ARCHIVED, "source_key": "wayback_bayern",
             "source_name": "Wayback/BAYERN.RECHT (ZIP export)",
@@ -83,7 +86,7 @@ def intervals(row: dict[str, Any]) -> list[dict[str, Any]]:
                                  f"{day} (builddate {capture.get('builddate')}); the export "
                                  "has no per-article validity date"),
             "known_from": day,
-            "known_until": _day(following["timestamp"]) if following else day,
+            "known_until": day,
             "timestamp": capture["timestamp"],
         })
     titles: dict[str, str] = {}
@@ -100,7 +103,8 @@ def intervals(row: dict[str, Any]) -> list[dict[str, Any]]:
                                                       titles.get(page["enbez"], "")),
                                       "text": page["text"]}],
                         "label": f"page {page['doc']} {page['timestamp']}",
-                        "items": [{"url": page["archive_url"]}]},
+                        "items": [{"url": page["archive_url"].split("id_/", 1)[-1],
+                                   "archive_url": page["archive_url"], "sha256": page.get("sha256")}]},
             "kind": "archived_page", "role": ARCHIVED, "partial": True,
             "source_key": "wayback_bayern", "source_name": "Wayback/BAYERN.RECHT (article page)",
             "valid_from": page.get("valid_from"),
@@ -113,7 +117,46 @@ def intervals(row: dict[str, Any]) -> list[dict[str, Any]]:
             "unresolved_basis": "archived article page without a 'Text gilt ab' date",
             "known_from": day, "known_until": day, "timestamp": page["timestamp"],
         })
-    return out
+    return sorted(out, key=lambda span: span["timestamp"])
+
+
+def daily_editions(directory: Path, keys: set[str]) -> dict[str, list[dict]]:
+    """Read dated official ZIP observations of acts with archived wording.
+
+    The 2026-11-18 collector introduced source_observed_on and raw ZIP
+    digests. Older directory names alone cannot establish an observation.
+    """
+    editions = defaultdict(list)
+    if not keys:
+        return editions
+    for path in sorted(directory.glob("*/acts.jsonl")):
+        if path.parent.name < "2026-11-18":
+            continue
+        acts = {a["key"]: a for a in read_jsonl(path)
+                if a["key"] in keys and a.get("source_observed_on") == path.parent.name
+                and a.get("source_url") and a.get("source_sha256")}
+        if not acts:
+            continue
+        articles = defaultdict(list)
+        for n in read_jsonl(path.with_name("norms.jsonl")):
+            if n["key"] in acts:
+                articles[n["key"]].append({k: n[k] for k in ("enbez", "titel", "text")})
+        for key, act in acts.items():
+            norms = articles[key]
+            if not norms or len(norms) != act["norm_count"]:
+                raise ValueError(f"incomplete daily Bavarian wording: {key} {path.parent.name}")
+            day = act["source_observed_on"]
+            editions[key].append({
+                "edition": {"articles": norms, "date": act.get("inkraft"), "items": [{"url": act["source_url"],
+                             "sha256": act["source_sha256"]}], "builddate": act["builddate"]},
+                "kind": "official_daily", "role": "official_consolidation",
+                "source_key": "bayern_recht", "source_name": "BAYERN.RECHT (ZIP export)",
+                "known_from": day, "known_until": day,
+                "timestamp": day.replace("-", ""), "status": None,
+                "valid_from": None, "valid_from_basis": None, "valid_until": None,
+                "valid_until_basis": None,
+                "unresolved_basis": "Official consolidated text observed in the dated BAYERN.RECHT export."})
+    return editions
 
 
 def _entries_for(label: str, edition: dict[str, Any], after: str | None, until: str | None
@@ -173,14 +216,14 @@ def version_change(row, prefix, norm_id, label, change_id, previous, group, vseq
     }
 
 
-def build(row: dict[str, Any]) -> dict[str, Any]:
+def build(row: dict[str, Any], *, daily: list[dict] | None = None) -> dict[str, Any]:
     jurabk = row["jurabk"]
     act_id = "by_" + _slug(jurabk)
-    spans = intervals(row)
+    spans = sorted(intervals(row) + (daily or []), key=lambda s: s["timestamp"])
     head_zip = next((i for i in reversed(spans) if i["kind"] == "archived_zip"), None)
     enacted = {
         "adopted": row.get("ausfertigung"), "published": None,
-        "oj_ref": row.get("gvbl"), "in_force": row.get("inkraft"), "applies_from": None,
+        "oj_ref": row.get("gvbl"), "in_force": None, "applies_from": None,
     }
     staged = {**row, "act_id": act_id, "celex": None, "dates": enacted,
               "source_url": row.get("permalink"), "fetched_at": row.get("fetched_at"),
@@ -188,7 +231,14 @@ def build(row: dict[str, Any]) -> dict[str, Any]:
               "relations": {}}
     detail = eu_history.build(staged, juris="DE-BY", intervals=spans,
                               per_article_enactment=False, version_change=version_change)
+    for version in detail["history"]["version"]:
+        version["temporal"]["consolidation_basis"] = "BAYERN.RECHT act edition (angaben.versabh/inkraft)"
+        version["verification"]["sources"] = sorted({a["source"] for a in version["attestations"]})
     for change in detail["history"]["change"]:
+        if change.get("verification") == "first_edition_with_the_article":
+            change["change_type"] = "erstmals beobachtet"
+            change["dates"]["in_force"] = eu_history._date(
+                None, "", reason="first observed text does not establish an insertion date")
         if change.get("change_type") == "erlassen":
             change["amending_act"].update({"citation": row.get("gvbl"), "document_id": None,
                                            "url": row.get("permalink")})
@@ -197,7 +247,7 @@ def build(row: dict[str, Any]) -> dict[str, Any]:
             change["dates"]["adopted"] = eu_history._date(
                 row.get("ausfertigung"), "BAYERN.RECHT export (ausfertigungsdatum)")
             change["dates"]["in_force"] = eu_history._date(
-                row.get("inkraft"), "BAYERN.RECHT export (inkraft of the act)")
+                None, "", reason="the export dates the edition, not the original act's commencement")
     for event in row.get("unincorporated_gvbl_events") or []:
         detail["history"]["finding"].append({
             "record_type": "finding", "kind": "gvbl_event_after_newest_capture", **event})

@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import io
 import json
@@ -42,15 +43,14 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 
 sys.path.insert(0, str(ROOT))
 
-from common import latest_snapshot, snapshot_dir, write_jsonl  # noqa: E402
+from common import latest_snapshot, read_jsonl, snapshot_dir, write_jsonl  # noqa: E402
 import fetch_bayern_wayback as wayback  # noqa: E402
 from tools import bavarian_history  # noqa: E402  (the workstation Bavarian parsers)
 
 UA = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
 ZIP_URL = "https://www.gesetze-bayern.de/Content/Zip/{key}"
 CDX = ("https://web.archive.org/cdx/search/cdx?url=gesetze-bayern.de/Content/Zip/{key}"
-       "&output=json&filter=statuscode:200&collapse=digest&fl=timestamp,digest,length")
-RAW = "https://web.archive.org/web/{ts}id_/https://www.gesetze-bayern.de/Content/Zip/{key}"
+       "&output=json&filter=statuscode:200&collapse=digest&fl=timestamp,digest,length,original")
 CACHE = ROOT / "data" / "snapshots" / "wayback_by" / "zip"
 
 # doc key -> options.  BayDSG: data-protection access cases (Art. 10, 20 BayDSG);
@@ -97,42 +97,52 @@ def zip_captures(key: str, *, offline: bool) -> list[dict]:
                 rows = fresh
                 CACHE.mkdir(parents=True, exist_ok=True)
                 index.write_text(json.dumps(rows))
-    return [{"timestamp": r[0], "digest": r[1]} for r in rows or []]
+    return [{"timestamp": r[0], "digest": r[1],
+             "original_url": r[3] if len(r) > 3 else ZIP_URL.format(key=key)}
+            for r in rows or []]
 
 
 def fetch_zip(key: str, capture: dict, *, offline: bool) -> dict:
     ts = capture["timestamp"]
+    original = capture.get("original_url") or ZIP_URL.format(key=key)
+    if not re.fullmatch(r"https?://(?:www\.)?gesetze-bayern\.de(?::(?:80|443))?/Content/Zip/"
+                        + re.escape(key), original, re.I):
+        raise ValueError(f"{key}: unexpected original URL in archive index")
+    url = f"https://web.archive.org/web/{ts}id_/{original}"
     path = CACHE / f"{key}-{ts}.zip"
     data = path.read_bytes() if path.is_file() else None
-    if data is None and not offline:
-        data = _get(RAW.format(ts=ts, key=key))
-        if data is not None:
-            CACHE.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data)
-    row = {"timestamp": ts, "archive_url": RAW.format(ts=ts, key=key),
-           "original_url": ZIP_URL.format(key=key), "wayback_digest": capture["digest"],
+    if not offline and (not data or base64.b32encode(hashlib.sha1(data).digest()).decode()
+                        != capture["digest"]):
+        data = _get(url)
+    row = {"timestamp": ts, "archive_url": url,
+           "original_url": original, "wayback_digest": capture["digest"],
            "sha256": hashlib.sha256(data).hexdigest() if data else None,
            "bytes_len": len(data) if data else 0}
     if not data:
         return {**row, "status": "rejected", "reason": "not retrievable"}
+    if base64.b32encode(hashlib.sha1(data).digest()).decode() != capture["digest"]:
+        return {**row, "status": "rejected", "reason": "CDX digest mismatch"}
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
         bad = archive.testzip()
         if bad:
             return {**row, "status": "rejected", "reason": f"CRC error in {bad}"}
-        name = next(n for n in archive.namelist() if n.endswith(".xml"))
+        name = f"bayportalnorm/{key}.xml"
         xml = archive.read(name)
-        parsed = bavarian_history.parse_zip(data, key, key)
+        parsed = bavarian_history.parse_zip(data, key, key, include_annexes=True)
     except Exception as exc:  # noqa: BLE001 — a damaged capture is evidence, not text
         return {**row, "status": "rejected", "reason": f"{type(exc).__name__}: {exc}"[:200]}
     norms, versions = parsed["norms"], parsed["aenderungsverlauf"]
     if not norms:
         return {**row, "status": "rejected", "reason": "no einzelnorm in the XML"}
+    if not offline and (not path.is_file() or path.read_bytes() != data):
+        bavarian_history._atomic_write(path, data)
     title = parsed["title"]
     text = xml.decode("utf-8", "replace")
     bayrs = re.search(r"<gliederungsNr\.BayRS>\s*(?:BayRS\s*)?([^<]+?)\s*</gliederungsNr\.BayRS>", text)
     signed = re.search(r"<ausfertigungsdatum>(\d{4}-\d{2}-\d{2})</ausfertigungsdatum>", text)
-    fassung = re.search(r"<fassung>.*?<jahr>(\d{4})</jahr>\s*<seite>S=(\d+)</seite>", text, re.S)
+    fassung = re.search(r"<fassung>.*?<jahr>\s*(\d{4})\s*</jahr>\s*<seite>(?:S=)?(\d+)</seite>",
+                        text, re.S)
     return {**row, "status": "ok", "builddate": parsed.get("builddate"),
             "ausfertigung": signed.group(1) if signed else None,
             "gvbl": (f"GVBl. {fassung.group(1)} S. {fassung.group(2)}" if fassung else None),
@@ -266,18 +276,42 @@ def main() -> int:
               f"{len(row['unincorporated_gvbl_events'])}", flush=True)
         rows.append(row)
     previous = latest_snapshot("bayern_recht_archive")
-    if previous and (previous / "acts.jsonl").is_file() and failed:
-        # keep the last good row of an act whose refresh failed
-        for line in (previous / "acts.jsonl").read_text().splitlines():
-            old = json.loads(line)
-            if old["key"] in failed:
-                rows.append(old)
     if not rows:
         return 1
+    if previous and (previous / "acts.jsonl").is_file():
+        rows = retain_observations(read_jsonl(previous / "acts.jsonl"), rows)
     out = snapshot_dir("bayern_recht_archive")
     write_jsonl(out / "acts.jsonl", rows)
     print(f"{len(rows)} acts -> {out}")
     return 1 if failed else 0
+
+
+def retain_observations(previous, fresh: list[dict]) -> list[dict]:
+    """Keep untouched acts and previously verified ZIPs/pages across partial runs."""
+    acts = {row["key"]: row for row in previous}
+    for row in fresh:
+        old = acts.get(row["key"])
+        if old:
+            captures = {c["timestamp"]: c for c in old["zip_captures"]}
+            for c in row["zip_captures"]:
+                prior = captures.get(c["timestamp"])
+                if prior and prior["status"] == "ok":
+                    if c["status"] == "ok" and c["sha256"] != prior["sha256"]:
+                        raise ValueError(f"conflicting archived bytes at {c['archive_url']}")
+                    continue
+                captures[c["timestamp"]] = c
+            pages = {(p["doc"], p["timestamp"]): p for p in old["pages"]}
+            for p in row["pages"]:
+                pages.setdefault((p["doc"], p["timestamp"]), p)
+            head = max((c for c in captures.values() if c["status"] == "ok"),
+                       key=lambda c: c["timestamp"])
+            # A partial or stale index may omit a newer retained export.
+            row = {**row, **{k: head.get(k) for k in
+                              ("jurabk", "bayrs_nr", "title", "inkraft", "ausfertigung", "gvbl")},
+                   "zip_captures": [captures[t] for t in sorted(captures)],
+                   "pages": [pages[k] for k in sorted(pages)]}
+        acts[row["key"]] = row
+    return list(acts.values())
 
 
 if __name__ == "__main__":
