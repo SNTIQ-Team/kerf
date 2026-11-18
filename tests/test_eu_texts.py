@@ -212,6 +212,37 @@ def test_routes_resolve_text_log_diff_for_an_eu_article(tmp_path):
     assert missing["status"] == "not_in_corpus"
 
 
+@pytest.mark.parametrize(("end", "observed", "valid_until"), [
+    ("2031-11-02", "2026-09-29", "2031-11-03"),
+    ("2020-11-02", "2020-11-02", "2020-11-03"),
+])
+def test_whole_act_repeal_bounds_knowledge_at_retrieval(end, observed, valid_until):
+    row = _row()
+    row["dates"]["end_of_validity"] = end
+    row["relations"]["repealed_by"] = [{"celex": "32024R1351"}]
+    detail = eu_history.build(row)
+    latest = detail["history"]["states"][-1]
+    assert (latest["known_until"], latest["valid_until"]) == (observed, valid_until)
+    assert detail["history"]["states"][0]["known_until"] == "2016-05-04"
+    for version in detail["history"]["version"]:
+        assert version["temporal"]["observed_until"] <= observed
+        assert all(att["known_until"] <= observed for att in version["attestations"])
+
+
+@pytest.mark.parametrize(("end", "repeals"), [("2031-11-02", []), ("2016-05-03", [{"celex": "example"}])])
+def test_unconfirmed_act_end_preserves_source_date_without_closing_text(end, repeals):
+    row = _row()
+    row["dates"]["end_of_validity"] = end
+    row["relations"]["repealed_by"] = repeals
+    detail = eu_history.build(row)
+    latest = detail["history"]["states"][-1]
+    assert latest["known_until"] == "2026-09-29" and latest["valid_until"] is None
+    assert detail["dates"]["end_of_validity"] is None
+    finding = next(f for f in detail["history"]["finding"] if f["kind"] == "act_end_of_validity_unresolved")
+    assert finding["reported_end_of_validity"] == end
+    assert row["dates"]["end_of_validity"] == end
+
+
 def test_repealed_act_answers_its_last_wording_only_with_the_verified_end(tmp_path):
     from api.law_routes import create_router
     row = _row()
