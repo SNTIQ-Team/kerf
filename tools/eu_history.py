@@ -73,8 +73,12 @@ def _intervals(row: dict[str, Any]) -> list[dict[str, Any]]:
         kind = edition.get("kind")
         following = editions[index + 1] if index + 1 < len(editions) else None
         known_from = edition.get("published") or edition.get("date")
-        known_until = (following.get("published") or following.get("date")) if following \
-            else (end or fetched)
+        boundary = (following.get("published") or following.get("date")) if following else end
+        if fetched and known_from and known_from > fetched:
+            known_from = fetched
+        known_until = fetched
+        if fetched and boundary and (not known_from or boundary >= known_from):
+            known_until = min(boundary, fetched)
         valid_from = valid_until = None
         basis = until_basis = None
         if kind == "oj":
@@ -144,13 +148,27 @@ def build(row: dict[str, Any], *, juris: str = "EU",
     act_id = row["act_id"]
     celex = row.get("celex")
     dates = row.get("dates") or {}
+    findings: list[dict[str, Any]] = []
+    end = dates.get("end_of_validity")
+    if juris == "EU" and end:
+        # The snapshot stores the earliest CELLAR end date, which can apply
+        # only to an article. Require evidence of repeal of the act as a whole.
+        later_editions = [edition["celex"] for edition in row.get("editions") or []
+                          if edition.get("kind") == "consolidated" and (edition.get("date") or "") > end]
+        if later_editions or not (row.get("relations") or {}).get("repealed_by"):
+            findings.append({"record_type": "finding", "kind": "act_end_of_validity_unresolved",
+                             "reported_end_of_validity": end, "later_editions": later_editions,
+                             "reason": ("A consolidated edition postdates the reported end."
+                                        if later_editions else
+                                        "The extracted date has no corroborating whole-act repeal relation.")})
+            dates = {**dates, "end_of_validity": None}
+            row = {**row, "dates": dates}
     act = {"id": act_id, "juris": juris, "jurabk": row["jurabk"], "celex": celex}
     prefix = act_prefix(act)
     intervals = _intervals(row) if intervals is None else intervals
     version_change = version_change or _version_change
     history_versions: list[dict[str, Any]] = []
     changes: list[dict[str, Any]] = []
-    findings: list[dict[str, Any]] = []
     per_norm: dict[str, list[tuple[int, dict[str, Any], dict[str, Any]]]] = {}
     order: list[str] = []
     for position, interval in enumerate(intervals):
@@ -442,7 +460,7 @@ def _act_level_changes(row, prefix, corrigenda) -> list[dict[str, Any]]:
                     "text_effect": None, "verification": "consolidation_header"})
     relations = row.get("relations") or {}
     end = (row.get("dates") or {}).get("end_of_validity")
-    for key, kind in (("repealed_by", "aufgehoben"), ("implicitly_repealed_by", "aufgehoben")):
+    for key, kind in (("repealed_by", "aufgehoben"), ("implicitly_repealed_by", "implizite Aufhebungsbeziehung")):
         for rel in relations.get(key) or []:
             out.append({"record_type": "change", "act_id": act_id,
                         "change_id": f"{act_id}:act:{key}:{rel['celex']}", "norm_id": None,
