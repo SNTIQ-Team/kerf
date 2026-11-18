@@ -188,7 +188,7 @@ Columns: `id` PK, `target` (decision id, or paragraph id `<decision>#rn-10`), `k
 
 ## User-browser captures (`ingest-capture`, 2026-09-28)
 
-Some portals answer automated requests with a bot challenge (gesetze-bayern.de / BAYERN.RECHT: Myra Security). The corpus never bypasses a challenge and never crawls such a portal. On an explicit request the MCP agent opens **one** page in the operator's Chrome; the operator may solve the challenge there; the saved page is handed over:
+BAYERN.RECHT offers a public, paginated list of court decisions. When it is available, `python -m courts sync --source by-recht --limit 650` collects canonical decision pages and checks each against the official listing. The source respects robots.txt and paces requests on one connection. During a portal challenge or for individual browser captures, the original manual intake remains available. On an explicit request the operator may supply a saved decision page from Chrome.
 
 ```
 python -m courts ingest-capture --source by --url <decision URL> --file <page.html|page.pdf> [--captured-at ISO-8601] [--wait 60]
