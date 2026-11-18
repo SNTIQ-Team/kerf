@@ -1193,6 +1193,22 @@ def _public_event(candidate: Mapping[str, Any]) -> dict[str, Any]:
     return event
 
 
+def _require_public_state_references(value: Any, objects: Mapping[str, Any],
+                                     context: str) -> None:
+    """Check state references in observations, assertions and nested provenance."""
+    if isinstance(value, list):
+        for item in value:
+            _require_public_state_references(item, objects, context)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if key in ("state_sha256", "previous_state_sha256", "anchor_state_sha256"):
+                if item is not None and _valid_digest(item, key) not in objects:
+                    raise RetrospectiveHistoryError(
+                        f"{context} references missing CAS state {item} in {key}")
+            elif isinstance(item, (dict, list)):
+                _require_public_state_references(item, objects, context)
+
+
 def build_public_manifest(
         history: Mapping[str, Any], states: Mapping[str, Any],
         objects: Mapping[str, Any], candidates: Iterable[dict[str, Any]], *,
@@ -1224,17 +1240,15 @@ def build_public_manifest(
                      if previous is not None else {})
     if not isinstance(objects, Mapping):
         raise RetrospectiveHistoryError("public CAS objects must be a mapping")
-    public_objects = copy.deepcopy(dict(
-        previous.get("objects") or {} if previous is not None else {}))
+    previous_objects = previous.get("objects", {}) if previous is not None else {}
+    if not isinstance(previous_objects, Mapping):
+        raise RetrospectiveHistoryError("previous public CAS objects must be a mapping")
+    public_objects = {}
     for digest, metadata in objects.items():
         _valid_digest(digest, "public object SHA-256")
         if not isinstance(metadata, Mapping):
             raise RetrospectiveHistoryError(
                 f"public object metadata is invalid for {digest}")
-        prior = public_objects.get(digest)
-        if prior is not None and prior != metadata:
-            raise RetrospectiveHistoryError(
-                f"public object metadata changed for {digest}")
         public_objects[digest] = copy.deepcopy(dict(metadata))
 
     reconstructed_by_act: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1339,6 +1353,17 @@ def build_public_manifest(
                     "outgoing_event": copy.deepcopy(outgoing),
                 },
             })
+    # Current source stores define the publishable catalogue. An old catalogue
+    # entry alone is not evidence, but a historical assertion still needs its body.
+    for digest, metadata in public_objects.items():
+        if digest in previous_objects and previous_objects[digest] != metadata:
+            raise RetrospectiveHistoryError(f"public object metadata changed for {digest}")
+        if digest not in states:
+            raise RetrospectiveHistoryError(f"public catalogue references missing CAS state {digest}")
+        _require_public_state_references(metadata, public_objects, digest)
+    for act_id, act in previous_acts.items():
+        _require_public_state_references(act, public_objects, f"previous {act_id}")
+
     by_act_events: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for candidate in candidates:
         if not isinstance(candidate, dict) or not candidate.get("act_id"):
@@ -1406,6 +1431,7 @@ def build_public_manifest(
             "gaps": copy.deepcopy(internal.get("gaps") or []),
             "coverage": copy.deepcopy(internal.get("coverage") or {}),
         }
+        _require_public_state_references(public_acts[act_id], public_objects, act_id)
     # Event-only acts cannot occur for a correctly joined curated corpus, but
     # fail closed instead of silently dropping one if source identifiers drift.
     unknown = set(by_act_events) - set(public_acts)
