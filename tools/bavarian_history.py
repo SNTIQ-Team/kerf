@@ -275,7 +275,8 @@ def parse_zip(data: bytes, key: str, jurabk: str, *, include_annexes: bool = Fal
     warnings = []
     # older exports carry an empty <para.titel/> before <para.nr> and the real
     # title after it; parse_act_xml reads the first one
-    for norm, element in zip(norms, body.iter("einzelnorm")):
+    elements = br.own_norms(body) if include_annexes else body.iter("einzelnorm")
+    for norm, element in zip(norms, elements):
         if norm["titel"]:
             continue
         titles = [br.flat(t) for t in element.findall("para.titel")]

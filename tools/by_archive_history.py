@@ -30,6 +30,8 @@ for extra in (ROOT, ROOT / "pipeline"):
 
 from tools import eu_history  # noqa: E402
 from common import read_jsonl  # noqa: E402
+from api.history_identity import norm_identity  # noqa: E402
+from api.norm_identity import norm_rows_with_ids  # noqa: E402
 
 ARCHIVED = "archived_capture"
 PAGE_STATUS = eu_history.AT_LATEST
@@ -231,9 +233,34 @@ def build(row: dict[str, Any], *, daily: list[dict] | None = None) -> dict[str, 
               "relations": {}}
     detail = eu_history.build(staged, juris="DE-BY", intervals=spans,
                               per_article_enactment=False, version_change=version_change)
+    # Retain legacy version links while identifying spans actually quoted inside
+    # another article's amendment command. Each mark is pinned to the exact
+    # canonical norm id, text identity and raw ZIP digests reviewed in the XML.
+    quoted = {(q["norm_id"], q["identity"]): q
+              for q in row.get("quoted_amendment_fragments") or []}
+    quoted_heads = set()
     for version in detail["history"]["version"]:
         version["temporal"]["consolidation_basis"] = "BAYERN.RECHT act edition (angaben.versabh/inkraft)"
         version["verification"]["sources"] = sorted({a["source"] for a in version["attestations"]})
+        key = (version["canonical_id"], version["content_hash"]["identity"])
+        mark = quoted.get(key)
+        if mark and all(s.get("sha256") in mark["source_sha256"]
+                        for a in version["attestations"] for s in a["samples"]):
+            finding = {"kind": "quoted_amendment_fragment", "norm_id": key[0],
+                       "version_id": version["version_id"], "citing_norm": mark["citing_norm"],
+                       "source_sha256": mark["source_sha256"]}
+            reason = f"Quoted inside {mark['citing_norm']}/Aenderungsinhalt in the official XML."
+            version["source_role"] = "quoted_amendment_fragment"
+            version["verification"].update(status="quoted_amendment_fragment",
+                                           citing_norm=mark["citing_norm"])
+            version["completeness"] = {"status": "quoted_fragment", "reason": reason}
+            detail["history"]["finding"].append(finding)
+            quoted_heads.add(key)
+    if quoted_heads:
+        detail["norms"] = [n for norm_id, n in norm_rows_with_ids(detail, detail["norms"])
+                           if (norm_id, norm_identity(n["enbez"], n["titel"], n["text"]))
+                           not in quoted_heads]
+        detail["norm_count"] = len(detail["norms"])
     for change in detail["history"]["change"]:
         if change.get("verification") == "first_edition_with_the_article":
             change["change_type"] = "erstmals beobachtet"
