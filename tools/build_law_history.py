@@ -1657,6 +1657,11 @@ def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
             temporal = row.get("temporal") or {}
             attestations = []
             for att in row.get("attestations") or []:
+                # Web-data histories already carry normalized samples with
+                # URLs, digests and observation dates.
+                if "samples" in att:
+                    attestations.append(att)
+                    continue
                 attestations.append({
                     "source": att.get("source"), "role": att.get("role"),
                     "known_from": att.get("known_at"),
@@ -1736,7 +1741,10 @@ def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
         effect["before_version"] = before[1] if before else None
         effect["after_version"] = after[1] if after else None
         change["text_effect"] = effect if (before or after) else None
-        change["source_role"] = "official_promulgation"
+        change["source_role"] = ("archived_capture" if event_status == "archived_captures"
+                                 and change.get("verification") in {
+                                     "archived_capture_difference_only", "first_edition_with_the_article"}
+                                 else "official_promulgation")
         change["sort_date"] = (change_effective_date(change) or (
             (change.get("dates") or {}).get("promulgated") or {}).get(
                 "date") or "0000-00-00")
@@ -1775,7 +1783,8 @@ def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
             (act_id, seq, f"{act_id}:{state['sha256'] or 'head'}:{seq}",
              state["source"], state["role"], state["known_from"],
              state["known_until"], state["url"], state["archive_url"],
-             state["sha256"], state["stand"], _json({}), 1,
+             state["sha256"], state["stand"], _json(state.get("notes") or {}),
+             int(state.get("complete", True)),
              state.get("valid_from"), state.get("valid_from_status"),
              state.get("valid_from_basis"), state.get("valid_until"), None))
     for finding in records["finding"]:

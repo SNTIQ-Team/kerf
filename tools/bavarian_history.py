@@ -259,19 +259,23 @@ def _xml_gliederung(root: ET.Element) -> list[str]:
     return out
 
 
-def parse_zip(data: bytes, key: str, jurabk: str) -> dict:
+def parse_zip(data: bytes, key: str, jurabk: str, *, include_annexes: bool = False) -> dict:
     """Parse one /Content/Zip/<KEY> archive (bayportalnorm XML)."""
     br = _bayern_recht_module()
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         name = next(n for n in archive.namelist() if n.endswith(".xml"))
         xml_bytes = archive.read(name)
-    act, norms, versions, _refs = br.parse_act_xml(xml_bytes, key, jurabk)
+    act, norms, versions, _refs = br.parse_act_xml(xml_bytes, key, jurabk,
+                                                   include_annexes=include_annexes)
     root = ET.fromstring(xml_bytes)
-    glied = _xml_gliederung(root)
+    body = root.find("rumpf") if include_annexes else root
+    glied = _xml_gliederung(body)
+    if include_annexes:
+        glied += [""] * len(root.findall("annex/annex.koerper"))
     warnings = []
     # older exports carry an empty <para.titel/> before <para.nr> and the real
     # title after it; parse_act_xml reads the first one
-    for norm, element in zip(norms, root.iter("einzelnorm")):
+    for norm, element in zip(norms, body.iter("einzelnorm")):
         if norm["titel"]:
             continue
         titles = [br.flat(t) for t in element.findall("para.titel")]

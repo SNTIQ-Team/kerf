@@ -2,6 +2,8 @@
 tools/by_archive_history.py): integrity gate, page rendering, dated versions."""
 from __future__ import annotations
 
+import base64
+import hashlib
 import io
 import sys
 import zipfile
@@ -40,6 +42,10 @@ def _zip(xml: str) -> bytes:
     return buffer.getvalue()
 
 
+def _digest(payload):
+    return base64.b32encode(hashlib.sha1(payload).digest()).decode()
+
+
 def test_archived_page_is_read_with_the_workstation_parser(tmp_path, monkeypatch):
     import gzip
     monkeypatch.setattr(archive, "PAGE_CACHE", tmp_path)
@@ -56,20 +62,23 @@ def test_corrupt_archived_zip_is_rejected_not_repaired(tmp_path, monkeypatch):
     monkeypatch.setattr(archive, "CACHE", tmp_path)
     good = _zip(XML)
     (tmp_path / "BayDSG-20230523085904.zip").write_bytes(good)
-    ok = archive.fetch_zip("BayDSG", {"timestamp": "20230523085904", "digest": "x"}, offline=True)
+    ok = archive.fetch_zip("BayDSG", {"timestamp": "20230523085904", "digest": _digest(good)},
+                           offline=True)
     assert ok["status"] == "ok" and ok["ausfertigung"] == "2018-05-15"
     assert ok["gvbl"] == "GVBl. 2018 S. 230" and ok["bayrs_nr"] == "204-1-I"
     broken = bytearray(good)
     broken[60] ^= 0xFF                       # inside the deflated member: CRC fails
     (tmp_path / "BayDSG-20260107083957.zip").write_bytes(bytes(broken))
-    bad = archive.fetch_zip("BayDSG", {"timestamp": "20260107083957", "digest": "y"}, offline=True)
+    bad = archive.fetch_zip("BayDSG", {"timestamp": "20260107083957", "digest": _digest(broken)},
+                            offline=True)
     assert bad["status"] == "rejected" and "norms" not in bad
 
 
 def test_zip_state_plus_newer_dated_page_gives_two_versions(tmp_path, monkeypatch):
     monkeypatch.setattr(archive, "CACHE", tmp_path)
-    (tmp_path / "BayDSG-20230523085904.zip").write_bytes(_zip(XML))
-    capture = archive.fetch_zip("BayDSG", {"timestamp": "20230523085904", "digest": "x"},
+    good = _zip(XML)
+    (tmp_path / "BayDSG-20230523085904.zip").write_bytes(good)
+    capture = archive.fetch_zip("BayDSG", {"timestamp": "20230523085904", "digest": _digest(good)},
                                 offline=True)
     valid, text = "2025-08-01", PAGE_TEXT
     row = {"key": "BayDSG", "jurabk": "BayDSG", "bayrs_nr": "204-1-I", "title": "BayDSG",
@@ -107,3 +116,46 @@ def test_act_title_drops_date_and_fassung_tail():
         "Geschäftsordnung für den Bayerischen Landtag (BayLTGeschO)in der Fassung der "
         "Bekanntmachung vom 14. August 2009 (GVBl. S. 420)", "BayLTGeschO") == \
         "Geschäftsordnung für den Bayerischen Landtag (BayLTGeschO)"
+
+
+def test_archived_and_daily_text_keep_their_urls_and_observation_dates(tmp_path):
+    import json
+    a = {"key": "BayProbe", "jurabk": "Probe", "title": "Gesetz (Probe)", "inkraft": "2024-05-01",
+         "ausfertigung": "2018-01-12", "permalink": "https://www.gesetze-bayern.de/Content/Document/BayProbe"}
+    original = "https://www.gesetze-bayern.de/Content/Zip/BayProbe"
+    url = "https://web.archive.org/web/20240507080000id_/" + original
+    old = {"enbez": "Art. 1", "titel": "Geltung", "text": "Erste Fassung."}
+    capture = {**a, "timestamp": "20240507080000", "original_url": original, "archive_url": url,
+               "sha256": "1"*64, "status": "ok", "norms": [old], "versions": []}
+    row = {**a, "zip_captures": [capture], "pages": []}
+    for day, digest, wording in [("2026-11-18", "2"*64, "Neue Fassung."),
+                                  ("2026-11-19", "3"*64, "Dritte Fassung.")]:
+        folder = tmp_path/day
+        folder.mkdir()
+        act = {**a, "norm_count": 1, "source_observed_on": day, "source_sha256": digest,
+               "source_url": original, "builddate": day}
+        (folder/"acts.jsonl").write_text(json.dumps(act))
+        (folder/"norms.jsonl").write_text(json.dumps({**old, "key": a["key"], "text": wording}))
+    daily = by_archive_history.daily_editions(tmp_path, {"BayProbe"})
+    detail = by_archive_history.build(row, daily=daily["BayProbe"])
+    versions = detail["history"]["version"]
+    assert [v["text"] for v in versions] == ["Erste Fassung.", "Neue Fassung.", "Dritte Fassung."]
+    assert [v["temporal"]["observed_from"] for v in versions] == ["2024-05-07", "2026-11-18", "2026-11-19"]
+    assert all(v["temporal"]["valid_from"] is None for v in versions)
+    assert versions[0]["attestations"][0]["samples"][0]["archive_url"] == url
+    assert versions[-1]["attestations"][0]["samples"][0]["sha256"] == "3"*64
+    assert detail["dates"]["in_force"] is None
+    assert detail["norms"][0]["text"] == "Dritte Fassung."
+
+
+def test_partial_refresh_keeps_other_acts_pages_and_verified_zip():
+    capture = {"timestamp": "20220101010101", "status": "ok", "sha256": "a"*64}
+    old = {"key": "Old", "pages": [{"doc": "Old-1", "timestamp": "20230102010101"}],
+           "zip_captures": [capture]}
+    untouched = {"key": "Other", "pages": [], "zip_captures": []}
+    update = {"key": "Old", "pages": [],
+              "zip_captures": [{"timestamp": capture["timestamp"], "status": "rejected"}]}
+    merged = archive.retain_observations([old, untouched], [update])
+    assert merged[0]["pages"] == old["pages"]
+    assert merged[0]["zip_captures"] == [capture]
+    assert merged[1] == untouched

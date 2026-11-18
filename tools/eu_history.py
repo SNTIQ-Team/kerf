@@ -124,9 +124,10 @@ def _attestation(interval: dict[str, Any]) -> dict[str, Any]:
         "source": interval.get("source_name") or "CELLAR",
         "role": interval["role"], "known_from": interval["known_from"],
         "known_until": interval["known_until"], "count": 1,
-        "kind": "full",
+        "kind": "norm_html" if interval.get("partial") else "full",
         "samples": [{k: v for k, v in {
             "url": (items[0].get("url") if items else None),
+            "archive_url": (items[0].get("archive_url") if items else None),
             "sha256": (items[0].get("sha256") if items else None),
             "celex": edition.get("celex"), "format": edition.get("format"),
             "known_at": interval["known_from"],
@@ -315,8 +316,12 @@ def build(row: dict[str, Any], *, juris: str = "EU",
     head.extend(newest[n] for n in order if n not in listed
                 and per_norm[n][-1][1].get("partial"))
     states = [{"source": i.get("source_key") or "cellar", "role": i["role"],
+               **({"complete": False, "notes": {"capture_kind": "norm_html"}}
+                  if i.get("partial") else {}),
                "known_from": i["known_from"], "known_until": i["known_until"],
                "url": ((i["edition"].get("items") or [{}])[0].get("url")),
+               **({"archive_url": i["edition"]["items"][0]["archive_url"]}
+                  if (i["edition"].get("items") or [{}])[0].get("archive_url") else {}),
                "sha256": ((i["edition"].get("items") or [{}])[0].get("sha256")),
                "stand": i["edition"].get("celex"), "valid_from": i["valid_from"],
                "valid_from_status": ((i.get("status") or VALID_STATUS) if i["valid_from"]
