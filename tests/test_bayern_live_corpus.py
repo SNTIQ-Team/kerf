@@ -51,3 +51,23 @@ def test_quoted_amendment_retains_text_inside_parent_only():
     _, norms, _, _ = parse_act_xml(xml, "law", "LAW", include_annexes=True)
     assert [n["enbez"] for n in norms] == ["Art. 1"]
     assert "Quoted body" in norms[0]["text"]
+
+
+def test_rerun_retains_first_capture_when_only_portal_token_changes(tmp_path):
+    import json
+    from pipeline.fetch_bayern_recht import verify_same_observation
+    dirs = [tmp_path / name for name in ("original", "repeat")]
+    for directory in dirs:
+        (directory / "raw").mkdir(parents=True)
+        raw = ('<table><tr><td>32-1-A</td><td><a href="BayOrgGAG">ArbGOrgG</a>'
+               '</td></tr></table><input name="__RequestVerificationToken" '
+               f'value="{directory.name}">').encode()
+        (directory / "raw/ffn.html").write_bytes(raw)
+        (directory / "acts.jsonl").write_text(json.dumps({"key": "BayOrgGAG",
+                                               "ffn_sha256": hashlib.sha256(raw).hexdigest()}))
+        for name in ("norms", "versions", "eu_refs"):
+            (directory / f"{name}.jsonl").write_bytes(b"")
+    verify_same_observation(*dirs)
+    (dirs[1] / "norms.jsonl").write_bytes(b'{"text":"Amendment"}\n')
+    with pytest.raises(ValueError, match="conflicting"):
+        verify_same_observation(*dirs)

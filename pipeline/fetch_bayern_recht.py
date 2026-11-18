@@ -44,6 +44,7 @@ import argparse
 import copy
 import hashlib
 import io
+import json
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -556,6 +557,27 @@ def write_snapshot(stage: Path, abbreviations, get_bytes, observed_on: str) -> N
         write_jsonl(stage / f"{name}.jsonl", rows)
 
 
+def verify_same_observation(existing: Path, candidate: Path) -> None:
+    """A rerun may receive a new request token in otherwise identical FFN HTML."""
+    for name in ("norms.jsonl", "versions.jsonl", "eu_refs.jsonl"):
+        if (existing / name).read_bytes() != (candidate / name).read_bytes():
+            raise ValueError(f"conflicting existing snapshot: {existing / name}")
+
+    def evidence(directory):
+        ffn = (directory / "raw" / "ffn.html").read_bytes()
+        sha = hashlib.sha256(ffn).hexdigest()
+        acts = []
+        for line in (directory / "acts.jsonl").read_text(encoding="utf-8").splitlines():
+            act = json.loads(line)
+            if act.pop("ffn_sha256") != sha:
+                raise ValueError(f"damaged FFN evidence: {directory}")
+            acts.append(act)
+        return acts, parse_ffn(ffn.decode("utf-8-sig"))
+
+    if evidence(existing) != evidence(candidate):
+        raise ValueError(f"conflicting existing snapshot: {existing}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--abbrs", help="comma-separated official abbreviations")
@@ -591,10 +613,7 @@ def main() -> int:
         stage.mkdir()
         write_snapshot(stage, sorted(wanted), get_bytes, observed_on)
         if destination.exists():
-            for name in ("acts", "norms", "versions", "eu_refs"):
-                filename = f"{name}.jsonl"
-                if (stage / filename).read_bytes() != (destination / filename).read_bytes():
-                    raise ValueError(f"conflicting existing snapshot: {destination / filename}")
+            verify_same_observation(destination, stage)
         else:
             stage.rename(destination)
         if not args.output_dir:
