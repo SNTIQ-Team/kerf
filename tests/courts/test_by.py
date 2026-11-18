@@ -127,3 +127,12 @@ def test_historical_verfgh_short_title_must_match_directory_date(monkeypatch):
     assert decision.case_numbers == ["Vf. 2-VII-00", "Vf. 3-VII-00"]
     with pytest.raises(by.UpstreamFailure, match="without decision date"):
         by.parse_pdf_decision(b"fixture", dict(item, listed_date="2001-07-05"), url)
+
+def test_verfgh_reasons_only_pdf_cannot_borrow_date_from_cited_judgment(monkeypatch):
+    from courts.sources import by
+    text = ("Vf. 4-IX-00\n\nGründe:\n\nA.\n\nMit Entscheidung des Bayerischen "
+            "Verfassungsgerichtshofs vom 29. August 1997 wurde über andere Fragen entschieden.")
+    monkeypatch.setattr(by, "pdf_text", lambda pdf, url: text)
+    with pytest.raises(by.UpstreamFailure, match="without decision date"):
+        by.parse_pdf_decision(b"fixture", dict(ITEM, listed_date="2000-04-13"),
+                              by.VERFGH + "/media/images/bayverfgh/4-ix-00.pdf")

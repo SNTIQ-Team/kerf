@@ -218,6 +218,9 @@ def parse_pdf_decision(pdf: bytes, item: dict, url: str) -> ParsedDecision:
         m = re.search(r"Gericht:\s*(\S+)", cover)
         metadata["cover_court"] = m.group(1) if m else None
     elif route == "verfgh":
+        # A reasons-only publication can cite the full title and date of an earlier
+        # judgment. Only the cover can identify the decision being published.
+        head = re.split(r"(?im)^\s*Gründe\s*:\s*$", head, maxsplit=1)[0]
         m = re.search(r"Aktenzeichen:\s*(.+)", head)
         if m:
             raw_az = squash(m.group(1))
