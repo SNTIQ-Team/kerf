@@ -65,6 +65,7 @@ def test_corrupt_archived_zip_is_rejected_not_repaired(tmp_path, monkeypatch):
     ok = archive.fetch_zip("BayDSG", {"timestamp": "20230523085904", "digest": _digest(good)},
                            offline=True)
     assert ok["status"] == "ok" and ok["ausfertigung"] == "2018-05-15"
+    assert ok["original_url"] is None  # legacy CDX identified the bytes, not the original scheme
     assert ok["gvbl"] == "GVBl. 2018 S. 230" and ok["bayrs_nr"] == "204-1-I"
     broken = bytearray(good)
     broken[60] ^= 0xFF                       # inside the deflated member: CRC fails
