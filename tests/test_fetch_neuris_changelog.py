@@ -7,11 +7,13 @@ import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "pipeline"))
 
 import fetch_neuris_changelog as neuris  # noqa: E402
+import fetch_history_neuris as history  # noqa: E402
 
 
 WORK = "eli/bund/bgbl-1/2004/s1950"
@@ -65,6 +67,31 @@ class FakeResponse:
 
     def close(self):
         self.closed = True
+
+
+def test_history_download_stays_with_the_requested_work_and_listed_expression(tmp_path):
+    expression = f"{WORK}/2026-07-01/1/deu"
+    other = "eli/bund/bgbl-1/2000/s123"
+
+    def member(work, expression_id, url):
+        return {"item": {"exampleOfWork": {"legislationIdentifier": work},
+                         "legislationIdentifier": expression_id,
+                         "encoding": [{"encodingFormat": "application/zip", "contentUrl": url}]}}
+
+    members = [member(other, expression, URL_1), member(WORK, expression, URL_2),
+               member(WORK, expression, URL_1.replace(neuris.BASE, "https://example.com")),
+               member(WORK, expression, URL_1)]
+
+    class OfficialListing:
+        def get(self, url, **params):
+            if params:
+                return FakeResponse(200, data={"member": members})
+            assert url == URL_1
+            return SimpleNamespace(status_code=200, content=_zip_bytes())
+
+    archive = history.HistoryArchive(tmp_path)
+    assert history.fetch_current(OfficialListing(), archive, "fed_aufenthg_2004", WORK) == 1
+    assert [row["original_url"] for row in archive.read_ledger("neuris")] == [URL_1]
 
 
 class VanishingHttp:
