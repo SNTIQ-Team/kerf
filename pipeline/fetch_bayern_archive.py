@@ -91,24 +91,27 @@ def zip_captures(key: str, *, offline: bool) -> list[dict]:
             # main retains the last complete act; only explicit offline mode
             # may use a cached index without claiming a successful refresh.
             raise RuntimeError(f"{key}: archive index refresh failed")
-        if body:
-            fresh = json.loads(body)[1:]
-            if fresh:
-                rows = fresh
-                CACHE.mkdir(parents=True, exist_ok=True)
-                index.write_text(json.dumps(rows))
-    return [{"timestamp": r[0], "digest": r[1],
-             "original_url": r[3] if len(r) > 3 else ZIP_URL.format(key=key)}
-            for r in rows or []]
+        rows = json.loads(body)[1:]
+        if not rows:
+            raise RuntimeError(f"{key}: archive index refresh failed (no captures)")
+        bavarian_history._atomic_write(index, json.dumps(rows).encode())
+    captures = []
+    for row in rows or []:
+        capture = {"timestamp": row[0], "digest": row[1]}
+        if len(row) > 3 and row[3]:
+            capture["original_url"] = row[3]
+        captures.append(capture)
+    return captures
 
 
 def fetch_zip(key: str, capture: dict, *, offline: bool) -> dict:
     ts = capture["timestamp"]
-    original = capture.get("original_url") or ZIP_URL.format(key=key)
+    original = capture.get("original_url")
+    replay_target = original or ZIP_URL.format(key=key)
     if not re.fullmatch(r"https?://(?:www\.)?gesetze-bayern\.de(?::(?:80|443))?/Content/Zip/"
-                        + re.escape(key), original, re.I):
+                        + re.escape(key), replay_target, re.I):
         raise ValueError(f"{key}: unexpected original URL in archive index")
-    url = f"https://web.archive.org/web/{ts}id_/{original}"
+    url = f"https://web.archive.org/web/{ts}id_/{replay_target}"
     path = CACHE / f"{key}-{ts}.zip"
     data = path.read_bytes() if path.is_file() else None
     if not offline and (not data or base64.b32encode(hashlib.sha1(data).digest()).decode()
@@ -276,10 +279,10 @@ def main() -> int:
               f"{len(row['unincorporated_gvbl_events'])}", flush=True)
         rows.append(row)
     previous = latest_snapshot("bayern_recht_archive")
-    if not rows:
-        return 1
     if previous and (previous / "acts.jsonl").is_file():
         rows = retain_observations(read_jsonl(previous / "acts.jsonl"), rows)
+    if not rows:
+        return 1
     out = snapshot_dir("bayern_recht_archive")
     write_jsonl(out / "acts.jsonl", rows)
     print(f"{len(rows)} acts -> {out}")

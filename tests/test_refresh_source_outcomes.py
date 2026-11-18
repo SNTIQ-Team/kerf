@@ -58,6 +58,11 @@ def test_failed_live_archive_index_cannot_masquerade_as_fresh_using_cached_index
     assert archive.zip_captures('fixture', offline=True) == [
         {'timestamp': '20200101000000', 'digest': 'digest'}]
     assert json.loads(cache.read_text()) == [['20200101000000', 'digest', '1']]
+    monkeypatch.setattr(archive, '_get', lambda *args, **kwargs:
+                        b'[["timestamp","digest","length","original"]]')
+    with pytest.raises(RuntimeError, match='no captures'):
+        archive.zip_captures('fixture', offline=False)
+    assert json.loads(cache.read_text()) == [['20200101000000', 'digest', '1']]
 
 
 @pytest.mark.parametrize('status,body', [
