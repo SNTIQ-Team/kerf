@@ -5,7 +5,7 @@ import unittest
 
 from api.court_observations import FILENAME, PROFILE, validate_metadata
 from tests import test_decision_passages as fixtures
-from tools.court_observations import attach
+from tools.court_observations import attach, merge_inputs
 
 
 def court_row(identity):
@@ -71,3 +71,17 @@ class ProjectionTests(unittest.TestCase):
         desc=self.publish([twin])
         self.assertEqual(desc["metadata_only"],0)
         self.assertEqual(self.client.get("/decision-observations").json()["observations"],[original])
+
+    def test_cumulative_metadata_input_retains_prior_rows_and_flags_conflicts(self):
+        prior = {"profile":PROFILE, "observations":[court_row("old")], "excluded":[{"id":"review"}]}
+        record = court_row("by-recht-new")
+        record["source"].update(profile="bayern-recht-metadata/1",
+            url="https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2026-N-30199")
+        new = {"profile":PROFILE, "observations":[record], "excluded":[]}
+        merged = merge_inputs(prior, new)
+        self.assertEqual(merged["observations"], [record, prior["observations"][0]])
+        self.assertEqual(merged["excluded"], prior["excluded"])
+        self.assertEqual(merge_inputs(merged,new), merged)
+        new["observations"][0] = record | {"event_date":"2001-04-01"}
+        with self.assertRaisesRegex(ValueError, "conflicting observations"):
+            merge_inputs(merged,new)

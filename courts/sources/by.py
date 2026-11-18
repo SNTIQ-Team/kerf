@@ -1,10 +1,8 @@
 """Bavaria.
 
-gesetze-bayern.de (Bayern.Recht) answers every path, including robots.txt,
-with a Myra Security challenge (HTTP 503 "Security Check").  It is not
-bypassed; ``python -m courts sync --source by`` probes it once and records the
-typed ``challenge`` failure, then collects the official decision PDFs the
-courts publish themselves:
+The individual Bavarian courts publish official decision PDFs. The independent
+`by-recht` adapter follows the portal's public decision list when available.
+This adapter collects:
 
 * BayVGH and the six Bavarian VGs: decisions attached to press releases
   (vgh.bayern.de, no robots.txt);
@@ -14,9 +12,8 @@ courts publish themselves:
 
 These are partial by nature; coverage says so.
 
-BAYERN.RECHT decision pages themselves enter only as user-browser captures: the operator opens one page in
-Chrome, and ``python -m courts ingest-capture --source by`` stores it (courts.capture, parsed by
-courts.sources.by_portal; ``source_items.extra.route = "portal_capture"``).
+Manually supplied BAYERN.RECHT captures also retain their original ingestion
+route (`source_items.extra.route = "portal_capture"`).
 """
 from __future__ import annotations
 
@@ -24,6 +21,8 @@ import re
 import sqlite3
 from datetime import date
 from urllib.parse import quote, urljoin, urlsplit, urlunsplit
+
+from bs4 import BeautifulSoup
 
 from ..casenumbers import split_case_numbers
 from ..courtids import priority, resolve as resolve_court
@@ -76,9 +75,15 @@ def parse_vgh_press(markup: str, court_key: str) -> list[dict]:
 
 def parse_verfgh_list(markup: str) -> list[dict]:
     items = []
-    for href, title, when in re.findall(r'<li class="pdf">\s*<a href="([^"]+\.pdf)"[^>]*>(.*?)</a>\s*<span>([^<]+)</span>',
-                                        markup, re.S):
-        url = encode_url(urljoin(VERFGH, href))
+    for entry in BeautifulSoup(markup, "html.parser").select("li.pdf"):
+        link, stamp = entry.select_one('a[href$=".pdf"]'), entry.find("span")
+        if not link or not stamp:
+            continue
+        url = encode_url(urljoin(VERFGH, link["href"]))
+        if urlsplit(url).netloc != urlsplit(VERFGH).netloc:
+            continue
+        title = link.get_text(" ", strip=True)
+        when = stamp.get_text(" ", strip=True)
         try:
             listed = iso_date(when)
         except UpstreamFailure:
@@ -86,7 +91,7 @@ def parse_verfgh_list(markup: str) -> list[dict]:
         items.append({"source_doc_id": f"verfgh:{urlsplit(url).path}", "url": url, "listed_date": listed,
                       "listed_court": "verfgh-by", "listed_case_numbers": None, "listed_modified": None,
                       "priority": 1, "extra": {"route": "verfgh", "court_name": "Bayerischer Verfassungsgerichtshof",
-                                               "title": squash(re.sub("<[^>]+>", "", title))}})
+                                               "title": squash(title)}})
     return items
 
 
@@ -285,7 +290,7 @@ def parse_pdf_decision(pdf: bytes, item: dict, url: str) -> ParsedDecision:
 
 class BayernAdapter(Adapter):
     source_id = "by"
-    label = ("Bayern: gesetze-bayern.de (blocked by bot challenge) + official court publications "
+    label = ("Bayern: official court publications "
              "(BayVGH/VG press decisions, BayVerfGH, LAG Nürnberg/München)")
     base_url = "https://www.gesetze-bayern.de"
     land = "by"

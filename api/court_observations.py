@@ -15,6 +15,10 @@ HEX = re.compile(r"[0-9a-f]{64}")
 RULES = {
     "rii-court-metadata/1": ("www.rechtsprechung-im-internet.de", "application/zip", r"/jportal/docs/bsjrs/jb-[A-Za-z0-9]+\.zip", ""),
     "hessen-court-metadata/1": ("www.lareda.hessenrecht.hessen.de", "application/json", r"/perma", r"d=[A-Za-z0-9_-]+"),
+    "bayern-recht-metadata/1": ("www.gesetze-bayern.de", "text/html", r"/Content/Document/Y-300-Z-[A-Z0-9]+-B-\d{4}-N-\d{1,7}", ""),
+    "by-verfgh-pdf-metadata/1": ("www.bayern.verfassungsgerichtshof.de", "application/pdf", r"/media/images/bayverfgh/[\w%.,()+~-]+\.pdf", ""),
+    "by-vgh-pdf-metadata/1": ("www.vgh.bayern.de", "application/pdf", r"/mam/gerichte/[\w%/.,()+~-]+\.pdf", ""),
+    "by-arbg-pdf-metadata/1": ("www.arbg.bayern.de", "application/pdf", r"/imperia/md/content/stmas/(?:arbg|lag)/[\w%/.,()+~-]+\.pdf", ""),
     "nrwe-court-metadata/1": ("nrwe.justiz.nrw.de", "text/html", r"/[\w%/.,()+~ -]+\.html", ""),
 }
 FIELDS = {"id","reference","court","court_short","event_date","document_type","published_at","ecli","source","norm_mentions"}
