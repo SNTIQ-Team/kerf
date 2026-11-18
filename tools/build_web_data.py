@@ -507,7 +507,11 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     syn_by_key: dict[tuple, list] = {}
     for s in load("buzer_synopse", "synopse.jsonl"):
         syn_by_key[(s["act_id"], s["date"])] = _clean_changes(s.get("changes"))
-    gvbl = load("gvbl_events", "events.jsonl")
+    # The RSS feed only retains 50 items per gazette. The official GVBl
+    # index preserves older references for the same exact BayRS numbers.
+    gazettes = {row["permalink"]: row for row in load("gvbl_index", "events.jsonl")}
+    gazettes.update({row["permalink"]: row for row in load("gvbl_events", "events.jsonl")})
+    gvbl = sorted(gazettes.values(), key=lambda row: row.get("time") or "", reverse=True)
     by_v = load("bayern_recht", "versions.jsonl")
     bay_bills = load("bay_landtag", "bills.jsonl")
     by_diffs = load_by_diffs()
