@@ -118,10 +118,12 @@ def test_verfgh_dates_and_nested_citations_stay_in_source_entry():
 
 def test_historical_verfgh_short_title_must_match_directory_date(monkeypatch):
     from courts.sources import by
-    text = "Vf. 2-VII-00\n\nEntscheidung vom 4. Juli 2001\n\nGründe:\n\nDie Popularklage ist zulässig."
+    text = "Vf. 2-VII-00\n\nEntscheidung vom 4. Juli 2001\n\nAktenzeichen: Vf. 2-VII-00\n    Vf. 3-VII-00\n\nGründe :\n\nDie Popularklage ist zulässig."
     monkeypatch.setattr(by, "pdf_text", lambda pdf, url: text)
     item = dict(ITEM, listed_date="2001-07-04", source_doc_id="verfgh:/media/images/bayverfgh/2-vii-00.pdf")
     url = by.VERFGH + "/media/images/bayverfgh/2-vii-00.pdf"
-    assert by.parse_pdf_decision(b"fixture", item, url).decision_date == "2001-07-04"
+    decision = by.parse_pdf_decision(b"fixture", item, url)
+    assert decision.decision_date == "2001-07-04"
+    assert decision.case_numbers == ["Vf. 2-VII-00", "Vf. 3-VII-00"]
     with pytest.raises(by.UpstreamFailure, match="without decision date"):
         by.parse_pdf_decision(b"fixture", dict(item, listed_date="2001-07-05"), url)
