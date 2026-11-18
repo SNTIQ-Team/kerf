@@ -193,6 +193,10 @@ def capabilities():
     return {"schema_version": 1, "service": "lexgraph",
             "snapshot": corpus_snapshot(), "snapshot_precondition": "If-Lexgraph-Snapshot",
             "decision_passage_coverage": decision_passage_coverage(DATA_DIR),
+            "bavarian_migration_guidance": {
+                "collection": "/bavaria/migration-guidance",
+                "document": "/bavaria/migration-guidance/{document_id}",
+                "document_type": "Verwaltungsvorschrift", "is_statute": False},
             "search": {"norms": "current_only", "changes": "recorded_history",
                        "decisions": "metadata", "decision_passages": "retained_official_source_blocks", "decision_relations": "source_bound_citation_mentions", "component_status": True},
             "historical_text": {"operation": "acts/{id}/markdown", "parameters": ["at", "as_of"],
@@ -1306,6 +1310,23 @@ def citations(
         "limit": limit,
         "citations": result["citations"],
     }
+
+
+@app.get("/bavaria/migration-guidance")
+def bavarian_migration_guidance():
+    """List captured Bavarian administrative directives on migration."""
+    documents = _load("bavarian_migration_guidance")
+    return _cached({"total": len(documents), "documents": [
+        {key: value for key, value in row.items() if key != "text"} for row in documents]})
+
+
+@app.get("/bavaria/migration-guidance/{document_id}")
+def bavarian_migration_directive(document_id: str):
+    """Return one directive with its legal status, official text and source."""
+    for document in _load("bavarian_migration_guidance"):
+        if document["id"] == document_id:
+            return _cached(document)
+    raise HTTPException(404, "Bavarian migration directive not found")
 
 
 @app.get("/bavaria/gvbl")
