@@ -705,7 +705,7 @@ Permission-gated snapshots are retained only as private research artifacts;
 the public web/HF builders exclude them unless an explicit private build mode
 is selected, and the HF exporter refuses that mode.
 
-Step 22 also deploys the arena to a local `qfs_visualizer` checkout if present.
+Set `LEXGRAPH_VISUALIZER_PUBLIC` to the local `qfs_visualizer/public` directory to deploy the arena there in step 22.
 
 ---
 

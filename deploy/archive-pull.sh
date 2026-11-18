@@ -13,7 +13,6 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ARCHIVE="${LEXGRAPH_ARCHIVE:-$HOME/.local/share/sntiq-legal/lexgraph-archive}"
-KEY="${LEXGRAPH_ARCHIVE_KEY:-$HOME/.config/sntiq/lexgraph-archive-signing-key}"
 PY="${LEXGRAPH_PYTHON:-$REPO/.venv/bin/python}"
 REMOTE="${LEXGRAPH_REMOTE:-sntiq}"
 REMOTE_ROOT="${LEXGRAPH_REMOTE_ROOT:-/srv/sntiq-lexgraph}"
@@ -33,7 +32,7 @@ if ! flock -n 8; then
     echo "archive-pull: another run holds the lock; skipping"
     exit 75   # EX_TEMPFAIL; the unit treats it as success
 fi
-test -r "$KEY" || { echo "signing key missing: $KEY" >&2; exit 1; }
+source "$REPO/deploy/workstation/archive-signing-key.sh"
 
 echo "==> [1/5] VPS manifest of unreceipted archive files"
 info=$(ssh "$REMOTE" "cd $REMOTE_ROOT && $REMOTE_PY tools/archive_offload.py manifest")

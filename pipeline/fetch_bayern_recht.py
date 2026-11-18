@@ -272,7 +272,7 @@ def main() -> int:
 
     http = Http(delay=0.8)
     http.s.headers["User-Agent"] = (
-        "SNTIQ-lexgraph/0.1 (research; deless500@gmail.com)")
+        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)")
 
     print("[ffn] fetching BayRS register …")
     r = http.get(FFN_URL, timeout=120)

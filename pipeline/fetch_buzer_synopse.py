@@ -129,7 +129,7 @@ def main() -> int:
     http = Http(delay=args.delay)
     http.s.cookies.set_policy(DefaultCookiePolicy(allowed_domains=[]))
     http.s.headers["User-Agent"] = \
-        "SNTIQ-lexgraph/0.1 (research; deless500@gmail.com)"
+        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
 
     rows, n_pages, failures = list(done.values()), 0, 0
     aborted = False

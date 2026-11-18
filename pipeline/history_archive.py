@@ -26,7 +26,7 @@ from typing import Iterator
 
 CAPTURE_SCHEMA = "lexgraph-history-capture/1"
 PARSED_SCHEMA = "lexgraph-history-parsed/1"
-USER_AGENT = "SNTIQ-lexgraph/0.2 (research; deless500@gmail.com)"
+USER_AGENT = "SNTIQ-lexgraph/0.2 (research; +https://sntiq.com/)"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

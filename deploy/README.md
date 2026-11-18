@@ -113,13 +113,29 @@ in `~/.local/share/sntiq-legal/lexgraph-archive/` (`data/legacy_bgbl_history`,
 `data/snapshots` incl. the `.compact` archive, and `offload/` with manifests,
 receipts and the allowed-signers copy).
 
+The archive pull, legacy rebuild and history bundle jobs read the signing key
+path from `LEXGRAPH_ARCHIVE_KEY` or the checkout's Git configuration.
+Before updating an existing workstation, register its current key path once
+from the checkout root:
+
+```sh
+git config --local lexgraph.archiveSigningKey /absolute/path/to/your/signing-key
+```
+
+The distributed workstation service uses a stable checkout symlink. Before
+installing that service, create the link from the checkout root:
+
+```sh
+mkdir -p "$HOME/.local/share"
+ln -sT "$PWD" "$HOME/.local/share/lexgraph-checkout"
+```
+
 * **Daily pull** — user timer `lexgraph-archive-pull.timer` (09:30,
   `Persistent=true`; units in `deploy/workstation/`) runs
   `deploy/archive-pull.sh`: the VPS lists every unreceipted archived file
   with SHA-256 (`tools/archive_offload.py manifest`), rsync pulls it
   append-only (never `--delete`), every file is re-hashed on the workstation
-  and a receipt signed with `~/.config/sntiq/lexgraph-archive-signing-key`
-  goes back to `data/archive-offload/receipts/`.
+  and a receipt signed with the configured key goes back to `data/archive-offload/receipts/`.
 * **VPS retention** — `tools/archive_offload.py prune --apply` (after the
   pull, and as refresh step 21a) deletes only files a verified receipt lists
   with the same path and hash, and only if the refresh no longer reads them:

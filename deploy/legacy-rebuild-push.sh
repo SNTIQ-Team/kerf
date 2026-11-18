@@ -20,7 +20,6 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ARCHIVE="${LEXGRAPH_ARCHIVE:-$HOME/.local/share/sntiq-legal/lexgraph-archive}"
-KEY="${LEXGRAPH_ARCHIVE_KEY:-$HOME/.config/sntiq/lexgraph-archive-signing-key}"
 PY="${LEXGRAPH_PYTHON:-$REPO/.venv/bin/python}"
 REMOTE="${LEXGRAPH_REMOTE:-sntiq}"
 REMOTE_ROOT="${LEXGRAPH_REMOTE_ROOT:-/srv/sntiq-lexgraph}"
@@ -36,6 +35,7 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+source "$REPO/deploy/workstation/archive-signing-key.sh"
 export LEXGRAPH_ARCHIVE_SIGNERS="$ARCHIVE/offload/allowed_signers"
 mkdir -p "$ARCHIVE/offload"
 exec 7>"${XDG_RUNTIME_DIR:-/tmp}/lexgraph-legacy-rebuild.lock"

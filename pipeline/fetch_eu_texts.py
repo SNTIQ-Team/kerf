@@ -54,7 +54,7 @@ CACHE = ROOT / "data" / "cache" / "eu_texts"
 SPARQL = "https://publications.europa.eu/webapi/rdf/sparql"
 CELLAR = "https://publications.europa.eu/resource/cellar/"
 CELEX_URI = "http://publications.europa.eu/resource/celex/"
-UA = "SNTIQ-lexgraph/0.1 (research; deless500@gmail.com)"
+UA = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
 DEU = "http://publications.europa.eu/resource/authority/language/DEU"
 PREFIXES = """PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>

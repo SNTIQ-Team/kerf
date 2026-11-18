@@ -101,7 +101,7 @@ garbage collection.
 
 ## Runnable commands
 
-Run from `/home/echo0x22/Desktop/02_PROJECTS_HOBBY/Project_SNTIQ/Gesetz`:
+Run these commands from the root of the Lexgraph checkout.
 
 ```sh
 # Read-only inventory and exact gzip budget calculation.
