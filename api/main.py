@@ -1308,6 +1308,27 @@ def citations(
     }
 
 
+@app.get("/bavaria/gvbl")
+def bavarian_gazette(year: int | None = Query(None, ge=1945, le=9999),
+                     bayrs: str | None = Query(None, min_length=1, max_length=100),
+                     limit: int = Query(100, ge=1, le=500),
+                     offset: int = Query(0, ge=0)):
+    """Bavarian GVBl publications, searchable by publication year and exact BayRS number."""
+    if not (DATA_DIR / "bavarian_gvbl.json").is_file():
+        raise HTTPException(404, "Bavarian GVBl index unavailable")
+    index = _load("bavarian_gvbl")
+    rows = index["publications"]
+    if year is not None:
+        rows = [row for row in rows if row["time"].startswith(f"{year}-")]
+    if bayrs is not None:
+        number = bayrs.strip().casefold()
+        rows = [row for row in rows if number in {
+            part.strip().casefold() for part in (row["gliederungs_nr"] or "").split(",") if part.strip()}]
+    return _cached({"total": len(rows), "offset": offset, "limit": limit,
+                    "source": index["source"], "index_date": index["index_date"],
+                    "authenticity": "nachrichtlich", "publications": rows[offset:offset + limit]})
+
+
 @app.get("/eu-index")
 def eu_index(q: str | None = Query(None, min_length=1),
              kind: str | None = Query(None, pattern="^(DIR|REG)$"),
