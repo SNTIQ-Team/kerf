@@ -139,14 +139,23 @@ def _update_by_diff_ledger() -> None:
     if len(days) < 2:
         return
 
-    def norms(day: str) -> dict[tuple, str]:
-        f = base / day / "norms.jsonl"
-        if not f.is_file():
-            return {}
-        return {(n["jurabk"], n.get("enbez") or n.get("titel") or "?"):
-                (n.get("text") or "") for n in read_jsonl(f)}
+    def norms(day: str) -> tuple[dict, set, set]:
+        snapshot = base / day
+        texts, annexes = {}, set()
+        acts_file = snapshot / "acts.jsonl"
+        annex_coverage = {a["jurabk"] for a in read_jsonl(acts_file)
+                          if a.get("includes_xml_annexes") is True} if acts_file.is_file() else set()
+        norm_file = snapshot / "norms.jsonl"
+        if norm_file.is_file():
+            for n in read_jsonl(norm_file):
+                key = (n["jurabk"], n.get("enbez") or n.get("titel") or "?")
+                texts[key] = n.get("text") or ""
+                if n.get("norm_kind") == "annex":
+                    annexes.add(key)
+        return texts, annexes, annex_coverage
 
-    old, new = norms(days[-2]), norms(days[-1])
+    old, old_annexes, old_coverage = norms(days[-2])
+    new, new_annexes, new_coverage = norms(days[-1])
     if not old or not new:
         return
     existing = set()
@@ -162,6 +171,13 @@ def _update_by_diff_ledger() -> None:
     for key in sorted((set(old) | set(new))):
         jb, enbez = key
         if jb not in shared_acts:
+            continue
+        # Annexes became separately indexed when the source parser gained
+        # annex support. A missing side is proof of a change only if that
+        # edition's parser covered annexes for this specific act.
+        if key in new_annexes and key not in old and jb not in old_coverage:
+            continue
+        if key in old_annexes and key not in new and jb not in new_coverage:
             continue
         o, n = old.get(key, ""), new.get(key, "")
         if o == n or (jb, days[-1], enbez) in existing:

@@ -144,3 +144,24 @@ def test_load_by_diffs_preserves_effective_date_and_provenance(
     assert first["confidence"] == "exact"
     # Legacy daily rows have no better legal date than the snapshot itself.
     assert changes["2026-07-14"][0]["effective_date"] == "2026-07-14"
+
+
+@pytest.mark.parametrize("coverage_before,coverage_after,existing_before", [
+    (False, True, False), (True, False, True), (True, True, True), (True, True, False)])
+def test_annex_import_coverage_preserves_actual_changes(
+        tmp_path, monkeypatch, coverage_before, coverage_after, existing_before):
+    snapshots, ledger = _redirect_storage(tmp_path, monkeypatch)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    for day, covered, has_annex, body in [
+            ("2026-11-17", coverage_before, existing_before, "old"),
+            ("2026-11-18", coverage_after, not existing_before, "new")]:
+        rows = [{"jurabk": "PAG", "enbez": "Art. 1", "text": body}]
+        if has_annex:
+            rows.append({"jurabk": "PAG", "enbez": "Anlage",
+                         "norm_kind": "annex", "text": "Tabelle"})
+        _snapshot(snapshots, day, rows)
+        _write_jsonl(snapshots / "bayern_recht" / day / "acts.jsonl",
+                     [{"jurabk": "PAG", "includes_xml_annexes": covered}])
+    web_data._update_by_diff_ledger()
+    changed = {r["para"] for r in _read_jsonl(ledger)}
+    assert changed == ({"Art. 1", "Anlage"} if coverage_before and coverage_after else {"Art. 1"})

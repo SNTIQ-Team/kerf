@@ -12,9 +12,9 @@ VERIFIED endpoints (2026-07-06, robots fully permissive "Allow: /"):
       inkraft/ausserkraft, einzelnorm per Art./§ (para.nr, para.titel,
       jurAbsatz), aenderungsverlauf, typed verweis.* cross-references.
 
-Doc keys are NOT the official abbreviations (AufnG -> "BayAsylAufnG";
-/Content/Document/AufnG is 404). Keys are resolved from the ffn
-register by matching the "( ... - AufnG)" abbreviation in the title.
+Official abbreviations and register document keys differ (AufnG ->
+"BayAsylAufnG"). Resolve by exact FFN document key and compare the
+BayRS number and XML identity before accepting the complete source archive.
 EU references in the corpus XML are encoded as verweis.norm with
 ersatz dokids "EU_RL_*", "EWG_VO_*", "EWG_DSGVO", "EUGRCharta*"; the
 DTD's verweis.eurl/verweis.euvo elements are also handled when present.
@@ -31,13 +31,22 @@ Output (data/snapshots/bayern_recht/<date>/):
     eu_refs.jsonl  {jurabk, enbez, ref_type, target}
 
 Usage:
-    python3 pipeline/fetch_bayern_recht.py [--abbrs AufnG,DVAsyl]
+    python3 pipeline/fetch_bayern_recht.py
+    python3 pipeline/fetch_bayern_recht.py --abbrs GO,BayBO --output-dir /tmp/by-sample
+
+The dated snapshot includes the original FFN HTML and all accepted ZIPs under
+raw/. A partial selection must use its own output directory. To replay an
+existing capture, give --raw-input, --observed-on and --output-dir.
 """
 from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import io
+import tempfile
+from datetime import date
+from pathlib import Path
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -45,31 +54,141 @@ import zipfile
 
 from bs4 import BeautifulSoup
 
-from common import ROOT, Http, snapshot_dir, write_jsonl
-from reader_source_cache import reader_act_id, save_reader_source
+if __package__:
+    from .common import ROOT, SNAPSHOTS, Http, write_jsonl
+    from .reader_source_cache import reader_act_id, save_reader_source
+else:
+    from common import ROOT, SNAPSHOTS, Http, write_jsonl
+    from reader_source_cache import reader_act_id, save_reader_source
 
 BASE = "https://www.gesetze-bayern.de"
 FFN_URL = BASE + "/Content/Document/ffn"
 ZIP_URL = BASE + "/Content/Zip/{key}"
 
-# practice corpus (asylum/social): official abbr -> candidates as they
-# appear in ffn register titles, tried in order
+# Official abbreviation (public identifier) -> document key linked from the
+# official FFN. These can differ substantially, e.g. AGAufenthG -> BayZGAusland.
 CORPUS = {
-    # Land constitutional layer (kept in the same official BayRS feed so the
-    # hierarchy never has to present a constitution-shaped placeholder).
-    "BayVerf": ("BayVerf",
-                 "Verfassung des Freistaates Bayern in der Fassung"),
-    "AufnG": ("AufnG",),
-    "DVAsyl": ("DVAsyl",),
-    "ZustVAuslR": ("ZustVAuslR",),
-    "BayIntG": ("BayIntG",),
-    "AGSG": ("AGSG",),
-    "BayVwVfG": ("BayVwVfG",),
-    "AGVwGO": ("AGVwGO",),
-    "VwZVG": ("VwZVG",),
-    "LStVG": ("LStVG",),
-    "BayPAG": ("BayPAG", "PAG"),
-    "BayEUG": ("BayEUG", "EUG"),
+    "AGAufenthG": "BayZGAusland",
+    "AGBBiG": "BayAGBBiG",
+    "AGBGB": "BayAGBGB",
+    "AGFGO": "BayAGFGO",
+    "AGGVG": "BayAGGVG",
+    "AGPStG": "BayAGPStG",
+    "AGSG": "BayAGSG",
+    "AGSGG": "BayAGSGG",
+    "AGVwGO": "BayAGVwGO",
+    "ArbGOrgG": "BayOrgGAG",
+    "AufnG": "BayAsylAufnG",
+    "BayAGBAföG": "BayAGBAfoeG",
+    "BayAGBtG": "BayAGBtG",
+    "BayAbfG": "BayAbfAlG",
+    "BayAbgG": "BayAbgG",
+    "BayAföG": "BayAfoeG",
+    "BayBG": "BayBG",
+    "BayBGG": "BayBGG",
+    "BayBO": "BayBO",
+    "BayBQFG": "BayBQFG",
+    "BayBeamtVG": "BayBeamtVG",
+    "BayBeauftrG": "BayBeauftrG",
+    "BayBesG": "BayBesG",
+    "BayBlindG": "BayBlindG",
+    "BayBodSchG": "BayBodSchG",
+    "BayDG": "BayDG",
+    "BayDSG": "BayDSG",
+    "BayDSchG": "BayDSchG",
+    "BayDiG": "BayDiG",
+    "BayEUG": "BayEUG",
+    "BayFAG": "BayFAG",
+    "BayFamGG": "BayFamGG",
+    "BayFiG": "BayFischG",
+    "BayFraktG": "BayFraktG",
+    "BayFwG": "BayFwG",
+    "BayGMPP": "BayAGBMG",
+    "BayGVFG": "BayGVFG",
+    "BayGlG": "BayGlG",
+    "BayGrStG": "BayGrStG",
+    "BayHIG": "BayHIG",
+    "BayHO": "BayHO",
+    "BayHintG": "BayHintG",
+    "BayImSchG": "BayImSchG",
+    "BayIntG": "BayIntG",
+    "BayJAVollzG": "BayJAVollzG",
+    "BayKRegG": "BayKRegG",
+    "BayKSG": "BayKatSchutzG",
+    "BayKiBiG": "BayKiBiG",
+    "BayKlimaG": "BayKlimaG",
+    "BayKrG": "BayKrG",
+    "BayLBG": "BayLBG",
+    "BayLPflGG": "BayLPflGG",
+    "BayLadSchlG": "BayLadSchlG",
+    "BayLobbyRG": "BayLobbyRG",
+    "BayLplG": "BayLplG",
+    "BayMG": "BayMG",
+    "BayMRVG": "BayMRVG",
+    "BayNatSchG": "BayNatSchG",
+    "BayPVG": "BayPVG",
+    "BayPetG": "BayPetG",
+    "BayPrG": "BayPrG",
+    "BayPsychKHG": "BayPsychKHG",
+    "BayRDG": "BayRDG",
+    "BayRKG": "BayRKG",
+    "BayRSG": "BayRSG",
+    "BayRadG": "BayRadG",
+    "BayRiStAG": "BayRiStAG",
+    "BaySchFG": "BaySchFG",
+    "BaySchO": "BaySchO2016",
+    "BaySchlG": "BaySchlG",
+    "BayStVollzG": "BayStVollzG",
+    "BayStatG": "BayStatG",
+    "BayStrAG": "BayStrAG",
+    "BayStrWG": "BayStrWG",
+    "BaySvVollzG": "BaySvVollzG",
+    "BaySÜG": "BaySichPruefG",
+    "BayUIG": "BayUIG",
+    "BayUVollzG": "BayUVollzG",
+    "BayVSG": "BayVSG",
+    "BayVerf": "BayVerf",
+    "BayVersG": "BayVersG08",
+    "BayVwVfG": "BayVwVfG",
+    "BayWG": "BayWG",
+    "BayWaldG": "BayWaldG",
+    "BayWoBindG": "BayWoBindG",
+    "BayWoFG": "BayWoFG",
+    "BayÖPNVG": "BayOePNVG",
+    "BestG": "BayBestG",
+    "BezO": "BayBezO",
+    "BezWG": "BayBezWG",
+    "DVAsyl": "BayDVAsyl",
+    "FTG": "BayFTG",
+    "GDG": "BayGDG",
+    "GLKrWG": "BayGLKrWG",
+    "GO": "BayGO",
+    "GSG": "BayGSG",
+    "GerOrgG": "BayGerOrgG",
+    "HKaG": "BayHKaG",
+    "JSOG": "BayJSOG",
+    "KAG": "BayKAG",
+    "KG": "BayKG",
+    "KWBG": "BayKWBG",
+    "KommStaGebG": "BayKomGlG",
+    "KommZG": "BayKommZG",
+    "LJKostG": "BayJVKostG",
+    "LKrO": "BayLKrO",
+    "LStVG": "BayLStVG",
+    "LWG": "BayLWG",
+    "LlbG": "BayLlbG",
+    "PAG": "BayPAG",
+    "PKGG": "BayPKGG",
+    "POG": "BayPOG",
+    "PfleWoqG": "BayPfleWoqG",
+    "RHG": "BayRHG",
+    "SWG": "BaySWG",
+    "VGemO": "BayVGemO",
+    "VfGHG": "BayVfGHG",
+    "VwZVG": "BayVwZVG",
+    "ZustG": "BayZustG",
+    "ZustVAuslR": "BayZustVAuslR",
+    "ZwEWG": "BayZwEWG2008",
 }
 
 DATE_RE = re.compile(r"v(?:om)?\.?\s+(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})")
@@ -138,24 +257,6 @@ def parse_chain_entry(seq: int, rest: str) -> dict:
             "date": iso_date(cit)}
 
 
-def resolve_key(register: list[dict], candidates: tuple[str, ...],
-                ) -> dict | None:
-    """Find the register entry whose title carries the abbreviation."""
-    for cand in candidates:
-        esc = re.escape(cand)
-        # tier 1: abbr right before ')' — "(Aufnahmegesetz - AufnG)"
-        # tier 2: abbr anywhere on a word boundary
-        for pat in (rf"(?<![A-Za-z0-9]){esc}\)",
-                    rf"(?<![A-Za-z0-9]){esc}(?![A-Za-z0-9])"):
-            hits = [r for r in register if re.search(pat, r["title"])]
-            if len(hits) == 1:
-                return hits[0]
-            if len(hits) > 1:
-                print(f"[warn] {cand}: {len(hits)} ambiguous ffn hits: "
-                      f"{[h['doc_key'] for h in hits]}")
-    return None
-
-
 # --------------------------------------------------------------- xml
 
 
@@ -189,7 +290,8 @@ def eu_refs_of(el: ET.Element) -> list[tuple[str, str]]:
     return refs
 
 
-def parse_act_xml(xml_bytes: bytes, key: str, abbr: str,
+def parse_act_xml(xml_bytes: bytes, key: str, abbr: str, *,
+                  include_annexes: bool = False,
                   ) -> tuple[dict, list[dict], list[dict], list[dict]]:
     """-> (act, norms, xml_versions, eu_refs) for one bayportalnorm doc."""
     root = ET.fromstring(xml_bytes)
@@ -204,7 +306,10 @@ def parse_act_xml(xml_bytes: bytes, key: str, abbr: str,
 
     norms, refs = [], []
     seen_refs: set[tuple[str, str]] = set()
-    for en in root.iter("einzelnorm"):
+    body = root.find("rumpf") if include_annexes else root
+    if body is None:
+        raise ValueError(f"{key}: no statute body")
+    for en in body.iter("einzelnorm"):
         enbez = " ".join((en.findtext("para.nr") or "").split())
         tit = en.find("para.titel")
         parts = [flat(c) for c in en
@@ -217,6 +322,37 @@ def parse_act_xml(xml_bytes: bytes, key: str, abbr: str,
                 seen_refs.add((enbez, target))
                 refs.append({"jurabk": jurabk, "enbez": enbez,
                              "ref_type": ref_type, "target": target})
+    if include_annexes:
+        for annex in root.findall("annex/annex.koerper"):
+            label = (annex.findtext("annex.nummer[@int]") or annex.findtext("annex.nummer") or "").strip()
+            if not label:
+                raise ValueError(f"{key}: annex without a label")
+            title_el = annex.find("annex.titel")
+            heading = flat(title_el) if title_el is not None else ""
+            long_label = (annex.findtext("annex.nummer") or "").strip()
+            parts = [long_label] if long_label and long_label != label else []
+            for part in annex:
+                if part.tag in {"annex.nummer", "annex.titel"}:
+                    continue
+                # Keep text in tables, paragraph breaks and descriptions of
+                # embedded media. Original binary attachments remain in the ZIP.
+                part = copy.deepcopy(part)
+                for el in part.iter():
+                    if el.tag == "graphic" and el.get("Desc"):
+                        el.text = el.get("Desc")
+                    if el.tag in {"p", "tr", "einzelnorm", "jurAbsatz"}:
+                        el.tail = "\n" + (el.tail or "")
+                    elif el.tag in {"td", "th"}:
+                        el.tail = " " + (el.tail or "")
+                lines = (" ".join(line.split()) for line in "".join(part.itertext()).splitlines())
+                parts.extend(line for line in lines if line)
+            norms.append({"key": key, "jurabk": jurabk, "enbez": label, "norm_kind": "annex",
+                          "titel": heading, "text": "\n".join(parts)})
+            for ref_type, target in eu_refs_of(annex):
+                if (label, target) not in seen_refs:
+                    seen_refs.add((label, target))
+                    refs.append({"jurabk": jurabk, "enbez": label, "ref_type": ref_type,
+                                 "target": target})
     act["norm_count"] = len(norms)
 
     versions = []
@@ -257,91 +393,105 @@ def parse_act_xml(xml_bytes: bytes, key: str, abbr: str,
     return act, norms, versions, refs
 
 
-# -------------------------------------------------------------- main
+def parse_registered_act(zip_bytes: bytes, entry: dict, abbreviation: str):
+    key = entry["doc_key"]
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+        member = archive.getinfo(f"bayportalnorm/{key}.xml")
+        if member.file_size > 40 * 1024**2:
+            raise ValueError(f"{key}: oversized XML")
+        xml = archive.read(member)
+    root = ET.fromstring(xml)
+    identity = root.find("kopf/angaben.versunabh/dokumentation")
+    if root.tag != "byrecht-norm" or identity is None or identity.get("dokid") != key:
+        raise ValueError(f"{key}: source document identity mismatch")
+    act, norms, xml_versions, refs = parse_act_xml(xml, key, abbreviation, include_annexes=True)
+    if act["jurabk"] != abbreviation or act["bayrs_nr"] != entry["bayrs_nr"]:
+        raise ValueError(f"{key}: XML abbreviation or BayRS number differs from the register mapping")
+    if not any(norm["enbez"] and norm["text"] for norm in norms):
+        raise ValueError(f"{key}: empty norm text")
+    act["long_title"] = re.sub(r"\s*(?:in der Fassung der Bekanntmachung\s+)?"
+                               r"vom\s+\d{1,2}\.\s.*$", "", entry["title"])
+    act.update(includes_xml_annexes=True, source_url=ZIP_URL.format(key=key),
+               source_sha256=hashlib.sha256(zip_bytes).hexdigest(),
+               xml_sha256=hashlib.sha256(xml).hexdigest())
+    versions = [{"jurabk": abbreviation, **row, "source": "ffn"} for row in entry["chain"]]
+    return act, norms, versions + xml_versions, refs, xml
+
+
+def write_snapshot(stage: Path, abbreviations, get_bytes, observed_on: str) -> None:
+    raw = stage / "raw"
+    raw.mkdir()
+    ffn = get_bytes("ffn.html", FFN_URL)
+    entries = parse_ffn(ffn.decode("utf-8-sig"))
+    (raw / "ffn.html").write_bytes(ffn)
+    register = {entry["doc_key"]: entry for entry in entries}
+    if not entries or len(register) != len(entries):
+        raise ValueError("empty or ambiguous official FFN document register")
+    ffn_sha = hashlib.sha256(ffn).hexdigest()
+    tables = {name: [] for name in ("acts", "norms", "versions", "eu_refs")}
+    for abbr in abbreviations:
+        key = CORPUS[abbr]
+        if key not in register:
+            raise ValueError(f"{key}: not listed in the official FFN")
+        blob = get_bytes(f"{key}.zip", ZIP_URL.format(key=key))
+        act, norms, versions, refs, xml = parse_registered_act(blob, register[key], abbr)
+        act.update(source_observed_on=observed_on, ffn_sha256=ffn_sha)
+        tables["acts"].append(act)
+        tables["norms"].extend(norms)
+        tables["versions"].extend(versions)
+        tables["eu_refs"].extend(refs)
+        (raw / f"{key}.zip").write_bytes(blob)
+        save_reader_source(stage / "reader-source", reader_act_id("by", abbr), xml)
+        print(f"  {abbr}: {len(norms)} norms, {len(versions)} amendment records", flush=True)
+    for name, rows in tables.items():
+        write_jsonl(stage / f"{name}.jsonl", rows)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--abbrs", help="comma list; default: practice corpus")
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--abbrs", help="comma-separated official abbreviations")
+    ap.add_argument("--output-dir", type=Path, help="standalone snapshot destination")
+    ap.add_argument("--raw-input", type=Path, help="replay captured ffn.html and original ZIPs")
+    ap.add_argument("--observed-on", type=date.fromisoformat, help="original capture date for replay")
     args = ap.parse_args()
-    wanted = (args.abbrs.split(",") if args.abbrs else sorted(CORPUS))
-    bad = [a for a in wanted if a not in CORPUS]
-    if bad:
-        print(f"[err] unknown abbrs (not in corpus map): {bad}")
-        return 1
+    if args.abbrs and not args.output_dir:
+        ap.error("--abbrs requires a separate --output-dir")
+    if args.raw_input and not (args.observed_on and args.output_dir):
+        ap.error("--raw-input requires --observed-on and --output-dir")
+    if args.observed_on and not args.raw_input:
+        ap.error("--observed-on requires --raw-input")
+    aliases = {key: abbr for abbr, key in CORPUS.items()}
+    wanted = {aliases.get(s.strip(), s.strip()) for s in args.abbrs.split(",")} if args.abbrs else set(CORPUS)
+    if wanted - set(CORPUS):
+        ap.error(f"unknown abbreviations: {sorted(wanted - set(CORPUS))}")
+    observed_on = (args.observed_on or date.today()).isoformat()
+    destination = args.output_dir or SNAPSHOTS / "bayern_recht" / observed_on
+    http = Http(delay=0.85)
+    http.s.headers["User-Agent"] = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
 
-    http = Http(delay=0.8)
-    http.s.headers["User-Agent"] = (
-        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)")
+    def get_bytes(filename, url):
+        if args.raw_input:
+            return (args.raw_input / filename).read_bytes()
+        response = http.get(url, timeout=90, retries=1)
+        response.raise_for_status()
+        return response.content
 
-    print("[ffn] fetching BayRS register …")
-    r = http.get(FFN_URL, timeout=120)
-    register = parse_ffn(r.text) if r.status_code == 200 else []
-    if not register:
-        print(f"[err] ffn register empty/unfetchable (HTTP "
-              f"{r.status_code}) — refusing to overwrite snapshot",
-              file=sys.stderr)
-        return 1
-    n_chain = sum(len(r["chain"]) for r in register)
-    print(f"[ffn] {len(register)} acts, {n_chain} amendment entries")
-
-    resolved, unresolved = {}, []
-    for abbr in wanted:
-        entry = resolve_key(register, CORPUS[abbr])
-        if entry is None:
-            unresolved.append(abbr)
-            print(f"[warn] unresolved in ffn register: {abbr}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".bayern-", dir=destination.parent) as temporary:
+        stage = Path(temporary) / "snapshot"
+        stage.mkdir()
+        write_snapshot(stage, sorted(wanted), get_bytes, observed_on)
+        if destination.exists():
+            for name in ("acts", "norms", "versions", "eu_refs"):
+                filename = f"{name}.jsonl"
+                if (stage / filename).read_bytes() != (destination / filename).read_bytes():
+                    raise ValueError(f"conflicting existing snapshot: {destination / filename}")
         else:
-            resolved[abbr] = entry
-            print(f"  {abbr:>10} -> {entry['doc_key']:<14} "
-                  f"BayRS {entry['bayrs_nr']:<12} "
-                  f"({len(entry['chain'])} ffn amendments)")
-
-    acts, norms, versions, eu_refs = [], [], [], []
-    fetched, failed = [], []
-    for abbr, entry in resolved.items():
-        key = entry["doc_key"]
-        try:
-            r = http.get(ZIP_URL.format(key=key), timeout=90)
-            r.raise_for_status()
-            with zipfile.ZipFile(io.BytesIO(r.content)) as z:
-                name = next(n for n in z.namelist() if n.endswith(".xml"))
-                xml_bytes = z.read(name)
-                act, ns, xv, refs = parse_act_xml(xml_bytes, key, abbr)
-                save_reader_source(ROOT / "data" / "reader-source",
-                                   reader_act_id("by", act["jurabk"]), xml_bytes)
-        except Exception as exc:            # noqa: BLE001 — count & go on
-            failed.append(abbr)
-            print(f"[err] {abbr} ({key}): {exc}")
-            continue
-        act["long_title"] = re.sub(
-            r"\s*(?:in der Fassung der Bekanntmachung\s+)?"
-            r"vom\s+\d{1,2}\.\s.*$", "", entry["title"])
-        act["bayrs_nr"] = act["bayrs_nr"] or entry["bayrs_nr"]
-        for c in entry["chain"]:
-            versions.append({"jurabk": act["jurabk"], **c, "source": "ffn"})
-        acts.append(act)
-        norms.extend(ns)
-        versions.extend(xv)
-        eu_refs.extend(refs)
-        fetched.append(abbr)
-        print(f"  {act['jurabk']:>10}  {act['norm_count']:4} norms  "
-              f"{len(entry['chain']):2} ffn / {len(xv):2} xml versions  "
-              f"{len(refs):2} EU refs  build {act['builddate']}")
-
-    if not acts or unresolved or failed:
-        print("[err] incomplete Bavarian corpus — refusing to overwrite "
-              f"snapshot (unresolved={unresolved or '-'}, "
-              f"failed={failed or '-'})", file=sys.stderr)
-        return 1
-    out = snapshot_dir("bayern_recht")
-    n_a = write_jsonl(out / "acts.jsonl", acts)
-    n_n = write_jsonl(out / "norms.jsonl", norms)
-    n_v = write_jsonl(out / "versions.jsonl", versions)
-    n_e = write_jsonl(out / "eu_refs.jsonl", eu_refs)
-    print(f"\nfetched {len(fetched)}/{len(wanted)} acts"
-          f" | unresolved {unresolved or '-'} | failed {failed or '-'}")
-    print(f"{n_a} acts, {n_n} norms, {n_v} versions, {n_e} EU refs -> {out}")
+            stage.rename(destination)
+        if not args.output_dir:
+            for xml_path in (destination / "reader-source").glob("by_*.xml"):
+                save_reader_source(ROOT / "data" / "reader-source", xml_path.stem, xml_path.read_bytes())
+    print(f"{len(wanted)} Bavarian acts -> {destination}")
     return 0
 
 
