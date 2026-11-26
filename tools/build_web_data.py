@@ -43,6 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
+from api.norm_identity import load_gii_toc  # noqa: E402
 from api.source_freshness import build_freshness  # noqa: E402
 from tools.reader_blocks import refresh_cached_sidecars  # noqa: E402
 from tools.archived_reader_store import publish_archived_readers  # noqa: E402
@@ -1712,6 +1713,16 @@ def attach_bavarian_observations(details: dict, manifest: dict) -> None:
         details[act_id]["official_states"] = sorted(observations, key=lambda row: row["observed_at"])
 
 
+def publish_gii_toc(source: Path, target: Path) -> int | None:
+    captured_toc = load_gii_toc(source)
+    if captured_toc is None:
+        target.unlink(missing_ok=True)
+        return None
+    target.write_text(json.dumps(captured_toc, ensure_ascii=False, separators=(",", ":")),
+                      encoding="utf-8")
+    return target.stat().st_size
+
+
 def main() -> int:
     (WEB / "acts").mkdir(parents=True, exist_ok=True)
     built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -2059,6 +2070,11 @@ def main() -> int:
         sizes["eu_index.json"] = dump("eu_index.json", eu_index)
     else:
         (WEB / "eu_index.json").unlink(missing_ok=True)
+    # The API reads per-norm official links from the same release as the acts.
+    # A data-only publication can precede deployment of a new API package.
+    toc_size = publish_gii_toc(ROOT / "api" / "data" / "gii_toc.json", WEB / "gii_toc.json")
+    if toc_size is not None:
+        sizes["gii_toc.json"] = toc_size
     if gii_catalog:
         sizes["gii_catalog.json"] = dump("gii_catalog.json", gii_catalog)
     else:
