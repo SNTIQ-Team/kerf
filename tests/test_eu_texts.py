@@ -73,6 +73,37 @@ def test_quoted_formex_articles_belong_to_the_amending_article():
     assert parsed["annexes_skipped"] == 1
 
 
+def test_formex_consolidation_omits_deleted_articles_and_inline_words():
+    # 2013/36/EU keeps the repealed Arts. 28–32 inside a single deleted division.
+    xml = b'''<CONS.ACT><ENACTING.TERMS><?CLG.MDFO ID="o1" IDREF="c1" ACTION="DELETED"?>
+      <DIVISION><ARTICLE><TI.ART>Artikel 28</TI.ART><ALINEA>Alt</ALINEA></ARTICLE></DIVISION>
+      <?CLG.MDFC ID="c1" IDREF="o1"?><ARTICLE><TI.ART>Artikel 33</TI.ART><ALINEA>
+      Erwerb <?CLG.MDFO ID="o2" IDREF="c2" ACTION="DELETED"?>oder <HT>Kauf</HT>
+      <?CLG.MDFC ID="c2" IDREF="o2"?>durch <?CLG.MDFO ID="o3" IDREF="c3" ACTION="REPLACED"?>
+      Dritte<?CLG.MDFC ID="c3" IDREF="o3"?>.</ALINEA></ARTICLE></ENACTING.TERMS></CONS.ACT>'''
+    articles = eu.parse_formex(xml)['articles']
+    assert [(a['enbez'], a['text']) for a in articles] == [('Art. 33', 'Erwerb durch Dritte.')]
+
+
+def test_formex_deletion_can_cross_division_and_contain_nested_changes():
+    # The consolidation of Regulation 2016/1624 closes a deletion inside a division.
+    xml = b'''<CONS.ACT><ENACTING.TERMS><?CLG.MDFO ID="o1" IDREF="c1" ACTION="DELETED"?>
+      <DIVISION><ARTICLE><TI.ART>Artikel 1</TI.ART><ALINEA>Alt</ALINEA></ARTICLE>
+      <?CLG.MDFO ID="o2" IDREF="c2" ACTION="DELETED"?>
+      <ARTICLE><TI.ART>Artikel 2</TI.ART><ALINEA>Alt</ALINEA></ARTICLE>
+      <?CLG.MDFC ID="c2" IDREF="o2"?><?CLG.MDFC ID="c1" IDREF="o1"?>
+      <ARTICLE><TI.ART>Artikel 3</TI.ART><ALINEA>Erhalten.</ALINEA></ARTICLE></DIVISION>
+      </ENACTING.TERMS></CONS.ACT>'''
+    assert [a['enbez'] for a in eu.parse_formex(xml)['articles']] == ['Art. 3']
+
+
+@pytest.mark.parametrize('closing', ['', '<?CLG.MDFC ID="c1" IDREF="other"?>'])
+def test_formex_rejects_unpaired_deletion(closing):
+    xml = '<CONS.ACT><?CLG.MDFO ID="o1" IDREF="c1" ACTION="DELETED"?>' + closing + '</CONS.ACT>'
+    with pytest.raises(ValueError, match='deletion'):
+        eu.parse_formex(xml.encode())
+
+
 def test_formex_article_renders_absatz_unterabsatz_and_points():
     parsed = eu.parse_formex(FORMEX_OJ.encode())
     art1, art2 = parsed["articles"]
