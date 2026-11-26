@@ -10,9 +10,7 @@ German norms.
 Dates (never invented, each with its basis):
 
 * ``adopted`` = CELLAR ``work_date_document``; ``promulgated`` = Official Journal date;
-  ``in_force`` = earliest ``resource_legal_date_entry-into-force``; ``applies_from`` = a
-  later entry-into-force date when CELLAR lists several (e.g. DSGVO 2016-05-24 /
-  2018-05-25).
+  entry into force and general application use the date roles annotated by CELLAR.
 * A consolidated version is valid from its EUR-Lex consolidation date (the first one
   from the entry into force) until the next consolidation or the end of validity.
 * The Official Journal wording of an article that the first consolidation corrects
@@ -152,8 +150,8 @@ def build(row: dict[str, Any], *, juris: str = "EU",
     findings: list[dict[str, Any]] = []
     end = dates.get("end_of_validity")
     if juris == "EU" and end:
-        # The snapshot stores the earliest CELLAR end date, which can apply
-        # only to an article. Require evidence of repeal of the act as a whole.
+        # Older snapshots may name an expiry limited to one article.
+        # Keep requiring evidence that the act as a whole was repealed.
         later_editions = [edition["celex"] for edition in row.get("editions") or []
                           if edition.get("kind") == "consolidated" and (edition.get("date") or "") > end]
         if later_editions or not (row.get("relations") or {}).get("repealed_by"):
@@ -376,7 +374,7 @@ def _base_change(row: dict[str, Any], prefix: str) -> dict[str, Any] | None:
             "promulgated": _date(dates.get("published"), f"{source} (Official Journal)"),
             "in_force": _date(dates.get("in_force"), f"{source} (entry into force)"),
             "applies_from": _date(dates.get("applies_from"),
-                                  f"{source} (later entry-into-force/application date)",
+                                  f"{source} (general application date)",
                                   reason="no separate date of application listed"),
         },
         "verification": "official_metadata",
