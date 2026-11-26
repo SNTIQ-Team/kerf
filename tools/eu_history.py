@@ -363,6 +363,9 @@ def _base_change(row: dict[str, Any], prefix: str) -> dict[str, Any] | None:
     if not (dates.get("adopted") or dates.get("published") or dates.get("in_force")):
         return None
     source = "CELLAR work metadata"
+    clause = dates.get("application_clause")
+    application_basis = (f"Official text, {clause['article']} Abs. {clause['paragraph']}"
+                         if clause else f"{source} (general application date)")
     return {
         "record_type": "change", "act_id": row["act_id"],
         "amending_act": {"citation": dates.get("oj_ref") or row.get("celex"),
@@ -374,10 +377,10 @@ def _base_change(row: dict[str, Any], prefix: str) -> dict[str, Any] | None:
             "promulgated": _date(dates.get("published"), f"{source} (Official Journal)"),
             "in_force": _date(dates.get("in_force"), f"{source} (entry into force)"),
             "applies_from": _date(dates.get("applies_from"),
-                                  f"{source} (general application date)",
-                                  reason="no separate date of application listed"),
+                                  application_basis, reason=("application clause missing or inconsistent across editions"
+                                                             if clause else "no separate date of application listed")),
         },
-        "verification": "official_metadata",
+        "verification": "official_metadata_and_text" if clause and clause.get("date") else "official_metadata",
     }
 
 

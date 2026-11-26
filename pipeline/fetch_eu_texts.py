@@ -50,9 +50,9 @@ from typing import Any, Iterable
 from urllib.parse import quote, unquote
 
 if __package__:
-    from .eu_dates import general_date
+    from .eu_dates import application_clause, general_date
 else:
-    from eu_dates import general_date
+    from eu_dates import application_clause, general_date
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "cache" / "eu_texts"
@@ -117,6 +117,9 @@ CORPUS: list[dict[str, Any]] = [
     {"celex": "32016L1919", "jurabk": "RL (EU) 2016/1919", "family": "directive"},
     {"celex": "32022R1925", "jurabk": "VO (EU) 2022/1925", "family": "regulation",
      "aliases": ["Digital Markets Act", "DMA", "Gesetz über digitale Märkte"]},
+    {"celex": "32022R2065", "jurabk": "VO (EU) 2022/2065", "family": "regulation",
+     "aliases": ["Digital Services Act", "DSA", "Gesetz über digitale Dienste"],
+     "application_clause": ("Art. 93", "2")},
     {"celex": "32024R1689", "jurabk": "VO (EU) 2024/1689", "family": "regulation",
      "aliases": ["AI Act", "KI-Verordnung", "Verordnung über künstliche Intelligenz"]},
 ]
@@ -809,6 +812,12 @@ def fetch_act(cellar: Cellar, spec: dict[str, Any], *, lisbon: dict[str, Any] | 
         dates = {**dates, "adopted": meta.get("signed"),
                  "basis": "Charta in der am 12.12.2007 angepassten Fassung (CELLAR metadata of "
                           f"{celex}); the Official Journal date is the 2016 republication"}
+    if spec.get("application_clause"):
+        clause = application_clause(editions, [celex, *(r["celex"] for r in cons)],
+                                    *spec["application_clause"], cellar_date=dates["applies_from"])
+        dates.update(applies_from=clause["date"], application_clause=clause)
+        if not clause["date"]:
+            warnings.append(f"{celex}: general application clause missing or inconsistent across editions")
     return {
         "act_id": act_id_of(celex), "celex": celex, "jurabk": spec["jurabk"],
         "aliases": spec.get("aliases") or [], "family": spec.get("family"),
