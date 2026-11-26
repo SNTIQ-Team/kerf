@@ -25,6 +25,11 @@ FIELDS = {"id","reference","court","court_short","event_date","document_type","p
 SOURCE_FIELDS = {"profile","url","media_type","content_sha256","observed_at","lineage_key","parser_version","canonical_decision_id"}
 
 
+def stamp(file):
+    stat = file.stat()
+    return stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+
+
 def validate_metadata(row):
     source = row["source"]
     host, media, path_pattern, query_pattern = RULES[source["profile"]]
