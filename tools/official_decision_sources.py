@@ -69,6 +69,10 @@ def extract_official(blob:bytes,metadata:dict,profile:str):
    if isinstance(child,NavigableString):
     if child.strip():raise ValueError('unrepresented source text')
    elif isinstance(child,Tag):yield child
+ # The Sozialgerichtsbarkeit JSON and CELLAR judgment XHTML carry case metadata
+ # but neither retained representation declares the judgment's own ECLI.
+ # A cited ECLI stays in its source passage.
+ ecli = None
  if profile=='bsg-html/1':
   headlines=soup.select('h1.entscheidungsHeadline')
   if len(headlines)!=1:raise ValueError('missing/ambiguous court decision heading')
@@ -148,7 +152,4 @@ def extract_official(blob:bytes,metadata:dict,profile:str):
   if not numbers or numbers!=list(range(1,len(numbers)+1)) or 'tenor' not in counts:raise ValueError('missing or duplicate source paragraph')
  else:raise ValueError('unsupported source profile')
  if len({r['passage_id'] for r in rows})!=len(rows):raise ValueError('duplicate passage identity')
- if profile!='bsg-html/1':
-  eclis=set(re.findall(r'ECLI:[A-Z]{2}:[A-Z]+:[0-9]{4}:[A-Za-z0-9.]+',raw))
-  ecli=next(iter(eclis)) if len(eclis)==1 else None
  return rows,ecli
