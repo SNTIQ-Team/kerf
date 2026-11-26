@@ -727,3 +727,43 @@ def test_dedupe_repairs_duplicates_stored_under_the_old_rules(monkeypatch):
     assert resolve_decision(conn, ARBG_ECLI) == ("ok", [ARBG_ECLI])
     assert conn.execute("SELECT source_doc_id FROM decisions WHERE id=?", (ARBG_ECLI,)).fetchone()[0] == "LARE914"
     assert dedupe(conn)["summary"] == {"republications": {}, "shared_eclis": {}}
+
+
+def test_relink_rechecks_identity_when_a_second_document_arrives(conn):
+    from courts.model import Block, Section
+    from courts.store import relink, store_decision
+
+    ecli = "ECLI:DE:BSG:2025:180625UB6KA424R0"
+    first = _bsg("rii", "first", ecli, ("1", "2"))
+    first_id, _ = store_decision(conn, first, content_hash="a", capture_path="-", media_type="x")
+    d = conn.execute("SELECT * FROM decisions WHERE id=?", (first_id,)).fetchone()
+    case_key = conn.execute("SELECT case_key FROM case_numbers WHERE decision_id=?", (first_id,)).fetchone()[0]
+
+    def cite(target, court, day, docket, author="parser", linked=None):
+        return conn.execute("""
+            INSERT INTO relations(decision_id,relation,target_kind,target_id,target_court_id,
+              target_date,target_case_key,target_decision_id,target_raw,quoted_context,origin,
+              derived_by,legal_effect_verified,confidence,detail)
+            VALUES(?,'mentions','decision',?,?,?,?,?,'citation','context','decision_text',?,0,1,'{}')
+        """, (first_id,target,court,day,docket,linked,author)).lastrowid
+
+    dated = cite("court:bsg/test", d["court_slug"], d["decision_date"], case_key)
+    undated = cite("court:bsg/test", d["court_id"], None, case_key)
+    printed = cite(ecli.lower(), None, None, None)
+    conflicting = cite("ECLI:DE:BSG:2025:UNKNOWN", d["court_slug"], d["decision_date"], case_key)
+    reviewed = cite(ecli, None, None, None, author="user", linked=first_id)
+
+    def links():
+        return dict(conn.execute("SELECT id,target_decision_id FROM relations"))
+
+    assert relink(conn) == 3
+    assert links() == {dated:first_id, undated:first_id, printed:first_id, conflicting:None, reviewed:first_id}
+    assert relink(conn) == 0
+
+    second = _bsg("rii", "second", ecli, ("1", "2"), dtype="Beschluss")
+    second.sections = [Section("gruende", "court", "t", [Block("Anderer Beschluss.", "1")])]
+    second_id, _ = store_decision(conn, second, content_hash="b", capture_path="-", media_type="x")
+    assert second_id != first_id
+    assert relink(conn) == 3
+    assert links() == {dated:None, undated:None, printed:None, conflicting:None, reviewed:first_id}
+    assert relink(conn) == 0
