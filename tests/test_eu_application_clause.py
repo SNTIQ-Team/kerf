@@ -52,3 +52,18 @@ def test_dsa_application_sources(monkeypatch, last_wording, expected):
         assert "Art. 93" in history_date["basis"] and "Abs. 2" in history_date["basis"]
     else:
         assert row["warnings"] and history_date["status"] == "unknown"
+
+
+def test_emission_limits_keep_the_partial_application_date_in_its_clause():
+    emissions = next(s for s in eu.CORPUS if s["celex"] == "32007R0715")
+    clause = ("(2) Diese Verordnung gilt ab dem 3. Januar 2009, mit Ausnahme des Artikels 10 "
+              "Absatz 1 und des Artikels 12, die ab dem 2. Juli 2007 gelten.")
+    article, paragraph = emissions["application_clause"]
+    edition = {"celex": emissions["celex"], "items": [],
+               "articles": [{"enbez": article, "text": clause}]}
+    result = eu.application_clause([edition], [edition["celex"]], article, paragraph, None)
+    assert result["date"] == "2009-01-03"
+    assert result["editions"][0]["quote"] == clause
+
+    edition["articles"][0]["text"] = "(2) Diese Verordnung gilt ab dem 3. Januar 2009, wenn eine Genehmigung vorliegt."
+    assert eu.application_clause([edition], [edition["celex"]], article, paragraph, None)["date"] is None
