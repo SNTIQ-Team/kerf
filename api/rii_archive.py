@@ -1,11 +1,15 @@
 """Read published RII decisions from byte ranges in a pinned Kerf Hub release."""
 from __future__ import annotations
 
+from collections import OrderedDict
+from concurrent.futures import Future
 from functools import lru_cache
 from hashlib import sha256
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
+from threading import Lock
 import io
 import json
+import os
 import re
 import zipfile
 
@@ -18,6 +22,49 @@ MAX_FRAME = 64 * 1024**2
 MAX_LOOKUP = 8 * 1024**2
 MAX_MANIFEST = 4 * 1024**2
 
+
+class _VerifiedRecords:
+    """One shared byte budget across revisions. Concurrent readers share the same fetch."""
+    def __init__(self, max_bytes=16 * 1024**2, max_entries=512):
+        self.max_bytes = max_bytes
+        self.max_entries = max_entries
+        self.stored_bytes = 0
+        self.entries = OrderedDict()
+        self.pending = {}
+        self.lock = Lock()
+
+    def get(self, key, load):
+        with self.lock:
+            if key in self.entries:
+                self.entries.move_to_end(key)
+                return self.entries[key]
+            pending = self.pending.get(key)
+            owner = pending is None
+            if owner:
+                pending = self.pending[key] = Future()
+        if not owner:
+            return pending.result()
+        try:
+            raw = load()
+            with self.lock:
+                if len(raw) <= self.max_bytes:
+                    self.entries[key] = raw
+                    self.stored_bytes += len(raw)
+                    while self.stored_bytes > self.max_bytes or len(self.entries) > self.max_entries:
+                        _, removed = self.entries.popitem(last=False)
+                        self.stored_bytes -= len(removed)
+                pending.set_result(raw)
+            return raw
+        except BaseException as exc:
+            pending.set_exception(exc)
+            raise
+        finally:
+            with self.lock:
+                del self.pending[key]
+
+
+_records = _VerifiedRecords()
+_open_lock = Lock()
 
 class MissingRecord(LookupError):
     """The verified catalogue or decision has no such item."""
@@ -53,9 +100,9 @@ class RiiArchive:
         self.revision = revision
         self.manifest_sha256 = manifest_sha256
         self.base = f"{BASE}/{revision}/rii"
-        raw = fetch(self.base + "/manifest.json", MAX_MANIFEST)
-        if sha256(raw).hexdigest() != manifest_sha256:
-            raise ValueError("RII manifest SHA-256 mismatch")
+        index_dir = os.environ.get("KERF_RII_INDEX_DIR")
+        self.index_dir = Path(index_dir) / revision if index_dir else None
+        raw = self._index_file("manifest.json", MAX_MANIFEST, manifest_sha256)
         manifest = json.loads(raw)
         if manifest["format"] != "kerf-rii-publications/1" or not isinstance(manifest["files"], dict):
             raise ValueError("Unsupported RII manifest")
@@ -72,6 +119,23 @@ class RiiArchive:
             raise ValueError("Invalid RII archive path")
         return self.files[path]
 
+    def _index_file(self, path, limit, digest, size=None):
+        # The manifest and lookup buckets are small enough to keep on a serving
+        # host. The pinned hash still decides which bytes can be used.
+        if self.index_dir:
+            try:
+                with (self.index_dir / path).open("rb") as stream:
+                    local = stream.read(limit + 1)
+            except OSError:
+                pass
+            else:
+                if (len(local) <= limit and (size is None or len(local) == size)
+                        and sha256(local).hexdigest() == digest):
+                    return local
+        data = fetch(f"{self.base}/{path}", limit)
+        verify(data, len(data) if size is None else size, digest)
+        return data
+
     @lru_cache(maxsize=12)
     def _bucket(self, bucket, directory="lookup"):
         path = f"{directory}/{bucket}.json.gz"
@@ -79,8 +143,7 @@ class RiiArchive:
             return {}
         entry = self._file(path)
         size = bounded(entry["size"], MAX_LOOKUP)
-        data = fetch(f"{self.base}/{path}", size)
-        verify(data, size, entry["sha256"])
+        data = self._index_file(path, size, entry["sha256"], size)
         table = json.loads(unpack(data, MAX_LOOKUP))
         if not isinstance(table, dict):
             raise ValueError("Invalid RII lookup table")
@@ -106,6 +169,11 @@ class RiiArchive:
 
     def decision(self, document):
         document = document_id(document)
+        key = (self.revision, self.manifest_sha256, document)
+        raw = _records.get(key, lambda: self._verified_record(document))
+        return json.loads(raw)
+
+    def _verified_record(self, document):
         entry = self._entry(document)
         ref = entry["document_frame"]
         packed = self._frame(ref["path"], ref["offset"], ref["length"], ref["packed_sha256"])
@@ -126,11 +194,11 @@ class RiiArchive:
             anchors.add(anchor)
         if sum(p["printed_number"] is not None for p in passages) != meta["printed_numbers"]:
             raise ValueError("RII printed number count differs from the frame metadata")
-        return result
+        return raw
 
     @lru_cache(maxsize=256)
     def metadata(self, document):
-        # Cache only verified metadata. Whole decisions can be many megabytes.
+        # Small metadata objects also support ECLI lookups after a frame is evicted.
         return self.decision(document)["metadata"]
 
     def decisions_by_ecli(self, ecli):
@@ -187,8 +255,17 @@ class RiiArchive:
 
 
 @lru_cache(maxsize=2)
-def open_archive(revision, manifest_sha256):
+def _open_archive(revision, manifest_sha256):
     return RiiArchive(revision, manifest_sha256)
+
+
+def open_archive(revision, manifest_sha256):
+    # The reader requests metadata and passages together on a cold process.
+    with _open_lock:
+        return _open_archive(revision, manifest_sha256)
+
+
+open_archive.cache_clear = _open_archive.cache_clear
 
 
 def passage_for(decision, anchor):

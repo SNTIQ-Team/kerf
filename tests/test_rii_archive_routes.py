@@ -23,6 +23,7 @@ def encode(obj):
 
 @pytest.fixture
 def archive(monkeypatch):
+    monkeypatch.setattr(rii_archive, "_records", rii_archive._VerifiedRecords())
     files = {}
     docs = ['jb-KORE123', 'jb-JURE456']
     by_bucket = {}
@@ -115,7 +116,7 @@ def test_absence_upstream_failure_and_bad_hash_are_distinct(archive):
     assert client.get(path+'/source').status_code==503
 
 
-def test_cli_uses_the_same_pinned_result_and_distinguishes_errors(archive, capsys):
+def test_cli_uses_the_same_pinned_result_and_distinguishes_errors(archive, capsys, monkeypatch):
     _, files, _ = archive
     assert main(['jb-KORE123','--anchor','rn-7']) == 0
     assert json.loads(capsys.readouterr().out)['passage']['printed_number'] == '7'
@@ -123,7 +124,10 @@ def test_cli_uses_the_same_pinned_result_and_distinguishes_errors(archive, capsy
     assert json.loads(capsys.readouterr().out)['passages'][0]['printed_number'] is None
     assert main(['jb-ABSENT']) == 1
     files['documents/bgh/0.bin'] = OSError('unavailable')
-    assert main(['jb-KORE123']) == 2
+    assert main(['jb-KORE123','--anchor','rn-7']) == 0
+    # A fresh CLI process has no previously verified frame.
+    monkeypatch.setattr(rii_archive, '_records', rii_archive._VerifiedRecords())
+    assert main(['jb-KORE123','--anchor','rn-7']) == 2
 
 
 def test_missing_published_file_is_a_service_error(archive):
@@ -223,11 +227,93 @@ def test_advertised_missing_bucket_cannot_establish_absence(archive, monkeypatch
     assert client.get("/rii/decisions", params={"ecli": OTHER}).status_code == 503
 
 
-def test_repeat_ecli_lookup_reuses_only_verified_metadata(archive, monkeypatch):
+def test_repeat_ecli_lookup_and_passages_reuse_verified_content(archive, monkeypatch):
     client, files, _ = archive
     enable_index(files, monkeypatch, {IDENTIFIER: DOCUMENTS})
     url = "/rii/decisions"
     assert client.get(url, params={"ecli": IDENTIFIER}).json()["total"] == 2
     files["documents/bgh/0.bin"] = OSError("temporarily offline")
     assert client.get(url, params={"ecli": IDENTIFIER}).json()["total"] == 2
-    assert client.get("/rii/decisions/KORE123/passages/rn-7").status_code == 503
+    assert client.get("/rii/decisions/KORE123/passages/rn-7").json()["passage"]["printed_number"] == "7"
+
+
+def test_simultaneous_reader_requests_fetch_each_asset_once(archive, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    client, _, _ = archive
+    original = rii_archive.fetch
+    first_fetch = Event()
+    release = Event()
+    calls = []
+    def count(url, limit, span=None):
+        calls.append(url.split('/rii/')[1])
+        if not first_fetch.is_set():
+            first_fetch.set()
+            assert release.wait(5)
+        return original(url, limit, span)
+    monkeypatch.setattr(rii_archive, 'fetch', count)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(client.get, '/rii/decisions/KORE123')
+        assert first_fetch.wait(5)
+        b = pool.submit(client.get, '/rii/decisions/jb-kore123/passages')
+        release.set()
+        assert a.result(timeout=5).status_code == b.result(timeout=5).status_code == 200
+    assert len(calls) == len(set(calls)) == 3
+    assert client.get('/rii/decisions/KORE123/passages?offset=1').status_code == 200
+    assert len(calls) == 3
+
+
+def test_verified_bytes_have_a_total_budget_and_oversized_records_remain_readable(archive, monkeypatch):
+    client, files, _ = archive
+    records = rii_archive._VerifiedRecords(max_bytes=1)
+    monkeypatch.setattr(rii_archive, '_records', records)
+    first = '/rii/decisions/KORE123/passages'
+    assert client.get(first).status_code == 200 and records.stored_bytes == 0
+    # Each fits individually. Their combined sizes exceed this budget.
+    sizes = [len(gzip.decompress(files[f'documents/bgh/{i}.bin'][7:])) for i in (0, 1)]
+    records.max_bytes = max(sizes)
+    assert client.get(first).status_code == 200
+    assert client.get('/rii/decisions/JURE456/passages').status_code == 200
+    assert records.stored_bytes == sizes[1] and len(records.entries) == 1
+    files['documents/bgh/0.bin'] = OSError('evicted')
+    assert client.get(first).status_code == 503
+
+
+def test_pinned_revision_cannot_reuse_old_decision_bytes(archive, monkeypatch):
+    client, files, _ = archive
+    url = '/rii/decisions/KORE123/passages'
+    assert client.get(url).status_code == 200
+    old_fetch = rii_archive.fetch
+    def next_release(url, limit, span=None):
+        assert '/'+('b' * 40)+'/rii/' in url
+        return old_fetch(url.replace('b' * 40, 'a' * 40), limit, span)
+    monkeypatch.setattr(rii_archive, 'fetch', next_release)
+    monkeypatch.setenv('KERF_RII_REVISION', 'b' * 40)
+    good = files['documents/bgh/0.bin']
+    files['documents/bgh/0.bin'] = b'wrong'
+    assert client.get(url).status_code == 503
+    files['documents/bgh/0.bin'] = good
+    assert client.get(url).json()['revision'] == 'b' * 40
+
+
+@pytest.mark.parametrize("corrupt", [None, "manifest.json", "lookup"])
+def test_optional_local_indexes_verify_hashes_and_fall_back_independently(archive, tmp_path, monkeypatch, corrupt):
+    client, files, _ = archive
+    revision = 'a' * 40
+    base = tmp_path / revision
+    bucket = 'lookup/' + h(b'jb-KORE123')[:2] + '.json.gz'
+    for path in ('manifest.json', bucket):
+        local = base / path
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(b'bad' if corrupt and path.startswith(corrupt) else files[path])
+    monkeypatch.setenv('KERF_RII_INDEX_DIR', str(tmp_path))
+    original = rii_archive.fetch
+    calls = []
+    def count(url, limit, span=None):
+        calls.append(url.split('/rii/')[1])
+        return original(url, limit, span)
+    monkeypatch.setattr(rii_archive, 'fetch', count)
+    assert client.get('/rii/decisions/KORE123/passages').status_code == 200
+    expected = ([('manifest.json' if corrupt == 'manifest.json' else bucket)] if corrupt else [])
+    assert calls == expected + ['documents/bgh/0.bin']
