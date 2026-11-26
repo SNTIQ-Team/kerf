@@ -1,6 +1,6 @@
 """Publish reviewed historical federal editions as ordinary Kerf state objects.
 
-The reviewed German Basic Law chain pins the complete GII anchor, both earlier
+The reviewed German Basic Law chain pins the complete GII anchor, earlier
 projections, the preceding text of each changed article and the source documents.
 Its full-edition comparison is reproducible with tools/audit_gg_editions.py.
 """
@@ -31,9 +31,23 @@ def _inverse(later: dict, earlier_edition: dict, later_edition: dict) -> dict:
         label = edit["enbez"]
         positions = [i for i, row in enumerate(earlier["norms"])
                      if row["enbez"] == label]
-        if len(positions) != 1 or label in labels:
-            raise ReconstructionError(f"non-unique edition article {label}")
+        if label in labels:
+            raise ReconstructionError(f"duplicate edition change {label}")
         labels.add(label)
+        if "previous_norm" in edit:
+            row = edit["previous_norm"]
+            left = [i for i, norm in enumerate(earlier["norms"]) if norm["enbez"] == edit["after"]]
+            if (positions or len(left) != 1 or left[0] + 1 >= len(earlier["norms"])
+                    or earlier["norms"][left[0] + 1]["enbez"] != edit["before"]
+                    or row.get("enbez") != label or not isinstance(row.get("text"), str)
+                    or not row["text"].strip()):
+                raise ReconstructionError(f"invalid prior article or position for {label}")
+            index = left[0] + 1
+            earlier["norms"].insert(index, copy.deepcopy(row))
+            restored.append((index, None, False))
+            continue
+        if len(positions) != 1:
+            raise ReconstructionError(f"non-unique edition article {label}")
         index = positions[0]
         current = earlier["norms"][index]
         if digest(current) != edit["current_norm_sha256"]:
@@ -56,7 +70,9 @@ def _inverse(later: dict, earlier_edition: dict, later_edition: dict) -> dict:
 
     forward = copy.deepcopy(earlier)
     for index, row, inserted in reversed(restored):
-        if inserted:
+        if row is None:
+            forward["norms"].pop(index)
+        elif inserted:
             forward["norms"].insert(index, row)
         else:
             forward["norms"][index] = row
@@ -69,11 +85,16 @@ def _inverse(later: dict, earlier_edition: dict, later_edition: dict) -> dict:
 
 def _event(edition: dict, sources: dict) -> dict:
     gazette = sources[edition["gazette"]]
-    return {
+    event = {
         "document_id": edition["document_id"], "published_at": edition["published_at"],
         "effective_at": edition["effective_from"], "official_html_url": gazette["url"],
-        "pdf_sha256": gazette["pdf_sha256"], "amending_article": "1",
+        "pdf_sha256": gazette["pdf_sha256"], "amending_article": edition.get("amending_article", "1"),
     }
+    if edition.get("companion_gazettes"):
+        event["companion_gazettes"] = [
+            {"official_html_url": sources[key]["url"], "pdf_sha256": sources[key]["pdf_sha256"]}
+            for key in edition["companion_gazettes"]]
+    return event
 
 
 def add_reviewed_editions(artifact: dict, manifest: dict, states: dict, *,
@@ -113,10 +134,16 @@ def add_reviewed_editions(artifact: dict, manifest: dict, states: dict, *,
     boundaries = [date.fromisoformat(e["effective_from"]) for e in editions]
     if any(a >= b for a, b in zip(boundaries, boundaries[1:])):
         raise ReconstructionError("edition dates must strictly increase")
-    # Each of the reviewed promulgating acts expressly uses the day after publication.
-    if any(date.fromisoformat(e["published_at"]) + timedelta(days=1) != d
-           for e, d in zip(editions, boundaries)):
-        raise ReconstructionError("edition boundary disagrees with its commencement clause")
+    for edition, boundary in zip(editions, boundaries):
+        published = date.fromisoformat(edition["published_at"])
+        if "expiry_last_day" in edition:
+            final_day = date.fromisoformat(edition["expiry_last_day"])
+            if published > final_day or edition.get("amending_article") != "2":
+                raise ReconstructionError("invalid expiry provision")
+        else:
+            final_day = published
+        if final_day + timedelta(days=1) != boundary:
+            raise ReconstructionError("edition boundary disagrees with its published clause")
     state = states[anchor_hash]
     if (state["id"] != act_id or state["jurabk"] != review["jurabk"]
             or digest(state) != anchor_hash or editions[-1]["state_sha256"] != anchor_hash):
@@ -126,6 +153,8 @@ def add_reviewed_editions(artifact: dict, manifest: dict, states: dict, *,
                  "state_sha256": anchor_hash, "observed_at": observed}]
     evidence.extend({k: s[k] for k in ("source", "url", "pdf_sha256")}
                     for s in review["sources"].values())
+    evidence.extend({k: source[k] for k in ("source", "url", "html_sha256")}
+                    for source in review.get("expiry_confirmations", {}).values())
     pending_states = {}
     pending_meta = {}
     pending_rows = []

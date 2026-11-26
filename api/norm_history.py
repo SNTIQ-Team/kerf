@@ -1039,6 +1039,20 @@ def select_version(versions: list[NormVersion], on: str,
                     "consolidated_version_valid_until_exclusive": end,
                     "valid_from": version.first_state.valid_from,
                     "valid_until_exclusive": version.last_state.valid_until}
+    # A complete reviewed edition can establish that the article was absent
+    # between two uses of the same number.
+    if versions and chain.norms:
+        present = {s.index for version in versions for s in version.states}
+        for state in chain.states:
+            if (state.index not in present and state.interval_id and not state.gaps
+                    and state.valid_from_status == "official_verified"
+                    and state.valid_from and state.valid_from <= on
+                    and state.valid_until and on < state.valid_until):
+                return "not_in_corpus", None, {
+                    "resolution": "absent_from_verified_edition",
+                    "valid_from": state.valid_from,
+                    "valid_until_exclusive": state.valid_until,
+                    "state": state.key}
     if chain.eu and versions:
         # CELLAR can already serve a future consolidation. Downloading it
         # today is no evidence for that wording on an earlier legal date.

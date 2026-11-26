@@ -64,14 +64,14 @@ def test_basic_law_dates_and_addresses_through_the_reader(tmp_path, monkeypatch)
     monkeypatch.setattr(main, "_NORM_STORES", {})
     monkeypatch.setattr(main, "_RETROSPECTIVE_MANIFEST", None)
     monkeypatch.setattr(main, "_RETROSPECTIVE_SOURCE", None)
-    assert len(public["acts"]["fed_gg"]["intervals"]) == 3
+    assert len(public["acts"]["fed_gg"]["intervals"]) == 9
     with TestClient(main.app) as client:
         def reading(day, article):
             return client.get("/acts/fed_gg/markdown", params={"at": day, "norm": article})
-        gap = reading("2022-12-23", "Art. 93")
+        gap = reading("2017-07-19", "Art. 93")
         assert gap.headers["x-kerf-complete"] == "false"
         assert client.get("/acts/fed_gg/markdown", params={
-            "at": "2022-12-23", "norm": "Art. 93", "as_of": BUILT}).status_code == 404
+            "at": "2017-07-19", "norm": "Art. 93", "as_of": BUILT}).status_code == 404
         for day, court, spending, status in [
             ("2022-12-24", False, False, "derived_verified"),
             ("2024-12-27", False, False, "derived_verified"),
@@ -114,6 +114,27 @@ def test_basic_law_dates_and_addresses_through_the_reader(tmp_path, monkeypatch)
             if spending:
                 assert "500 Milliarden Euro" in inserted.text
 
+        for day, wording in [
+                ("2020-10-07", None), ("2020-10-08", "Mindereinnahmen aus der Gewerbesteuer"),
+                ("2020-12-31", "Mindereinnahmen aus der Gewerbesteuer"), ("2021-01-01", None),
+                ("2025-03-24", None), ("2025-03-25", "500 Milliarden Euro")]:
+            md = reading(day, "Art. 143h")
+            evidence = client.get("/norms/de/bund/gg/art/143h/at", params={"date": day})
+            if wording is None:
+                assert md.status_code == evidence.status_code == 404
+            else:
+                assert md.status_code == evidence.status_code == 200
+                assert wording in md.text and wording in evidence.json()["evidence"][0]["text"]
+        for label, change, previous, boundary in [
+                ("Art. 104b", "zusätzlich zu eigenen Mitteln", "2019-04-03", "2019-04-04"),
+                ("Art. 105", "über die Grundsteuer", "2019-11-20", "2019-11-21"),
+                ("Art. 104a", "drei Viertel der Ausgaben", "2020-10-07", "2020-10-08"),
+                ("Art. 87a", "100 Milliarden Euro", "2022-06-30", "2022-07-01"),
+                ("Art. 82", "elektronischer Form", "2022-12-23", "2022-12-24")]:
+            old, new = reading(previous, label), reading(boundary, label)
+            assert old.status_code == new.status_code == 200
+            assert change not in old.text and change in new.text
+
         for label, expected in [("Art. 93", "de/bund/gg/art/93"),
                                 ("Art. 143h", "de/bund/gg/art/143h"),
                                 ("Präambel", "de/bund/gg/text/praambel")]:
@@ -154,6 +175,6 @@ def test_later_observations_do_not_bridge_an_intervening_change():
         {**source, "observed_at": "2026-11-29"},
     ])
     add_reviewed_editions(artifact, manifest, states)
-    earlier, latest = artifact["reconstructions"]
+    earlier, *_, latest = artifact["reconstructions"]
     assert earlier["observed_at"] == latest["observed_at"] == "2026-11-26"
     assert latest["anchor_verified_through"] == "2026-11-27"
