@@ -114,6 +114,9 @@ CORPUS: list[dict[str, Any]] = [
     {"celex": "32024L1346", "jurabk": "RL (EU) 2024/1346", "family": "directive"},
     *[{"celex": f"32024R{number}", "jurabk": f"VO (EU) 2024/{number}", "family": "regulation"}
       for number in (1347, 1348, 1349, 1350, 1351, 1352, 1356, 1358, 1359)],
+    {"celex": "32003L0008", "jurabk": "RL 2003/8/EG", "family": "directive",
+     # The OJ printed 2002/8/EC. Corrigendum 32003L0008R(01) corrects the title.
+     "corrected_title_edition": "02003L0008-20030131"},
     {"celex": "32016L1919", "jurabk": "RL (EU) 2016/1919", "family": "directive"},
     {"celex": "32022R1925", "jurabk": "VO (EU) 2022/1925", "family": "regulation",
      "aliases": ["Digital Markets Act", "DMA", "Gesetz über digitale Märkte"]},
@@ -204,6 +207,13 @@ def celex_uri(celex: str) -> str:
 
 # ----------------------------------------------------------------- metadata
 
+def german_title(cellar: Cellar, celex: str) -> str | None:
+    rows = cellar.sparql(f"""SELECT ?t WHERE {{ ?w owl:sameAs {celex_uri(celex)} .
+      ?e cdm:expression_belongs_to_work ?w ; cdm:expression_uses_language <{DEU}> ;
+         cdm:expression_title ?t }} LIMIT 1""")
+    return rows[0]["t"] if rows else None
+
+
 def work_metadata(cellar: Cellar, celex: str) -> dict[str, Any]:
     rows = cellar.sparql(f"""PREFIX ann: <http://publications.europa.eu/ontology/annotation#>
       SELECT ?p ?o ?dateRole ?dateComment WHERE {{ ?w owl:sameAs {celex_uri(celex)} . ?w ?p ?o .
@@ -224,9 +234,6 @@ def work_metadata(cellar: Cellar, celex: str) -> dict[str, Any]:
       OPTIONAL {{ ?oj cdm:publication_general_date_publication ?d }}
       OPTIONAL {{ ?oj cdm:official-journal_number ?n }} OPTIONAL {{ ?oj cdm:official-journal_year ?y }}
       OPTIONAL {{ ?oj cdm:official-journal_part_of_collection_document ?c }} }}""")
-    title = cellar.sparql(f"""SELECT ?t WHERE {{ ?w owl:sameAs {celex_uri(celex)} .
-      ?e cdm:expression_belongs_to_work ?w ; cdm:expression_uses_language <{DEU}> ;
-         cdm:expression_title ?t }} LIMIT 1""")
     eif = sorted(set(values.get("resource_legal_date_entry-into-force", [])))
 
     def date_rows(predicate: str) -> list[dict]:
@@ -254,7 +261,7 @@ def work_metadata(cellar: Cellar, celex: str) -> dict[str, Any]:
             oj_ref = f"ABl. {series} vom {day.day}.{day.month}.{day.year}"
     return {
         "celex": celex,
-        "title": (title[0]["t"] if title else None),
+        "title": german_title(cellar, celex),
         "adopted": min(values.get("work_date_document", []) or [""]) or None,
         "signed": min(values.get("resource_legal_date_signature", []) or [""]) or None,
         "published": published, "oj_ref": oj_ref,
@@ -557,7 +564,7 @@ def html_blocks(data: bytes) -> list[dict[str, str]]:
     A table row of two cells (marker, text) is one list point; nested tables are
     flattened into their row.
     """
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup, NavigableString
     soup = BeautifulSoup(data.decode("utf-8", "replace"), "html.parser")
     body = soup.body or soup
     # footnote calls ("(1)" links) and footnote bodies are not norm text
@@ -565,6 +572,22 @@ def html_blocks(data: bytes) -> list[dict[str, str]]:
         anchor.decompose()
     for note in body.find_all("p", class_="note"):
         note.decompose()
+    # Early consolidations place endnotes after the last article. Each note
+    # follows a named anchor and links back to its matching call in the body.
+    for backlink in body.find_all("a", href=re.compile(r"^#src\.E\d+$")):
+        note = backlink.find_parent("p")
+        marker = note.find_previous_sibling() if note else None
+        if marker and marker.name == "a" and marker.get("name") == backlink["href"][5:]:
+            note.decompose()
+    for call in body.find_all("a", href=re.compile(r"^#E\d+$")):
+        before, after, paragraph = call.previous_sibling, call.next_sibling, call.find_parent("p")
+        if (paragraph and isinstance(before, NavigableString) and isinstance(after, NavigableString)
+                and before.rstrip().endswith("(") and after.lstrip().startswith(")")
+                and call.get_text(strip=True).isdigit()):
+            before.replace_with(re.sub(r"\s*\(\s*$", "", before))
+            after.replace_with(re.sub(r"^\s*\)", "", after))
+            call.decompose()
+            paragraph.smooth()
     blocks: list[dict[str, str]] = []
     for node in body.find_all(["p", "tr"]):
         if node.name == "tr":
@@ -581,7 +604,11 @@ def html_blocks(data: bytes) -> list[dict[str, str]]:
             continue
         text = _clean(re.sub(r"\s*\[\d{1,3}\]", "", node.get_text(" ")))
         if text and not re.match(r"^\[\d{1,3}\]\s", _clean(node.get_text(" "))):
-            blocks.append({"kind": "p", "text": text, "class": " ".join(node.get("class") or [])})
+            klass = " ".join(node.get("class") or [])
+            style = set(re.sub(r"\s+", "", node.get("style", "").lower()).split(";"))
+            if {"font-weight:bold", "text-align:center"} <= style:
+                klass = f"{klass} sti-art".strip()
+            blocks.append({"kind": "p", "text": text, "class": klass})
     return blocks
 
 
@@ -818,14 +845,22 @@ def fetch_act(cellar: Cellar, spec: dict[str, Any], *, lisbon: dict[str, Any] | 
         dates.update(applies_from=clause["date"], application_clause=clause)
         if not clause["date"]:
             warnings.append(f"{celex}: general application clause missing or inconsistent across editions")
+    title = meta["title"]
+    source = {"name": "Publications Office of the EU (CELLAR)", "sparql": SPARQL,
+              "reuse": "Decision 2011/833/EU; EUR-Lex legal notice"}
+    if title_edition := spec.get("corrected_title_edition"):
+        corrected = german_title(cellar, title_edition)
+        source.update(published_title=title, corrected_title_edition=title_edition)
+        title = corrected or spec["jurabk"]
+        if not corrected:
+            warnings.append(f"{celex}: corrected German title unavailable in {title_edition}")
     return {
         "act_id": act_id_of(celex), "celex": celex, "jurabk": spec["jurabk"],
         "aliases": spec.get("aliases") or [], "family": spec.get("family"),
-        "title": meta["title"], "dates": dates,
+        "title": title, "dates": dates,
         "relations": rel, "extends": spec.get("extends"),
         "editions": editions, "warnings": warnings,
-        "source": {"name": "Publications Office of the EU (CELLAR)", "sparql": SPARQL,
-                   "reuse": "Decision 2011/833/EU; EUR-Lex legal notice"},
+        "source": source,
         "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
