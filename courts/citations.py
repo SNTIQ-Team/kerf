@@ -422,8 +422,9 @@ DATE_RE = (r"(?P<d>\d{1,2})\.\s?(?:(?P<m>\d{1,2})\.|(?P<mn>Januar|Februar|März|
            r"September|Oktober|November|Dezember|Jan\.|Febr?\.|Mär\.|Mrz\.|Apr\.|Jun\.|Jul\.|Aug\.|Sept?\.|"
            r"Okt\.|Nov\.|Dez\.))\s?(?P<y>\d{4}|\d{2})")
 DECISION_REF_RE = re.compile(
-    r"(?:(?P<dtype>Urteile?n?|Urt\.|Beschlüsse?n?|Beschl\.|Gerichtsbescheide?s?|Kammerbeschlüsse?n?|"
-    r"Senatsurteile?n?|Senatsbeschlüsse?n?|Vorlagebeschlusse?s?|Teilurteile?s?|Entscheidung(?:en)?)"
+    r"(?:(?P<dtype>Urteile?n?|Urt\.|Beschl(?:uss(?:es)?|üsse?n?)|Beschl\.|Gerichtsbescheide?s?|"
+    r"Kammerbeschl(?:uss(?:es)?|üsse?n?)|Senatsurteile?n?|Senatsbeschl(?:uss(?:es)?|üsse?n?)|"
+    r"Vorlagebeschlusse?s?|Teilurteile?s?|Entscheidung(?:en)?)"
     + S + r")?(?:vom|v\.)" + S + DATE_RE + S +
     r"(?:[-–—]|,)" + S + r"(?:Az\.?:?" + S + r"|Aktenzeichen:?" + S + r")?"
     r"(?P<az>[A-ZÄÖÜ0-9IVX][^\n;()]{2,45}?)(?=" + S + r"(?:[-–—](?:\s|$)|[,;)]|\s(?:und|sowie|juris|BVerwGE|BSGE|BVerfGE|BGHZ|BFHE|BAGE|NJW|NVwZ)\b|\.\s|$))")

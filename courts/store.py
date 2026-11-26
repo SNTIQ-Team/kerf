@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import PARSER_VERSION, SCHEMA_VERSION
 from .casenumbers import case_key
-from .citations import Relation, extract_all, synthetic_decision_id
+from .citations import DECISION_REF_RE, Relation, extract_all, parse_date, synthetic_decision_id
 from .config import data_home, db_path
 from .packs import CaptureIntegrityError, PackStore
 from .courtids import resolve as resolve_court
@@ -1171,6 +1171,46 @@ def _mark_item(conn: sqlite3.Connection, parsed: ParsedDecision, decision_id: st
                  (decision_id, content_hash, utcnow(), parsed.source_id, parsed.source_doc_id))
 
 
+def _decision_family(label: str) -> str | None:
+    """The legal form named explicitly in the source. General labels carry no form."""
+    value = label.strip().lower()
+    if value == "urt." or value.endswith(("urteil", "urteils", "urteile", "urteilen")):
+        return "urteil"
+    if value == "beschl." or value.endswith(("beschluss", "beschlusses", "beschlüsse", "beschlüssen")):
+        return "beschluss"
+    if value.endswith(("gerichtsbescheid", "gerichtsbescheids", "gerichtsbescheides", "gerichtsbescheide")):
+        return "gerichtsbescheid"
+    return None
+
+
+def _target_by_cited_form(candidates: str, raw: str, day: str, docket: str) -> str | None:
+    """Disambiguate one dated citation with the form printed beside its date and docket."""
+    forms = {match.group("dtype").lower() for match in DECISION_REF_RE.finditer(raw)
+             if match.group("dtype") and parse_date(match) == day and case_key(match.group("az")) == docket}
+    if len(forms) != 1:
+        return None
+    word = forms.pop()
+    wanted = _decision_family(word)
+    if wanted is None:
+        return None
+    found = None
+    for decision_id, label in json.loads(candidates):
+        family = _decision_family(label or "")
+        if family is None:
+            return None
+        if family == wanted:
+            if found is not None:
+                return None
+            found = (decision_id, label.lower())
+    if found is None:
+        return None
+    # A subtype such as Teilurteil needs positive evidence of that subtype.
+    for qualifier in ("teilurteil", "vorlagebeschl", "kammerbeschl", "senatsbeschl", "senatsurteil"):
+        if word.startswith(qualifier) and qualifier not in found[1]:
+            return None
+    return found[0]
+
+
 def relink(conn: sqlite3.Connection) -> int:
     """Refresh inferred citation targets and return the number of changed links.
 
@@ -1179,11 +1219,14 @@ def relink(conn: sqlite3.Connection) -> int:
     Published ECLIs take precedence over docket matching. Existing links set
     by users or models keep their recorded target.
     """
+    conn.create_function("kerf_target_by_cited_form", 4, _target_by_cited_form, deterministic=True)
     conn.execute("""
         WITH
         dated AS MATERIALIZED (
             SELECT d.court_slug AS court, d.decision_date AS day, n.case_key AS docket,
-                   CASE WHEN count(DISTINCT d.id) = 1 THEN min(d.id) END AS candidate
+                   CASE WHEN count(DISTINCT d.id) = 1 THEN min(d.id) END AS candidate,
+                   CASE WHEN count(DISTINCT d.id) > 1 THEN
+                       json_group_array(DISTINCT json_array(d.id, d.decision_type)) END AS choices
             FROM decisions d JOIN case_numbers n ON n.decision_id = d.id
             GROUP BY d.court_slug, d.decision_date, n.case_key
         ),
@@ -1202,6 +1245,8 @@ def relink(conn: sqlite3.Connection) -> int:
             SELECT r.id, r.target_decision_id AS previous,
                    CASE WHEN r.target_id LIKE 'ECLI:%' THEN published.candidate
                         WHEN r.target_date IS NULL THEN undated.candidate
+                        WHEN dated.choices IS NOT NULL THEN
+                            kerf_target_by_cited_form(dated.choices, r.target_raw, r.target_date, r.target_case_key)
                         ELSE dated.candidate END AS candidate
             FROM relations r
             LEFT JOIN published ON published.ecli = r.target_id COLLATE NOCASE
