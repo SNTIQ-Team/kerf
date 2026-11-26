@@ -6,6 +6,7 @@ API's compact presentation JSON wherever possible.  It also exports the two
 derived graph views and a merged court-decision table so a dataset consumer
 gets the same case set as the public API.
 
+    python3 tools/export_court_archive.py web/data hf_export/court_archive  # optional (pyarrow)
     python3 tools/export_hf.py [--out hf_export]
 """
 from __future__ import annotations
@@ -912,9 +913,12 @@ def main() -> int:
     configs = "\n".join(
         f"  - config_name: {Path(name).stem}\n    data_files: {name}"
         for name in ordered if name.endswith(".jsonl"))
-    (out / "README.md").write_text(CARD.format(
-        today=date.today().isoformat(), configs=configs,
-        rows_table=rows_table), encoding="utf-8")
+    card = CARD.format(today=date.today().isoformat(), configs=configs,
+                       rows_table=rows_table)
+    if (out / "court_archive").is_dir():
+        from export_court_archive import add_to_card
+        card = add_to_card(card, out / "court_archive")
+    (out / "README.md").write_text(card, encoding="utf-8")
     copy_file(require_file(ROOT / "docs" / "RIGHTS.md", "rights matrix"),
               out / "RIGHTS.md")
 
