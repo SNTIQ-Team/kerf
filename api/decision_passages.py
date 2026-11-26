@@ -1,5 +1,7 @@
 """Bounded passage discovery and exact original-block/source retrieval."""
-from functools import lru_cache
+from http.client import IncompleteRead
+from api.court_observations import stamp
+from api.compact_court_store import verified_index
 import hashlib
 import json
 from pathlib import Path
@@ -17,24 +19,13 @@ def validate_query(request,allowed):
  if unknown or repeated:
   failure(422,'unsupported_temporal_request' if set(unknown)&{'at','as_of','known_at','valid_at'} else 'invalid_request',unsupported_arguments=unknown,repeated_arguments=repeated)
 
-def stamp(file):
- s=file.stat();return (s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
-@lru_cache(maxsize=8)
-def verified(root,db_stamp,manifest_stamp):
- root=Path(root);manifest=json.loads((root/'decision_passages.json').read_text())
- if manifest.get('schema_version')!=2 or manifest.get('profile')!='official-passages/2':raise ValueError('invalid manifest')
- with (root/'decision_passages.sqlite').open('rb') as f:digest=hashlib.file_digest(f,'sha256').hexdigest()
- if digest!=manifest.get('database_sha256'):raise ValueError('database hash mismatch')
- return manifest
-
 def database(root):
  try:
-  db=root/'decision_passages.sqlite';manifest=root/'decision_passages.json'
-  coverage=verified(str(root),stamp(db),stamp(manifest))
+  db,coverage=verified_index(root)
   conn=sqlite3.connect(db.as_uri()+'?mode=ro&immutable=1',uri=True);conn.row_factory=sqlite3.Row
   return conn,coverage
  except FileNotFoundError:failure(503,'source_unavailable',reason='decision_passage_index_missing')
- except (OSError,ValueError,sqlite3.Error):failure(503,'integrity_check_failed',reason='decision_passage_index_unusable')
+ except (OSError,ValueError,KeyError,TypeError,sqlite3.Error):failure(503,'integrity_check_failed',reason='decision_passage_index_unusable')
 
 def coverage_status(root):
  try:
@@ -50,6 +41,7 @@ def decision(conn,identity):
 
 def enrich(row,source,*,preview=False,tokens=()):
  data=json.loads(row['data']);metadata=json.loads(source['metadata'])
+ if 'text' not in data:data['text']=row['text']
  data['decision']={k:metadata.get(k) for k in ['id','az','court_short','date','kind']};data['decision']['ecli']=source['ecli']
  data['source']=json.loads(source['source_data'])
  if preview:
@@ -141,12 +133,16 @@ def create_router(data_dir):
   finally:conn.close()
  @router.get('/decisions/{decision_id}/source')
  def source(request:Request,decision_id:str):
-  validate_query(request,set());conn,_=database(Path(data_dir()).resolve())
+  validate_query(request,set());conn,coverage=database(Path(data_dir()).resolve())
   try:
    row=decision(conn,decision_id);blob=conn.execute('SELECT source_zip FROM decisions WHERE id=?',(decision_id,)).fetchone()[0]
+   if blob is None:
+    from api.compact_court_store import read_source
+    try:blob=read_source(conn,decision_id,coverage['database_sha256'])
+    except (OSError,IncompleteRead):failure(503,'source_unavailable',reason='court_archive_unreachable')
    if hashlib.sha256(blob).hexdigest()!=row['content_sha256']:failure(503,'integrity_check_failed')
    descriptor=json.loads(row['source_data'])
    return Response(blob,media_type=descriptor['media_type'],headers={'X-Kerf-Source-Sha256':row['content_sha256'],'Content-Disposition':f'attachment; filename="{quote(decision_id,safe="")}.{descriptor["extension"]}"'})
-  except (sqlite3.Error,ValueError):failure(503,'integrity_check_failed')
+  except (sqlite3.Error,ValueError,KeyError,TypeError):failure(503,'integrity_check_failed')
   finally:conn.close()
  return router
