@@ -1043,11 +1043,11 @@ def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content
            or (r["source_id"], r["source_doc_id"]) == (parsed.source_id, parsed.source_doc_id)]
     if not force and superseded is None and own and own[0]["id"] == decision_id \
             and own[0]["text_hash"] == text_hash and own[0]["parser_version"] == PARSER_VERSION:
-        conn.execute("UPDATE decisions SET observed_at=?, content_hash=?, capture_path=? WHERE id=?",
-                     (observed_at, content_hash, capture_path, decision_id))
+        conn.execute("UPDATE decisions SET observed_at=?, content_hash=?, capture_path=?, numbering=? WHERE id=?",
+                     (observed_at, content_hash, capture_path, numbering, decision_id))
         _mark_item(conn, parsed, decision_id, content_hash)
         conn.commit()
-        return decision_id, False
+        return decision_id, own[0]["numbering"] != numbering
     section_authorship = {s.name: s.authorship for s in parsed.sections}
     own_keys = {case_key(c) for c in parsed.case_numbers}
     # Everything CPU-bound (block offsets, citation extraction) happens before the write lock.

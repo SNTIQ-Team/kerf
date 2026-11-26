@@ -122,6 +122,19 @@ def test_search_complete_scope_counts_and_evidence(conn, fixture):
     assert {s["source"]: s["count"] for s in env["searched"]} == {"nrw": 0, "rii": 1}
 
 
+def test_offline_reparse_updates_numbering_with_unchanged_paragraphs(conn, fixture):
+    from courts.sync import reparse_source
+
+    adapter = FixtureAdapter(fixture, [item()])
+    sync_source(adapter, conn, FakeHttp())
+    conn.execute("UPDATE decisions SET numbering='none' WHERE id=?", (ECLI,))
+    conn.commit()
+
+    assert reparse_source(adapter, conn, decision_ids={ECLI})["reparsed"] == 1
+    assert get_decision(conn, ECLI)["decision"]["numbering"] == "rn"
+    assert reparse_source(adapter, conn, decision_ids={ECLI})["unchanged"] == 1
+
+
 def test_ecli_case_variants_retain_the_published_identity(conn, fixture):
     seed(conn, fixture)
     for ref in (ECLI.upper(), ECLI.lower()):
