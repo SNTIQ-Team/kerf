@@ -76,6 +76,7 @@ except ImportError:  # optional component; /capabilities still declares it
     materials_router = None
 from api.gii_catalog import GiiCatalogIndex
 from api.citation_store import CitationStoreError, query_citations
+from api.reviewed_norm_editions import ReviewedEditionError
 from api.search_engine import SearchEngine, normalize_search_text, search_source
 from api.source_freshness import source_health
 from api.procedure_search import ProcedureSearchIndex
@@ -1039,34 +1040,43 @@ def act_markdown(
     knowledge = _knowledge_value(as_of)
     try:
         act = _load_act(act_id)
-        retrospective_interval, retrospective_state, observed_state = \
-            _resolve_archive_states(act, requested_at, knowledge)
-        paragraph_layouts = None
-        if download:
-            payloads = []
-            try:
-                payloads.append(load_sidecar(READER_DIR, act))
-            except ReaderBlocksError:
-                pass  # Optional layout: canonical text remains usable.
-            state = ({**retrospective_state,
-                      "state_sha256": retrospective_interval["state_sha256"]}
-                     if retrospective_state is not None else observed_state)
-            if requested_at is not None and state is not None:
-                archived = load_archived_reader(
-                    DATA_DIR / "reader-history", act, state,
-                    requested_at=requested_at)
-                if archived is not None:
-                    payloads.append(archived)
-            paragraph_layouts = source_paragraph_layouts(
-                payloads, (act.get("norms") or []) +
-                ((state or {}).get("norms") or []))
-        result = render_markdown_snapshot(
-            act, requested_at=requested_at, norm=norm,
-            fallback_head=_archive_head_fallback(),
-            observed_state=observed_state,
-            retrospective_state=retrospective_state,
-            retrospective_interval=retrospective_interval,
-            paragraph_layouts=paragraph_layouts)
+        from api.reviewed_norm_editions import load as load_reviewed
+        from api.act_archive import reviewed_section_markdown
+        result = None
+        if requested_at and norm:
+            result = reviewed_section_markdown(
+                act, norm, requested_at, knowledge, load_reviewed(DATA_DIR), _archive_head_fallback())
+        if result is None:
+            retrospective_interval, retrospective_state, observed_state = \
+                _resolve_archive_states(act, requested_at, knowledge)
+            paragraph_layouts = None
+            if download:
+                payloads = []
+                try:
+                    payloads.append(load_sidecar(READER_DIR, act))
+                except ReaderBlocksError:
+                    pass  # Optional layout: canonical text remains usable.
+                state = ({**retrospective_state,
+                          "state_sha256": retrospective_interval["state_sha256"]}
+                         if retrospective_state is not None else observed_state)
+                if requested_at is not None and state is not None:
+                    archived = load_archived_reader(
+                        DATA_DIR / "reader-history", act, state,
+                        requested_at=requested_at)
+                    if archived is not None:
+                        payloads.append(archived)
+                paragraph_layouts = source_paragraph_layouts(
+                    payloads, (act.get("norms") or []) +
+                    ((state or {}).get("norms") or []))
+            result = render_markdown_snapshot(
+                act, requested_at=requested_at, norm=norm,
+                fallback_head=_archive_head_fallback(),
+                observed_state=observed_state,
+                retrospective_state=retrospective_state,
+                retrospective_interval=retrospective_interval,
+                paragraph_layouts=paragraph_layouts)
+    except ReviewedEditionError as exc:
+        raise HTTPException(503, str(exc)) from exc
     except UnknownNormError as exc:
         raise HTTPException(404, str(exc)) from exc
     except RetrospectiveNotFound as exc:

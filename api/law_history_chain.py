@@ -249,8 +249,8 @@ def history_block(chain: ActChain, versions: list[NormVersion]
     info = getattr(chain, "law_history", {}) or {}
     roles: dict[str, int] = {}
     for version in versions:
-        role = (version.source_capture or {}).get("law_history", {}).get(
-            "source_role", "unknown")
+        role = ((version.source_capture or {}).get("law_history", {}).get("source_role")
+                or version.first_state.source_role)
         roles[role] = roles.get(role, 0) + 1
     known = [v.first_state.first_observed_at for v in versions
              if v.first_state.first_observed_at]

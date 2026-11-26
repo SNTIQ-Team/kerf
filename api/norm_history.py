@@ -921,7 +921,12 @@ def version_evidence(chain: ActChain, version: NormVersion,
     number = number.split("~")[0]
     slug = chain.prefix.split("/")[-1]
     first = version.first_state
-    if chain.eu:
+    reviewed = version.source_capture.get("reviewed_norm_edition")
+    if reviewed:
+        link = {"url": reviewed["source_url"], "act_url": chain.act.get("source_url"),
+                "status": "reviewed_norm_edition", "basis": reviewed["sources"][0]["locator"]}
+        role = first.source_role
+    elif chain.eu:
         link = {"url": first.source_url, "act_url": chain.act.get("source_url"),
                 "status": "publication_item",
                 "basis": "CELLAR item of the edition that carries this "
@@ -1015,6 +1020,7 @@ def select_version(versions: list[NormVersion], on: str,
                     "official_archived_version_date":
                         "archived_official_interval",
                     "official_eu_consolidation": "official_eu_interval",
+                    "reviewed_norm_edition": "reviewed_norm_interval",
                     "official_archived_in_force_at_latest":
                         "archived_in_force_at_latest",
                 }.get(status, "commencement_attributed_interval")

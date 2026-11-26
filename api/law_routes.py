@@ -53,6 +53,7 @@ from api.law_history_chain import (
     norm_summary,
 )
 from api.norm_identity import load_gii_toc
+from api import reviewed_norm_editions as reviewed
 
 BUNDLED_TOC = Path(__file__).resolve().parent / "data" / "gii_toc.json"
 _ALLOWED = {
@@ -99,8 +100,37 @@ def create_router(data_dir: Callable[[], Path],
                                     "reason": "integrity_check_failed"}]
             ) from exc
 
-    def context(norm_id: str, as_of: str | None, selector: str | None = None):
-        return _context(store(), norm_id, as_of, history(), selector=selector)
+    def context(norm_id: str, as_of: str | None, selector: str | None = None, *, wording: bool = True):
+        index = store()
+        if not wording:
+            return _context(index, norm_id, as_of, history(), selector=selector)
+        try:
+            records = reviewed.load(data_dir())
+        except reviewed.ReviewedEditionError as exc:
+            raise EnvelopeError("integrity_check_failed", str(exc)) from exc
+        if not records:
+            return _context(index, norm_id, as_of, history(), selector=selector)
+        resolved = index.resolve(norm_id)
+        record = records.get(resolved["norm_id"])
+        if record is None or not reviewed.available(record, as_of):
+            return _context(index, norm_id, as_of, history(), selector=selector, resolved=resolved)
+        try:
+            _, chain, versions = _context(index, norm_id, as_of, history(),
+                                          selector=selector, resolved=resolved)
+        except EnvelopeError as exc:
+            if exc.status not in {"temporally_unresolved", "not_found_in_searched_scope", "not_in_corpus"}:
+                raise
+            # A reviewed section can have an earlier legal date or a later knowledge
+            # horizon than the optional full-act archive in this same generation.
+            versions = reviewed.merge_versions(resolved["norm_id"], record, [], selector)
+            if not versions:
+                raise
+            chain = ActChain(act=resolved["act"], prefix=resolved["norm_id"].rsplit("/", 2)[0],
+                             states=[v.first_state for v in versions], norms={}, events=[],
+                             history_start=record["editions"][0]["valid_from"], bavarian=False,
+                             snapshot={"reviewed_norm_editions": True})
+            return resolved, chain, versions
+        return resolved, chain, reviewed.merge_versions(resolved["norm_id"], record, versions, selector)
 
     def run(operation: str, request: Request, norm_id: str | None,
             handler: Callable[..., dict[str, Any]]):
@@ -370,7 +400,7 @@ def create_router(data_dir: Callable[[], Path],
             limit = _int(params.get("limit"), 100, 0, 500)
             offset = _int(params.get("offset"), 0, 0, 100000)
             state = _state_filter(params.get("state"))
-            resolved, chain, versions = context(norm_id, None)
+            resolved, chain, versions = context(norm_id, None, wording=False)
             if not _is_lh(chain):
                 raise EnvelopeError(
                     "unavailable",
@@ -658,9 +688,10 @@ def _bool(value: str | None, default: bool) -> bool:
 
 
 def _context(store: NormHistoryStore, norm_id: str, as_of: str | None,
-             history: LawHistoryStore | None = None, *, selector: str | None = None
+             history: LawHistoryStore | None = None, *, selector: str | None = None,
+             resolved: dict | None = None
              ) -> tuple[dict[str, Any], ActChain, list[NormVersion]]:
-    resolved = store.resolve(norm_id)
+    resolved = resolved or store.resolve(norm_id)
     act_id = str(resolved["act_id"])
     if history is not None and as_of is None and history.covers(act_id):
         if (selector and re.fullmatch(r"\d{4}-\d{2}-\d{2}", selector)
@@ -814,6 +845,8 @@ def _summary(history: LawHistoryStore | None, chain: ActChain,
 
 
 def _searched(chain: ActChain) -> list[dict[str, Any]]:
+    if chain.snapshot.get("reviewed_norm_editions"):
+        return [{"source": "reviewed_norm_editions", "status": "ok", "count": len(chain.states)}]
     if _is_lh(chain):
         info = getattr(chain, "law_history", {}) or {}
         return [

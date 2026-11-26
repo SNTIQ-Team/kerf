@@ -1535,13 +1535,21 @@ a citation. All responses are evidence envelopes: `status`, `searched`,
   `explains` (the fragment heading targets the norm; draft numbering,
   correspondence unverified), `mentions` and `drafts`.
 
-Per-norm source URLs come only from the captured GII table of contents
+Per-norm links to GII come from the captured GII table of contents
 (`api/data/gii_toc.json`, `pipeline/fetch_gii_toc.py`), e.g. `gg/art_1.html`;
 a norm missing from the TOC has `norm_url: null`.
 
 `GET /acts/{id}/markdown.json` returns the unmodified Markdown (front matter
 included) plus the front matter as typed `provenance` and the limitations as
 `warnings`.
+
+Six editions of § 42 SGB VIII cover 1 July 1998 through the corpus checked on
+26 November 2026. Federal gazettes, 25 amending articles and dated publications
+from Deutsche Rentenversicherung document the wording. The section record
+includes its legal dates, knowledge date, text hash and the hash of each source.
+For 1 January 2000, request
+`GET /acts/fed_sgb_8/markdown.json?norm=%C2%A7%2042&at=2000-01-01`
+or `GET /norms/de/bund/sgb_8/para/42/at?date=2000-01-01`.
 
 `tools/law_git_export.py` exports these versions to a Git repository (default
 `~/.local/share/sntiq-legal/law-git`): one Markdown file per norm, one commit
