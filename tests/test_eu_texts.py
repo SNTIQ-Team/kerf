@@ -103,6 +103,20 @@ def test_consolidated_formex_lists_its_corrigenda_and_zipped_formex_is_read():
         ["Art. 1", "Art. 2"]
 
 
+def test_legacy_html_keeps_the_article_and_drops_its_endnotes():
+    # The German consolidated edition of 2003/8/EC links each body note to a source anchor.
+    html = """<body><p>Artikel 23</p>
+    <p style="font-weight: bold; text-align: center">Adressaten</p>
+    <p>(1) Diese Richtlinie gilt für die genannten Personen (<a href="#E0001">1</a>).</p>
+    <p>(2) Der zweite Absatz bleibt erhalten.</p>
+    <a name="E0001"></a><p>(<a href="#src.E0001">1</a>) ABl. C 103 E vom 30.4.2002, S. 368.</p>
+    </body>"""
+    assert eu.parse_html_articles(html.encode())["articles"] == [{
+        "enbez": "Art. 23", "titel": "Adressaten",
+        "text": "(1) Diese Richtlinie gilt für die genannten Personen.\n(2) Der zweite Absatz bleibt erhalten.",
+    }]
+
+
 def test_treaty_xhtml_and_legacy_html_articles():
     art = eu.parse_html_articles(XHTML_ARTICLE.encode())["articles"][0]
     assert art["enbez"] == "Art. 267"
@@ -288,3 +302,30 @@ def test_repealed_act_answers_its_last_wording_only_with_the_verified_end(tmp_pa
     assert after["resolution"]["valid_until_exclusive"] == "2026-06-12"
     repeal = [c for c in detail["history"]["change"] if c["change_type"] == "aufgehoben"]
     assert repeal[0]["dates"]["in_force"]["date"] == "2026-06-12"
+
+
+def test_civil_aid_display_title_comes_from_the_corrected_german_edition(monkeypatch):
+    original = "32003L0008"
+    corrected = "02003L0008-20030131"
+    spec = next(s for s in eu.CORPUS if s["celex"] == original)
+    old_title = "Richtlinie 2002/8/EG des Rates"
+    new_title = "Richtlinie 2003/8/EG des Rates"
+    meta = dict.fromkeys(("adopted", "signed", "published", "oj_ref", "in_force", "applies_from",
+                          "entry_into_force_dates", "end_of_validity", "eli"))
+    meta["title"] = old_title
+    monkeypatch.setattr(eu, "work_metadata", lambda *_: meta)
+    monkeypatch.setattr(eu, "consolidations", lambda *_: [{"celex": corrected, "date": "2003-01-31"}])
+    monkeypatch.setattr(eu, "related", lambda *_: {})
+    monkeypatch.setattr(eu, "manifestations", lambda *_: {})
+    monkeypatch.setattr(eu, "fetch_edition", lambda _cellar, celex, _: {
+        "celex": celex, "articles": [{"enbez": "Art. 1", "text": "Ziele"}]})
+
+    class CellarTitle:
+        def sparql(self, query):
+            assert eu.celex_uri(corrected) in query and eu.DEU in query
+            return [{"t": new_title}]
+
+    row = eu.fetch_act(CellarTitle(), spec, lisbon=None)
+    assert row["title"] == new_title
+    assert row["source"]["published_title"] == old_title
+    assert row["source"]["corrected_title_edition"] == corrected
