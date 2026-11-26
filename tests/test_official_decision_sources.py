@@ -19,6 +19,16 @@ class OfficialTests(unittest.TestCase):
   self.assertEqual(rows[2]['text'],'Facts with inline text.')
   self.assertEqual(rows[0]['source_locator'],'#readme_9 > h1:nth-of-type(1)')
   self.assertNotIn('Not part', ' '.join(r['text'] for r in rows))
+ def test_bsg_keeps_only_the_identifier_in_its_own_judicial_side_box(self):
+  cited = b'<p>See ECLI:DE:BSG:2018:251018BB7AY118R0.</p>'
+  with_cited = BSG.replace(b'27 is only text, not a court paragraph.', cited[3:-4])
+  self.assertIsNone(extract_official(with_cited,ROW,'bsg-html/1')[1])
+  field = b'<div class="box"><div class="ecli">ECLI:DE:BSG:2024:250724BB8AY623R0</div></div>'
+  def with_box(contents):
+   return with_cited.replace(b'</body>', b'<div id="supplement">'+contents+b'</div></body>')
+  self.assertEqual(extract_official(with_box(field),ROW,'bsg-html/1')[1], 'ECLI:DE:BSG:2024:250724BB8AY623R0')
+  for invalid in (field+field, field.replace(b'250724',b'260724'), field.replace(b':BSG:',b':BGH:')):
+   with self.assertRaises(ValueError):extract_official(with_box(invalid),ROW,'bsg-html/1')
  def test_bsg_wrong_identity_or_unknown_sections_fail(self):
   for data in [BSG.replace(b'6/23',b'7/23'),BSG.replace(b'25.07.2024',b'26.07.2024'),BSG.replace(b'Tatbestand',b'Unknown'),BSG.replace(b'<p>Facts',b'<p id="rn1">Facts')]:
    with self.assertRaises(ValueError):extract_official(data,ROW,'bsg-html/1')
@@ -75,6 +85,30 @@ class PortalTests(unittest.TestCase):
   self.assertEqual(rows[-1]['source_locator'],'/text :: p:nth-of-type(3)')
   for change in [{'aktenzeichen':'S 42 AY 56/26 ER'},{'datum_1_instanz':'2026-07-07'},{'gericht':{'bezeichnung':'Other','instanz':'SG'}},{'text':'&lt;script&gt;bad&lt;/script&gt;'}]:
    with self.assertRaises(ValueError):extract_official(json.dumps({**source,**change}).encode(),row,'sozialgerichtsbarkeit-json/1')
+
+class PortalProvenanceTests(unittest.TestCase):
+ def test_text_publisher_and_catalogue_citation_retain_their_own_urls(self):
+  import sqlite3
+  from tools.decision_passages import build_index
+  url = 'https://www.sozialgerichtsbarkeit.de/api/public/entscheidungen/180475'
+  catalogue = 'https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2026-N-15104'
+  row = {'id':'sg-test','court':'Sozialgericht München','court_short':'SG München','date':'2026-07-06',
+         'az':'S 42 AY 55/26 ER','kind':'Beschluss','source':'BAYERN.RECHT','url':catalogue,
+         'text_source':{'name':'Sozialgerichtsbarkeit.de','url':url}}
+  body = json.dumps({'id':180475,'aktenzeichen':row['az'],'gericht':{'bezeichnung':row['court'],'instanz':'SG'},
+                     'datum_1_instanz':row['date'],'kategorie':'B','text':'<p>Tenor.</p><p>Gründe</p><p>Text.</p>'}).encode()
+  with tempfile.TemporaryDirectory() as temp:
+   root = Path(temp); cache = root/'official'; cache.mkdir(); stamp='2026-07-10T00:00:00+00:00'
+   digest=hashlib.sha256(body).hexdigest(); (cache/(digest+'.source')).write_bytes(body)
+   (cache/'sg-test.json').write_text(json.dumps({'decision_id':row['id'],'profile':'sozialgerichtsbarkeit-json/1',
+     'sha256':digest,'observed_at':stamp,'url':url,'media_type':'application/json'}))
+   build_index([row],root/'rii',root,observed_at=stamp,official_cache=cache)
+   with sqlite3.connect(root/'decision_passages.sqlite') as db:
+    record=json.loads(db.execute('select source_data from decisions').fetchone()[0])
+   self.assertEqual((record['provider'],record['canonical_url'],record['url']),('Sozialgerichtsbarkeit.de',url,url))
+   self.assertEqual(record['catalogue_reference'],{'name':row['source'],'url':catalogue})
+   with self.assertRaisesRegex(ValueError,'text URL'):
+    build_index([{**row,'text_source':{'url':catalogue,'name':'BAYERN.RECHT'}}],root/'rii',root,observed_at=stamp,official_cache=cache)
 
 class CaptureTests(unittest.TestCase):
  def test_failed_or_changed_http_content_cannot_replace_retained_source(self):
