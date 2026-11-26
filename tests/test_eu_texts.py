@@ -329,3 +329,15 @@ def test_civil_aid_display_title_comes_from_the_corrected_german_edition(monkeyp
     assert row["title"] == new_title
     assert row["source"]["published_title"] == old_title
     assert row["source"]["corrected_title_edition"] == corrected
+
+
+def test_formex_nested_list_points_keep_their_printed_markers():
+    # The German NIS2 Directive, Article 2(2)(a), puts its Roman points inside
+    # a paragraph of the outer point. The marker is required to cite the text.
+    xml = b"""<ACT><ENACTING.TERMS><ARTICLE><TI.ART>Artikel 2</TI.ART>
+      <PARAG><NO.PARAG>2.</NO.PARAG><ALINEA><LIST><ITEM><NP><NO.P>a)</NO.P>
+      <TXT>Einrichtungen:</TXT><P><LIST><ITEM><NP><NO.P>i)</NO.P><TXT>Netze;</TXT>
+      </NP></ITEM><ITEM><NP><NO.P>ii)</NO.P><TXT>Dienste.</TXT></NP></ITEM></LIST></P>
+      </NP></ITEM></LIST></ALINEA></PARAG></ARTICLE></ENACTING.TERMS></ACT>"""
+    [article] = eu.parse_formex(xml)["articles"]
+    assert article["text"] == "(2) a) Einrichtungen: i) Netze; ii) Dienste."

@@ -360,14 +360,14 @@ def _clean(value: str) -> str:
 def _formex_text(el: ET.Element) -> str:
     """Flatten Formex inline content (tails of ``el`` itself excluded).
 
-    Quoted articles retain their headings and paragraph/list numbers. The
+    Quoted articles and embedded lists keep their printed markers. The
     enclosing article renders its own numbers separately and omits footnotes.
     """
     parts: list[str] = []
 
-    def walk(node: ET.Element, quoted_article: bool = False) -> None:
-        quoted_article = quoted_article or node.tag == "ARTICLE"
-        if node.tag == "NOTE" or (not quoted_article and node.tag in {"NO.P", "NO.PARAG"}):
+    def walk(node: ET.Element, keep_markers: bool = False) -> None:
+        keep_markers = keep_markers or node.tag in {"ARTICLE", "LIST"}
+        if node.tag == "NOTE" or (not keep_markers and node.tag in {"NO.P", "NO.PARAG"}):
             return
         if node.tag in {"QUOT.START", "QUOT.END"}:
             default = "201E" if node.tag == "QUOT.START" else "201C"
@@ -375,9 +375,9 @@ def _formex_text(el: ET.Element) -> str:
             return
         parts.append(node.text or "")
         for child in node:
-            walk(child, quoted_article)
+            walk(child, keep_markers)
             parts.append(child.tail or "")
-        if node.tag in {"P", "TXT", "ROW", "CELL"} or (quoted_article and node.tag in {
+        if node.tag in {"P", "TXT", "ROW", "CELL"} or (keep_markers and node.tag in {
                 "TI.ART", "STI.ART", "NO.P", "NO.PARAG", "ALINEA", "PARAG"}):
             parts.append(" ")
 
