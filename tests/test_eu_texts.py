@@ -6,6 +6,7 @@ evidence), the shared identity (api.norm_identity) and log/at/diff over a real
 ``law_history.sqlite`` built by tools/build_law_history.py.
 """
 from __future__ import annotations
+import hashlib
 
 import io
 import json
@@ -448,3 +449,20 @@ def test_formex_and_html_keep_multi_letter_vat_article_numbers():
         for index, label in enumerate(labels)) + "</body>"
     for parsed in (eu.parse_formex(formex.encode()), eu.parse_html_articles(html.encode())):
         assert [(a["enbez"], a["text"]) for a in parsed["articles"]] == expected
+
+
+def test_multipart_edition_cites_the_item_with_the_articles(monkeypatch):
+    # Brussels I Recast, 26 February 2015: seven annex TIFFs precede the XML.
+    content = {"annex": (b"II*\x00", "image/tiff"),
+               "text": (FORMEX_OJ.encode(), "application/xml")}
+
+    class CellarItems:
+        def get(self, url):
+            data, mime = content[url]
+            return {"url": url, "bytes": data, "content_type": mime,
+                    "sha256": hashlib.sha256(data).hexdigest()}
+
+    monkeypatch.setattr(eu, "manifestation_items", lambda *args: ["annex", "text"])
+    edition = eu.fetch_edition(CellarItems(), "02012R1215-20150226", {"fmx4": "manifestation"})
+    assert [i["url"] for i in edition["items"]] == ["text", "annex"]
+    assert edition["articles"]
