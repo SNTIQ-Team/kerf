@@ -918,6 +918,9 @@ def main() -> int:
     if (out / "court_archive").is_dir():
         from export_court_archive import add_to_card
         card = add_to_card(card, out / "court_archive")
+    if (out / "rii").is_dir():
+        from rii_dataset_card import add_to_card as add_rii_to_card
+        card = add_rii_to_card(card, out / "rii")
     (out / "README.md").write_text(card, encoding="utf-8")
     copy_file(require_file(ROOT / "docs" / "RIGHTS.md", "rights matrix"),
               out / "RIGHTS.md")
