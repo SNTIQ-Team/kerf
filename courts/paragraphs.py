@@ -16,7 +16,7 @@ import json
 import re
 import unicodedata
 
-from .model import HEADNOTE_SECTIONS, Block, Paragraph, Section
+from .model import FOOTNOTE_SECTIONS, HEADNOTE_SECTIONS, Block, Paragraph, Section
 
 BLOCK_SEPARATOR = "\n\n"  # paragraphs.text joins its blocks with a blank line
 
@@ -59,7 +59,7 @@ def assemble(decision_id: str, sections: list[Section]) -> tuple[list[Paragraph]
             continue
         numbered = section.name not in HEADNOTE_SECTIONS and any(clean_label(b.label) for b in blocks)
         positional_ids = section.name in HEADNOTE_SECTIONS or (
-            not numbered and (has_source_marker or section.name in ("tenor", "rechtsmittelbelehrung")))
+            not numbered and (has_source_marker or section.name in ("tenor", "rechtsmittelbelehrung", *FOOTNOTE_SECTIONS)))
         if positional_ids:
             # Positional ids; labels here are list markers, not Randnummern.
             for block in blocks:
