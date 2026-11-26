@@ -219,11 +219,56 @@ def _skipped(el: ET.Element) -> bool:
     return el.tag in HEADING_TAGS and "unsichtbar" in _classes(el)
 
 
-def _contains_heading(el: ET.Element) -> bool:
-    return any(_heading_label(d) is not None for d in el.iter())
+def _prepare_footnotes(root: ET.Element) -> dict[ET.Element, ET.Element]:
+    """Match a visible reference and a printed note before removing its hidden tooltip copies."""
+    notes: dict[tuple[str, str], list[ET.Element]] = {}
+    hidden: dict[str, list[tuple[ET.Element, ET.Element]]] = {}
+    references = []
+    for parent in root.iter():
+        if "footnoteDL" in _classes(parent):
+            dl = parent.find("dl")
+            if dl is not None and len(dl.findall("dt")) == len(dl.findall("dd")) == 1:
+                label = squash("".join(dl.find("dt").itertext())).rstrip(").").strip()
+                body = squash("".join(dl.find("dd").itertext()))
+                notes.setdefault((label, body), []).append(parent)
+        for child in parent:
+            if "hidefootnote" in _classes(child) and child.get("id"):
+                hidden.setdefault(child.get("id"), []).append((parent, child))
+            if child.tag == "a" and "footnotelink" in _classes(child):
+                references.append(child)
+
+    matches: dict[ET.Element, ET.Element] = {}
+    for ref in references:
+        label = squash("".join(ref.itertext()))
+        target = hidden.get(ref.get("data-juris-target"), [])
+        tooltip = hidden.get(ref.get("data-juris-target-tooltip"), [])
+        if len(target) != 1 or len(tooltip) != 1:
+            continue
+        body = squash("".join(target[0][1].itertext()))
+        candidates = notes.get((label, body), [])
+        if not body or len(candidates) != 1 or target == tooltip:
+            continue
+        matches[ref] = candidates[0]
+        for parent, child in (target[0], tooltip[0]):
+            if child in parent:
+                _remove(parent, child)
+        # Preserve the printed reference in plain text. A superscript next
+        # to a year or an ECLI must not become a digit of the identifier.
+        ref.text = " " + (ref.text or "")
+        ref.tail = " " + (ref.tail or "")
+    return matches
 
 
-def _events(el: ET.Element, path: str, out: list[tuple]) -> None:
+def _footnote_heading(el: ET.Element) -> bool:
+    return el.tag in HEADING_TAGS and squash("".join(el.itertext())).casefold() == "fussnoten" and any(
+        a.get("name") == "fn" for a in el.iter("a"))
+
+
+def _event_boundary(el: ET.Element, has_notes: bool) -> bool:
+    return _heading_label(el) is not None or (has_notes and ("footnoteDL" in _classes(el) or _footnote_heading(el)))
+
+
+def _events(el: ET.Element, path: str, out: list[tuple], has_notes: bool) -> None:
     """Flatten the document into rubric headings and content nodes in document order."""
     counts: dict[str, int] = {}
     for child in el:
@@ -232,10 +277,14 @@ def _events(el: ET.Element, path: str, out: list[tuple]) -> None:
         if _skipped(child):
             continue
         label = _heading_label(child)
-        if label is not None:
+        if has_notes and _footnote_heading(child):
+            out.append(("note_heading", None, child, cpath))
+        elif label is not None:
             out.append(("heading", label, child, cpath))
-        elif _contains_heading(child):
-            _events(child, cpath, out)
+        elif has_notes and "footnoteDL" in _classes(child):
+            out.append(("footnote", None, child, cpath))
+        elif any(_event_boundary(d, has_notes) for d in child.iter()):
+            _events(child, cpath, out, has_notes)
         else:
             out.append(("content", None, child, cpath))
 
@@ -340,8 +389,10 @@ def parse_body(text: str, doc_id: str) -> dict:
     portals and by copies of juris documents in other collections (courts.sources.old)."""
     root = parse_fragment(text)
     _strip_invisible_rn_labels(root)
+    has_notes = "footnoteDL" in text
+    matches = _prepare_footnotes(root) if has_notes else {}
     events: list[tuple] = []
-    _events(root, "text:", events)
+    _events(root, "text:", events, has_notes)
 
     sections: list[Section] = []
     by_name: dict[str, Section] = {}
@@ -349,6 +400,9 @@ def parse_body(text: str, doc_id: str) -> dict:
     apparatus: dict[str, str] = {}
     unmapped: list[str] = []
     covered = 0
+    note_authors: dict[ET.Element, set[str]] = {}
+    endnotes: list[tuple[ET.Element, str]] = []
+    note_heading = None
     current: tuple[str, str, str, str | None] | None = None   # (name, authorship, basis, heading)
     current_kind = "pre"                                       # pre | section | procedural | apparatus
     current_label = ""
@@ -376,6 +430,20 @@ def parse_body(text: str, doc_id: str) -> dict:
                 current = ("sonstiger_langtext", "unknown", f"unmapped juris rubric {label!r}", label)
                 current_kind = "section"
             continue
+        if kind == "note_heading":
+            note_heading = text_content(node)
+            covered += _dense_len(note_heading)
+            continue
+        if kind == "footnote":
+            endnotes.append((node, cpath))
+            covered += _visible_len(node)
+            continue
+        if matches:
+            for reference in node.iter("a"):
+                note = matches.get(reference)
+                if note is not None:
+                    author = current[1] if current else "unknown"
+                    note_authors.setdefault(note, set()).add(author)
         if current_kind == "procedural":
             text = text_content(node)
             covered += _dense_len(text)
@@ -401,6 +469,20 @@ def parse_body(text: str, doc_id: str) -> dict:
             assert current is not None
             target = section_for(*current)
         target.blocks.extend(blocks)
+
+    for note, cpath in endnotes:
+        content = text_content(note)
+        if not content:
+            continue
+        authors = note_authors.get(note, set())
+        if authors == {"court"}:
+            name, author = "fussnoten", "court"
+        elif authors == {"editorial"}:
+            name, author = "redaktionelle_fussnoten", "editorial"
+        else:
+            name, author = "fussnoten_unklar", "unknown"
+        section_for(name, author, "juris footnoteDL; attribution from the linked rubric", note_heading).blocks.append(
+            Block(text=content, locator=cpath))
 
     total = _visible_len(root)
     missing = total - covered

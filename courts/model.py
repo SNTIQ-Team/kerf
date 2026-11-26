@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+FOOTNOTE_SECTIONS = ("fussnoten", "redaktionelle_fussnoten", "fussnoten_unklar")
+
 # Canonical section names.  ``authorship`` separates court-authored text from
 # editorial additions (documentation titles, Orientierungssätze).
 SECTION_ORDER = (
     "titel", "leitsatz", "orientierungssatz", "tenor", "tatbestand",
-    "entscheidungsgruende", "gruende", "abweichende_meinung", "sonstiger_langtext", "rechtsmittelbelehrung",
+    "entscheidungsgruende", "gruende", "abweichende_meinung", "sonstiger_langtext", "rechtsmittelbelehrung", *FOOTNOTE_SECTIONS,
 )
 HEADNOTE_SECTIONS = frozenset({"titel", "leitsatz", "orientierungssatz"})
 AUTHORSHIP = frozenset({"court", "editorial", "unknown"})
