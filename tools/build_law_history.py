@@ -56,6 +56,7 @@ from api.law_history import (  # noqa: E402
     summarize)
 from api.norm_identity import (  # noqa: E402
     act_prefix, designator_unit, norm_rows_with_ids)
+from api.official_state_store import incomplete_projection, single_state_observations  # noqa: E402
 from api.stand_notes import parse_notes  # noqa: E402
 
 BUILDER = "build_law_history/1"
@@ -143,7 +144,7 @@ def _read_state_object(data_dir: Path, digest: str) -> dict[str, Any]:
 def gii_states(act: dict[str, Any], data_dir: Path,
                intervals: list[dict[str, Any]]) -> list[StateObs]:
     observations: dict[str, dict[str, Any]] = {}
-    for row in act.get("official_states") or []:
+    for row in single_state_observations(act.get("official_states") or [], allow_partial=True):
         digest = str(row.get("state_sha256") or "")
         observed = _day(row.get("observed_at"))
         if not _DIGEST.fullmatch(digest) or not observed:
@@ -155,7 +156,8 @@ def gii_states(act: dict[str, Any], data_dir: Path,
         entry["last"] = max(entry["last"], observed)
     by_state: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in intervals:
-        by_state[str(row.get("state_sha256"))].append(row)
+        if not incomplete_projection(row):
+            by_state[str(row.get("state_sha256"))].append(row)
     states: list[StateObs] = []
     for digest in set(observations) | set(by_state):
         obs = observations.get(digest) or {}
@@ -178,7 +180,7 @@ def gii_states(act: dict[str, Any], data_dir: Path,
             "official_consolidation",
             known_from=obs.get("first"), known_until=obs.get("last"),
             loader=load, url=obs.get("source_url") or act.get("source_url"),
-            sha256=digest)
+            sha256=digest, complete=not incomplete_projection({"state_sha256": digest}))
         if rows:
             first = rows[0]
             state.valid_from = _day(first.get("effective_from"))

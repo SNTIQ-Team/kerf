@@ -79,7 +79,7 @@ from api.citation_store import CitationStoreError, query_citations
 from api.search_engine import SearchEngine, normalize_search_text, search_source
 from api.source_freshness import source_health
 from api.procedure_search import ProcedureSearchIndex
-from api.official_state_store import OfficialStateError, load_observed_state
+from api.official_state_store import OfficialStateError, load_observed_state, with_projection_coverage
 from api.markdown_layout import source_paragraph_layouts
 from tools.reader_blocks import ReaderBlocksError, load_sidecar
 from tools.archived_reader_store import ArchivedReaderError, load_archived_reader
@@ -537,7 +537,7 @@ def official_states(
         "matched": len(rows),
         "offset": offset,
         "limit": limit,
-        "observations": rows[offset:offset + limit],
+        "observations": [with_projection_coverage(row) for row in rows[offset:offset + limit]],
     }
 
 
