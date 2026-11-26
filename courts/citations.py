@@ -447,7 +447,12 @@ COURT_NAMES = (
 COURT_RE = re.compile(r"(?<![\w-])(?P<court>" + COURT_NAMES + r")(?![\w])")
 SELF_RE = re.compile(r"(?<![\w-])(?P<self>Senats?|Senatsurteile?s?|Senatsbeschlusse?s?|Kammer|Kammerbeschlusse?s?|"
                      r"Große[nr]? Senats?)(?![\w])")
-ECLI_RE = re.compile(r"ECLI:[A-Z]{2}:[A-Za-z]+:\d{4}:[A-Za-z0-9.\-]*[A-Za-z0-9]")
+# The EU courts use a sequential number. Both spellings occur in judgments,
+# sometimes immediately followed by a word in the published HTML.
+ECLI_RE = re.compile(
+    r"(?P<eu>(?i:(?:ECLI:|(?<![\w:]))EU:[CTF]:[0-9]{4}:[0-9]+))"
+    r"|ECLI:(?!EU:[CTF]:)[A-Z]{2}:[A-Za-z]+:\d{4}:[A-Za-z0-9.\-]*[A-Za-z0-9]"
+)
 PROCEDURAL_RE = re.compile(r"(?i)angefochten|angegriffen|Vorinstanz|vorinstanzlich|vorgehend|erstinstanzlich|"
                            r"Ausgangsgericht|zurückverwiesen|Zurückverweisung|Berufungsurteil|Beschwerde gegen|"
                            r"Berufung gegen|Revision gegen|Nichtzulassungsbeschwerde gegen|aufgehoben")
@@ -526,11 +531,13 @@ def extract_decisions(text: str, paragraph_id: str | None, *, own_court_id: str 
             detail={"court": court_label, "court_id": court_id, "date": iso, "case_number": az,
                     "decision_type": (ref.group("dtype") or None), "case_key": case_key(az)}))
     for m in ECLI_RE.finditer(text):
+        printed = m.group()
+        identifier = "ECLI:" + printed.upper().removeprefix("ECLI:") if m.group("eu") else printed
         relations.append(Relation(
-            relation="mentions", target_kind="decision", target_id=m.group(0), target_raw=m.group(0),
+            relation="mentions", target_kind="decision", target_id=identifier, target_raw=printed,
             paragraph_id=paragraph_id, span_start=m.start(), span_end=m.end(),
             quoted_context=context_window(text, m.start(), m.end()), confidence=0.97,
-            detail={"ecli": m.group(0)}))
+            detail={"ecli": identifier}))
     return relations
 
 

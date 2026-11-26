@@ -104,6 +104,25 @@ def test_quote_procedural_self_and_ecli():
     assert quote.quoted_context.startswith("„Ein Anspruch")
 
 
+def test_cjeu_identifier_keeps_the_printed_span_and_uses_the_full_target():
+    from courts.citations import extract_decisions
+
+    text = ("Urteil, EU:C:2016:764, Rn. 28, eu:t:2005:57 und EU:F:2010:80; "
+            "ECLI:EU:C:2021:629und juris; ECLI:EU:C:2015:780Urteil. "
+            "ECLI:DE:BVerfG:2012:ls20120718.1bvl001010. NichtEU:C:2018:19. "
+            "ECLI:EU:C:2018:ABC.")
+    hits = extract_decisions(text, "source#rn-4", own_court_id=None)
+    assert [(x.target_raw, x.target_id) for x in hits] == [
+        ("EU:C:2016:764", "ECLI:EU:C:2016:764"),
+        ("eu:t:2005:57", "ECLI:EU:T:2005:57"),
+        ("EU:F:2010:80", "ECLI:EU:F:2010:80"),
+        ("ECLI:EU:C:2021:629", "ECLI:EU:C:2021:629"),
+        ("ECLI:EU:C:2015:780", "ECLI:EU:C:2015:780"),
+        ("ECLI:DE:BVerfG:2012:ls20120718.1bvl001010", "ECLI:DE:BVerfG:2012:ls20120718.1bvl001010"),
+    ]
+    assert all(text[x.span_start:x.span_end] == x.target_raw and x.detail["ecli"] == x.target_id for x in hits)
+
+
 def test_parser_cannot_emit_legal_effect_relations():
     assert PARSER_RELATIONS == {"mentions", "quotes", "procedural_reference"}
     for forbidden in FORBIDDEN_FOR_PARSER | {"applies", "interprets", "supports"}:
