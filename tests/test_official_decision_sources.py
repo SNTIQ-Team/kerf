@@ -32,6 +32,14 @@ class OfficialTests(unittest.TestCase):
  def test_bsg_wrong_identity_or_unknown_sections_fail(self):
   for data in [BSG.replace(b'6/23',b'7/23'),BSG.replace(b'25.07.2024',b'26.07.2024'),BSG.replace(b'Tatbestand',b'Unknown'),BSG.replace(b'<p>Facts',b'<p id="rn1">Facts')]:
    with self.assertRaises(ValueError):extract_official(data,ROW,'bsg-html/1')
+ def test_cellar_document_title_identifies_the_work_but_cited_ecli_does_not(self):
+  other = b'ECLI:EU:C:2014:103'
+  body = EU.replace(b'One <span>claim</span>.', b'See '+other+b' for that case.')
+  rows,ecli=extract_official(body,EU_ROW,'cellar-xhtml/1')
+  self.assertIsNone(ecli)
+  self.assertTrue(any(other.decode() in p['text'] for p in rows))
+  with self.assertRaisesRegex(ValueError,'CELEX'):
+   extract_official(body.replace(b'<title>62024CJ0621',b'<title>62023CJ0333'),EU_ROW,'cellar-xhtml/1')
  def test_eu_original_anchor_number_and_quoted_structure_survive(self):
   rows,_=extract_official(EU,EU_ROW,'cellar-xhtml/1')
   numbered=[r for r in rows if r['paragraph_label']]
@@ -85,6 +93,17 @@ class PortalTests(unittest.TestCase):
   self.assertEqual(rows[-1]['source_locator'],'/text :: p:nth-of-type(3)')
   for change in [{'aktenzeichen':'S 42 AY 56/26 ER'},{'datum_1_instanz':'2026-07-07'},{'gericht':{'bezeichnung':'Other','instanz':'SG'}},{'text':'&lt;script&gt;bad&lt;/script&gt;'}]:
    with self.assertRaises(ValueError):extract_official(json.dumps({**source,**change}).encode(),row,'sozialgerichtsbarkeit-json/1')
+
+ def test_portal_decision_preserves_its_identity_and_leaves_a_cited_ecli_in_the_text(self):
+  cited='ECLI:DE:BSG:2024:250724BB8AY623R0'
+  row={'id':'sg-example','court':'Sozialgericht München','court_short':'SG München','az':'S 42 AY 55/26 ER','date':'2026-07-06','kind':'Beschluss'}
+  source={'id':180475,'aktenzeichen':row['az'],'gericht':{'bezeichnung':row['court'],'instanz':'SG'},
+          'datum_1_instanz':row['date'],'kategorie':'B','text':f'<p>Tenor.</p><p>Gründe</p><p>{cited}</p>'}
+  rows,ecli=extract_official(json.dumps(source).encode(),row,'sozialgerichtsbarkeit-json/1')
+  self.assertIsNone(ecli)
+  self.assertEqual(rows[-1]['text'],cited)
+  with self.assertRaisesRegex(ValueError,'identity'):
+   extract_official(json.dumps({**source,'aktenzeichen':'Other'}).encode(),row,'sozialgerichtsbarkeit-json/1')
 
 class PortalProvenanceTests(unittest.TestCase):
  def test_text_publisher_and_catalogue_citation_retain_their_own_urls(self):
