@@ -7,7 +7,7 @@ derived graph views and a merged court-decision table so a dataset consumer
 gets the same case set as the public API.
 
     python3 tools/export_court_archive.py web/data hf_export/court_archive  # optional (pyarrow)
-    python3 tools/export_hf.py [--out hf_export]
+    python3 tools/export_hf.py [--out hf_export] [--viewer-parquet]
 """
 from __future__ import annotations
 
@@ -823,6 +823,8 @@ The release pipeline is available in the [Kerf repository](https://github.com/SN
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "hf_export"))
+    ap.add_argument("--viewer-parquet", action="store_true",
+                    help="create the uniform Parquet viewer (requires datasets and pyarrow for new or changed files)")
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -837,7 +839,7 @@ def main() -> int:
 
     # Avoid stale files surviving when the exported schema changes.
     for path in out.iterdir():
-        if path.is_file():
+        if path.is_file() and path.name != "README.md":
             path.unlink()
 
     descriptions: dict[str, str] = {}
@@ -921,7 +923,10 @@ def main() -> int:
     if (out / "rii").is_dir():
         from rii_dataset_card import add_to_card as add_rii_to_card
         card = add_rii_to_card(card, out / "rii")
-    (out / "README.md").write_text(card, encoding="utf-8")
+    if args.viewer_parquet or (out / "viewer").is_dir():
+        from viewer_parquet import prepare_viewer
+        card = prepare_viewer(card, out, [name for name in ordered if name.endswith(".jsonl")])
+    write_bytes_atomic(out / "README.md", card.encode("utf-8"))
     copy_file(require_file(ROOT / "docs" / "RIGHTS.md", "rights matrix"),
               out / "RIGHTS.md")
 
