@@ -340,13 +340,14 @@ def _clean(value: str) -> str:
 def _formex_text(el: ET.Element) -> str:
     """Flatten Formex inline content (tails of ``el`` itself excluded).
 
-    Footnotes (``NOTE``) and list/paragraph numbers are not wording; quotation
-    marks are empty elements with the code point in ``CODE``.
+    Quoted articles retain their headings and paragraph/list numbers. The
+    enclosing article renders its own numbers separately and omits footnotes.
     """
     parts: list[str] = []
 
-    def walk(node: ET.Element) -> None:
-        if node.tag in {"NOTE", "NO.P", "NO.PARAG"}:
+    def walk(node: ET.Element, quoted_article: bool = False) -> None:
+        quoted_article = quoted_article or node.tag == "ARTICLE"
+        if node.tag == "NOTE" or (not quoted_article and node.tag in {"NO.P", "NO.PARAG"}):
             return
         if node.tag in {"QUOT.START", "QUOT.END"}:
             default = "201E" if node.tag == "QUOT.START" else "201C"
@@ -354,9 +355,10 @@ def _formex_text(el: ET.Element) -> str:
             return
         parts.append(node.text or "")
         for child in node:
-            walk(child)
+            walk(child, quoted_article)
             parts.append(child.tail or "")
-        if node.tag in {"P", "TXT", "ROW", "CELL"}:
+        if node.tag in {"P", "TXT", "ROW", "CELL"} or (quoted_article and node.tag in {
+                "TI.ART", "STI.ART", "NO.P", "NO.PARAG", "ALINEA", "PARAG"}):
             parts.append(" ")
 
     walk(el)
@@ -456,11 +458,20 @@ def _marker(value: str) -> str | None:
     return f"({match.group(1)})" if match else value
 
 
+def _formex_articles(node: ET.Element) -> Iterable[ET.Element]:
+    """Yield each article once, keeping its quoted amendments and annexes out of the index."""
+    if node.tag == "ARTICLE":
+        yield node
+    elif node.tag not in {"ANNEX", "QUOT.S"}:
+        for child in node:
+            yield from _formex_articles(child)
+
+
 def parse_formex(data: bytes) -> dict[str, Any]:
     """Articles of one Formex 4 act (OJ ``ACT`` or consolidated ``CONS.ACT``)."""
     root = ET.fromstring(data)
     articles, annexes = [], 0
-    for article in root.iter("ARTICLE"):
+    for article in _formex_articles(root):
         label = _clean("".join(article.find("TI.ART").itertext())) if article.find("TI.ART") is not None else ""
         match = re.match(r"Artikel\s+(\d+\s*[a-z]?)", label)
         if not match:
