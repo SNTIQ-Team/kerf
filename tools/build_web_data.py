@@ -73,6 +73,7 @@ from retrospective_history import (                       # noqa: E402
     materialize_history,
     write_sqlite as write_retrospective_sqlite,
 )
+from verified_editions import add_reviewed_editions  # noqa: E402
 from verified_reconstruction import (                     # noqa: E402
     build_from_paths as build_verified_reconstructions,
 )
@@ -321,6 +322,8 @@ def load_decisions() -> list[dict]:
         if row.get("id"):
             seen_ids.add(str(row["id"]))
         seen_cases.add(case_key(row))
+    from tools.neuris_passages import add_selected, selected_snapshot
+    rows = add_selected(rows, selected_snapshot(latest_snapshot("neuris")))
     rows.sort(key=lambda d: d.get("date") or "", reverse=True)
     return rows
 
@@ -1757,6 +1760,7 @@ def main() -> int:
     retrospective_candidates.extend(load_reviewed_candidates())
     verified_reconstructions = build_verified_reconstructions(
         built_at=built_at)
+    add_reviewed_editions(verified_reconstructions, official_states, official_state_objects)
     derived_states = verified_reconstructions.get("state_objects") or {}
     derived_metadata = {}
     for digest, state in sorted(derived_states.items()):
@@ -1822,7 +1826,9 @@ def main() -> int:
     git = build_git(
         official_transitions, transition_reviews, retrospective_candidates)
     decisions = load_decisions()
-    build_decision_passages(decisions, ROOT / "data" / "cache" / "rii", WEB, observed_at=built_at)
+    neuris = latest_snapshot("neuris")
+    build_decision_passages(decisions, ROOT / "data" / "cache" / "rii", WEB, observed_at=built_at,
+                            neuris_cache=neuris / "official_decisions" if neuris else None)
     attach_court_observations(ROOT / "data" / "court_observations.json", WEB)
     data_policy = {
         "schema_version": 1,

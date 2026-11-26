@@ -19,7 +19,7 @@ sys.path.insert(0,str(ROOT))
 sys.path.insert(0, str(ROOT / 'pipeline'))
 from fetch_rii import parse_xml, read_zip_xml
 from tools.official_decision_sources import read_capture, extract_official
-from tools.decision_citations import citations_for
+from tools.decision_citations import citation_matcher
 
 SECTIONS = {
  'titelzeile':'published_title', 'leitsatz':'published_headnote',
@@ -86,7 +86,7 @@ def extract_passages(xml:bytes,metadata:dict):
       'xml_path':xpath+'/dd[1]','text':text,'text_sha256':sha(text.encode())})
  return rows
 
-def build_index(decisions,cache:Path,destination:Path,*,observed_at:str,official_cache:Path|None=None):
+def build_index(decisions,cache:Path,destination:Path,*,observed_at:str,official_cache:Path|None=None,neuris_cache:Path|None=None):
  stamp=datetime.fromisoformat(observed_at)
  if stamp.tzinfo is None:raise ValueError('observation time requires a timezone')
  destination=destination.resolve()
@@ -102,6 +102,7 @@ def build_index(decisions,cache:Path,destination:Path,*,observed_at:str,official
    previous={r[0]:(r[1],r[2]) for r in old.execute(f'SELECT id, {field}, observed_at FROM decisions WHERE {field} IS NOT NULL')}
  fd,tmp=tempfile.mkstemp(prefix='.decision-passages-',suffix='.sqlite',dir=destination);os.close(fd)
  indexed=0;passages=0;missing=[]
+ citations_for=citation_matcher(decisions)
  try:
   with closing(sqlite3.connect(tmp)) as db:
    db.executescript('''CREATE TABLE decisions(id TEXT PRIMARY KEY, status TEXT NOT NULL, metadata TEXT NOT NULL,
@@ -115,7 +116,9 @@ def build_index(decisions,cache:Path,destination:Path,*,observed_at:str,official
     CREATE INDEX citing_decision ON citations(source_id,target_id,passage_id,position);''')
    for d in sorted(decisions,key=lambda d:d['id']):
     identity=d['id'];source=available.get('jb-'+identity[4:]) if identity.startswith('rii-') else None
-    capture=read_capture(official_cache,d) if not source else None
+    retained=neuris_cache if neuris_cache and identity.startswith('neuris-') else official_cache
+    capture=read_capture(retained,d) if not source else None
+    if identity.startswith('neuris-') and not capture:raise ValueError('selected NeuRIS publication lacks its source capture')
     status='indexed' if source or capture else 'source_not_retained'
     if status!='indexed':
      missing.append({'decision_id':identity,'reason':status})
@@ -129,16 +132,20 @@ def build_index(decisions,cache:Path,destination:Path,*,observed_at:str,official
                  'xml_sha256':xml_hash,'zip_sha256':zip_hash}
     else:
      blob,record=capture;rows,ecli=extract_official(blob,d,record['profile']);observed=record['observed_at']
+     if record['profile']=='neuris-akn/1':xml_hash=sha(blob)
      descriptor={'profile':record['profile'],'url':record['url'],'media_type':record['media_type'],
-                 'extension':{'cellar-xhtml/1':'xhtml','sozialgerichtsbarkeit-json/1':'json','bsg-html/1':'html'}[record['profile']],
-                 'canonical_url':d.get('url'),'xml_sha256':None,'zip_sha256':None}
+                 'extension':{'cellar-xhtml/1':'xhtml','sozialgerichtsbarkeit-json/1':'json','bsg-html/1':'html','neuris-akn/1':'xml'}[record['profile']],
+                 'canonical_url':d.get('url'),'xml_sha256':xml_hash,'zip_sha256':None}
+     if record['profile']=='neuris-akn/1':
+      from tools.neuris_passages import NS
+      descriptor['xml_namespaces']=NS
     content_hash=sha(blob);prior=previous.get(identity)
     first_seen=prior[1] if prior and prior[0]==content_hash else observed
     if datetime.fromisoformat(first_seen)>stamp:raise ValueError('observation after index build')
     descriptor.update(content_sha256=content_hash,observed_at=first_seen,language='de',lineage_key=ecli or identity)
     db.execute('INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)',(identity,status,canonical(d),ecli,xml_hash,zip_hash,first_seen,blob,content_hash,canonical(descriptor)))
     for row in rows:
-     row['citations']=citations_for(row,decisions)
+     row['citations']=citations_for(row)
      for citation in row['citations']:
       db.execute('INSERT INTO citations VALUES(?,?,?,?,?)',(identity,citation['target_id'],row['passage_id'],citation['start'],canonical(citation)))
      cur=db.execute('INSERT INTO passages VALUES(?,?,?,?,?,?)',(identity,row['passage_id'],row['section'],row['document_position'],row['text'],canonical(row)))
