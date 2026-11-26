@@ -11,7 +11,7 @@ import json
 import re
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from . import PARSER_VERSION, SCHEMA_VERSION
@@ -740,6 +740,20 @@ def ecli_encoded_date(ecli: str) -> str | None:
     parts = ecli.split(":")
     if len(parts) != 5 or parts[1] != "DE":
         return None
+    # The BPatG ordinal for JURE269032429 starts with DDMMYYYY. Also accept
+    # YYYYMMDD when the calendar and the ECLI's year distinguish that reading.
+    if parts[2].upper() == "BPATG" and (match := re.match(r"^([0-9]{8})(?=\.?[A-Za-z])", parts[4])):
+        digits = match.group(1)
+        candidates = set()
+        for year, month, day in ((digits[:4], digits[4:6], digits[6:]),
+                                 (digits[4:], digits[2:4], digits[:2])):
+            if year != parts[3]:
+                continue
+            try:
+                candidates.add(date(int(year), int(month), int(day)).isoformat())
+            except ValueError:
+                continue
+        return candidates.pop() if len(candidates) == 1 else None
     m = GERMAN_ECLI_DATE.match(parts[4])
     if not m:
         return None
