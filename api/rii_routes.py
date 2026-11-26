@@ -8,7 +8,7 @@ import zlib
 
 from fastapi import APIRouter, HTTPException, Query, Response
 
-from api.rii_archive import MissingRecord, document_id, open_archive, passage_for, select_passages
+from api.rii_archive import EcliIndexUnavailable, MissingRecord, canonical_ecli, document_id, open_archive, passage_for, select_passages
 
 router = APIRouter(prefix="/rii/decisions", tags=["RII decisions"])
 
@@ -21,6 +21,9 @@ def verified(response):
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Kerf-RII-Revision"] = archive.revision
         yield archive
+    except EcliIndexUnavailable as exc:
+        raise HTTPException(501, "The pinned RII release has no ECLI index",
+                            headers={"Cache-Control": "no-store", "X-Kerf-RII-Revision": archive.revision}) from exc
     except MissingRecord as exc:
         raise HTTPException(404, "Document or passage absent from this RII release",
                             headers={"Cache-Control": "no-store", "X-Kerf-RII-Revision": archive.revision}) from exc
@@ -29,10 +32,20 @@ def verified(response):
                             headers={"Cache-Control": "no-store", "Retry-After": "30"}) from exc
 
 
+@router.get("")
+def decisions_by_ecli(response: Response, ecli: str = Query(..., min_length=1, max_length=200)):
+    try:
+        identifier = canonical_ecli(ecli)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    with verified(response) as archive:
+        return {"revision": archive.revision, **archive.decisions_by_ecli(identifier)}
+
+
 @router.get("/{document}")
 def decision(document: str, response: Response):
     with verified(response) as archive:
-        return {"revision": archive.revision, "metadata": archive.decision(document)["metadata"]}
+        return {"revision": archive.revision, "metadata": archive.metadata(document_id(document))}
 
 
 @router.get("/{document}/passages")

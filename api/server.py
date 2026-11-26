@@ -35,7 +35,7 @@ SERVICE_INDEX = {
         "/amending-acts/{document_id}",
         "/decisions", "/decisions/{id}", "/decision-passages", "/decisions/{id}/relations",
         "/decisions/{id}/passages/{passage_id}", "/decisions/{id}/source",
-        "/rii/decisions/{document}", "/rii/decisions/{document}/passages",
+        "/rii/decisions", "/rii/decisions/{document}", "/rii/decisions/{document}/passages",
         "/rii/decisions/{document}/passages/{anchor}", "/rii/decisions/{document}/source",
         "/git", "/graph", "/hierarchy", "/eu-index",
         "/procedures/watched", "/amendment-fates", "/federal-history",
