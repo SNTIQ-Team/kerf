@@ -32,7 +32,7 @@ from datetime import date
 
 from common import ROOT, Http, snapshot_dir, write_jsonl
 from gii_import_cache import GiiImportCache, ImportBudgetExceeded
-from reader_source_cache import reader_act_id, save_reader_source
+from reader_source_cache import gii_designator, reader_act_id, save_reader_source
 
 TOC_URL = "https://www.gesetze-im-internet.de/gii-toc.xml"
 
@@ -144,13 +144,15 @@ def parse_law(xml_bytes: bytes, slug: str) -> tuple[dict, list[dict]]:
         if meta is None:
             continue
         jurabk = (meta.findtext("jurabk") or "").strip()
-        enbez = (meta.findtext("enbez") or "").strip()
+        enbez = gii_designator(norm)
         titel = (meta.findtext("titel") or "").strip()
         glied = meta.find("gliederungseinheit")
         if glied is not None:
             gliederung = " ".join(filter(None, (
                 (glied.findtext("gliederungsbez") or "").strip(),
                 (glied.findtext("gliederungstitel") or "").strip())))
+        if enbez and glied is not None and not (meta.findtext("enbez") or "").strip():
+            titel = (glied.findtext("gliederungstitel") or "").strip()
         if not act["jurabk"] and jurabk:
             act["jurabk"] = jurabk
             act["long_title"] = (meta.findtext("langue") or "").strip()

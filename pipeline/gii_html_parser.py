@@ -39,8 +39,12 @@ import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
 
+if __package__:
+    from .gii_import_cache import PARSER_VERSION as XML_PARSER_VERSION
+else:
+    from gii_import_cache import PARSER_VERSION as XML_PARSER_VERSION
+
 PARSER_VERSION = "gii-html/1"
-XML_PARSER_VERSION = "gii-xml/1"
 
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
         "meta", "param", "source", "track", "wbr"}

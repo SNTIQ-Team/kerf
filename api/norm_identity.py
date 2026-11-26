@@ -231,6 +231,16 @@ def load_gii_toc(*paths: Path) -> dict[str, Any] | None:
     return None
 
 
+_GII_DOCUMENT_ANCHOR = re.compile(r"(BJNR[0-9A-Z]+)\.html#\1BJ(?:NG|NE)[0-9A-Z]+")
+
+
+def gii_norm_href(href: str) -> bool:
+    """Accept a local norm page or a same-document GII norm anchor."""
+    if href.startswith("BJNR"):
+        return _GII_DOCUMENT_ANCHOR.fullmatch(href) is not None
+    return re.fullmatch(r"[A-Za-z0-9_.-]+\.html", href) is not None
+
+
 def gii_norm_url(toc: dict[str, Any] | None, slug: str, unit: str,
                  number: str) -> dict[str, Any]:
     """Resolve an official per-norm URL through the captured GII TOC.
@@ -249,7 +259,7 @@ def gii_norm_url(toc: dict[str, Any] | None, slug: str, unit: str,
                 "basis": "act slug absent from the captured GII TOC"}
     key = f"{unit}/{number}"
     href = (entry.get("norms") or {}).get(key)
-    if not href or not re.fullmatch(r"[A-Za-z0-9_.-]+\.html", str(href)):
+    if not isinstance(href, str) or not gii_norm_href(href):
         return {"url": None, "act_url": act_url, "status": "norm_not_in_toc",
                 "basis": f"no TOC link for {key} in the GII capture of "
                          f"{entry.get('fetched_at')}"}
