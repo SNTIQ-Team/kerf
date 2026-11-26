@@ -18,8 +18,9 @@ from fetch_gii import (  # noqa: E402
 
 def test_practice_expansion_is_large_and_not_silently_shrunk() -> None:
     assert len(PRACTICE_EXPANSION_2026_07) == 74
-    assert len(PRACTICE_EXPANSION_2026_11) == 55
-    assert len(CORPUS) == 255
+    assert len(PRACTICE_EXPANSION_2026_11) == 56
+    assert "urhg" in PRACTICE_EXPANSION_2026_11
+    assert len(CORPUS) == 256
     assert len(CORPUS - PRACTICE_EXPANSION_2026_07 - PRACTICE_EXPANSION_2026_09
                - PRACTICE_EXPANSION_2026_11) == 51
 
