@@ -11,7 +11,9 @@ import re
 from urllib.parse import urlsplit
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-PROFILES={'bsg-html/1':('www.bsg.bund.de','text/html'),
+from tools import neuris_passages
+
+PROFILES={neuris_passages.PROFILE:('testphase.rechtsinformationen.bund.de','application/xml'),'bsg-html/1':('www.bsg.bund.de','text/html'),
           'cellar-xhtml/1':('publications.europa.eu','application/xhtml+xml'),
           'sozialgerichtsbarkeit-json/1':('www.sozialgerichtsbarkeit.de','application/json')}
 MONTHS=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -33,6 +35,7 @@ def read_capture(cache:Path,metadata:dict):
  if profile not in PROFILES or record.get('decision_id')!=metadata['id']:raise ValueError('capture identity/profile mismatch')
  url=urlsplit(record.get('url',''));host,media=PROFILES[profile]
  if url.scheme!='https' or url.hostname!=host or url.username or url.password or url.port not in {None,443}:raise ValueError('capture not from expected official origin')
+ if profile==neuris_passages.PROFILE and record['url']!=neuris_passages.source_url(metadata):raise ValueError('capture URL does not name this NeuRIS document')
  if record.get('media_type')!=media:raise ValueError('capture media type mismatch')
  if datetime.fromisoformat(record.get('observed_at','')).tzinfo is None:raise ValueError('observation time requires timezone')
  digest=record.get('sha256','')
@@ -42,6 +45,7 @@ def read_capture(cache:Path,metadata:dict):
  return blob,record
 
 def extract_official(blob:bytes,metadata:dict,profile:str):
+ if profile==neuris_passages.PROFILE:return neuris_passages.extract(blob,metadata)
  if len(blob)>8*1024*1024 or re.search(br'<!ENTITY\b',blob,re.I):raise ValueError('unsafe or oversized source')
  raw=blob.decode('utf-8',errors='strict')
  # XML validation prevents a tolerant HTML parser repairing changed numbered
