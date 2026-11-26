@@ -120,8 +120,9 @@ EXTENDED_ACT = "32022D0382"
 # ------------------------------------------------------------------ network
 
 class Cellar:
-    def __init__(self, *, offline: bool = False, delay: float = 0.6):
+    def __init__(self, *, offline: bool = False, delay: float = 0.6, cache: Path | None = None):
         import requests
+        self.cache = CACHE if cache is None else cache
         self.offline = offline
         self.delay = delay
         self.session = requests.Session()
@@ -155,7 +156,7 @@ class Cellar:
     def get(self, url: str) -> dict[str, Any]:
         """Bytes of one Cellar resource (cache first) with provenance."""
         key = re.sub(r"[^A-Za-z0-9._-]+", "_", url.removeprefix(CELLAR))
-        path, meta_path = CACHE / f"{key}.gz", CACHE / f"{key}.json"
+        path, meta_path = self.cache / f"{key}.gz", self.cache / f"{key}.json"
         if path.is_file() and meta_path.is_file():
             data = gzip.decompress(path.read_bytes())
             meta = json.loads(meta_path.read_text())
@@ -179,7 +180,7 @@ class Cellar:
         meta = {"url": url, "final_url": response.url, "content_type": kind,
                 "sha256": hashlib.sha256(data).hexdigest(), "bytes_len": len(data),
                 "retrieved_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-        CACHE.mkdir(parents=True, exist_ok=True)
+        self.cache.mkdir(parents=True, exist_ok=True)
         path.write_bytes(gzip.compress(data, 9, mtime=0))
         meta_path.write_text(json.dumps(meta, sort_keys=True))
         return {"bytes": data, **meta, "cached": False}
@@ -813,25 +814,41 @@ def fetch_act(cellar: Cellar, spec: dict[str, Any], *, lisbon: dict[str, Any] | 
 
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--acts", default="", help="comma-separated CELEX (default: corpus)")
+    parser.add_argument("--acts", help="probe these comma-separated CELEX IDs in a separate snapshot")
     parser.add_argument("--offline", action="store_true", help="cache only (no network)")
     args = parser.parse_args(list(argv) if argv is not None else None)
     sys.path.insert(0, str(ROOT / "pipeline"))
     from common import snapshot_dir, write_jsonl
 
-    cellar = Cellar(offline=args.offline)
+    source, cache = "eu_texts", CACHE
+    wanted = set()
+    if args.acts is not None:
+        parts = [part.strip() for part in args.acts.split(",")]
+        if not all(parts):
+            parser.error("--acts requires comma-separated CELEX identifiers")
+        wanted = set(parts)
+        selection = hashlib.sha256("\n".join(sorted(wanted)).encode()).hexdigest()
+        source = f"eu_texts_probes/{selection}"
+        cache = CACHE.parent / "eu_texts_probes" / selection
+    cellar = Cellar(offline=args.offline, cache=cache)
     specs = [dict(s) for s in CORPUS]
-    try:
-        for celex in extension_decisions(cellar):
+    if not wanted or wanted - {s["celex"] for s in specs}:
+        try:
+            extensions = extension_decisions(cellar)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[err] extension discovery failed, snapshot not written: {exc}", file=sys.stderr)
+            return 1
+        for celex in extensions:
             if all(s["celex"] != celex for s in specs):
                 year, number = celex[1:5], int(celex[6:])
                 specs.append({"celex": celex, "jurabk": f"DB (EU) {year}/{number}",
                               "family": "decision", "extends": EXTENDED_ACT,
                               "aliases": [f"Durchführungsbeschluss (EU) {year}/{number}"]})
-    except Exception as exc:  # noqa: BLE001 — the fixed corpus still refreshes
-        print(f"[warn] extension discovery failed: {exc}", file=sys.stderr)
-    wanted = {a for a in args.acts.split(",") if a}
     if wanted:
+        missing = sorted(wanted - {s["celex"] for s in specs})
+        if missing:
+            print(f"[err] unknown EU corpus identifiers: {', '.join(missing)}", file=sys.stderr)
+            return 1
         specs = [s for s in specs if s["celex"] in wanted]
     lisbon = None
     if any(s.get("base") for s in specs):
@@ -848,11 +865,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"  {spec['celex']:>12} {spec['jurabk']:<20} editions "
               f"{len(row['editions'])} articles {len(row['editions'][-1]['articles'])}"
               + (f" warnings {len(row['warnings'])}" if row["warnings"] else ""))
-    if not rows or (failed and not wanted):
+    if not rows or failed:
         print(f"[err] incomplete EU text corpus (failed={failed}); snapshot not written",
               file=sys.stderr)
         return 1
-    out = snapshot_dir("eu_texts")
+    out = snapshot_dir(source)
     write_jsonl(out / "acts.jsonl", rows)
     print(f"{len(rows)} acts, {cellar.requests} requests -> {out}")
     return 0
