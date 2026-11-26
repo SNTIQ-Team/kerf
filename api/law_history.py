@@ -162,6 +162,17 @@ class LawHistoryStore:
     def covers(self, act_id: str) -> bool:
         return act_id in self.acts()
 
+    def has_verified_federal_state(self, act_id: str, day: str) -> bool:
+        """A complete reviewed source edition covers the requested legal date."""
+        if not act_id.startswith("fed_"):
+            return False
+        return self._db().execute(
+            "SELECT 1 FROM states WHERE act_id=? AND complete=1 "
+            "AND valid_from_status='official_verified' AND interval_json IS NOT NULL "
+            "AND valid_from <= ? AND (valid_until IS NULL OR ? < valid_until) "
+            "AND source IN ('gii_daily','reconstruction') LIMIT 1", (act_id, day, day)
+        ).fetchone() is not None
+
     def states(self, act_id: str) -> list[dict[str, Any]]:
         rows = self._db().execute(
             "SELECT * FROM states WHERE act_id=? ORDER BY seq", (act_id,))
