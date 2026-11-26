@@ -52,6 +52,7 @@ export KERF_PUBLISH_TOOLS="$(cd -- "$(dirname -- "$0")/../tools" && pwd -P)"
 "$PYTHON" - "$RELEASE" <<'PY'
 import gzip
 import hashlib
+import os
 import json
 import re
 import sqlite3
@@ -70,8 +71,12 @@ required = (
     "retrospective_history.json", "retrospective_history.sqlite",
     "federal_states/manifest.json", "search.sqlite",
     "citations.json", "citations.sqlite",
-    "decision_passages.json", "decision_passages.sqlite",
+    "decision_passages.json",
 )
+if (root / "decision_passages.sqlite").exists():
+    required += ("decision_passages.sqlite",)
+else:
+    required += ("decision_passages.compact.sqlite", "decision_passages.compact.json", "court_observations.json")
 for name in required:
     path = root / name
     if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
@@ -81,13 +86,10 @@ for name in required:
         continue
     with (root / name).open(encoding="utf-8") as handle:
         json.load(handle)
-with (root / "decision_passages.json").open(encoding="utf-8") as handle:
-    passages = json.load(handle)
-with (root / "decision_passages.sqlite").open("rb") as handle:
-    passage_hash = hashlib.file_digest(handle, "sha256").hexdigest()
-if passages.get("schema_version") != 2 or passages.get("database_sha256") != passage_hash:
-    raise SystemExit("publish validation: decision passage manifest/hash mismatch")
-with sqlite3.connect(f"file:{root / 'decision_passages.sqlite'}?mode=ro", uri=True) as db:
+sys.path.insert(0, str(Path(os.environ["KERF_PUBLISH_TOOLS"]).parent))
+from api.compact_court_store import verified_index
+passage_file, passages = verified_index(root.resolve())
+with sqlite3.connect(passage_file.as_uri() + "?mode=ro&immutable=1", uri=True) as db:
     if db.execute("PRAGMA quick_check").fetchone()[0] != "ok" or db.execute("SELECT count(*) FROM passages").fetchone()[0] != passages.get("passages"):
         raise SystemExit("publish validation: decision passage integrity/count mismatch")
 with (root / "summary.json").open(encoding="utf-8") as handle:
