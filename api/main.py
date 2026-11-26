@@ -75,6 +75,7 @@ try:
 except ImportError:  # optional component; /capabilities still declares it
     materials_router = None
 from api.gii_catalog import GiiCatalogIndex
+from api.rii_routes import router as rii_router
 from api.citation_store import CitationStoreError, query_citations
 from api.search_engine import SearchEngine, normalize_search_text, search_source
 from api.source_freshness import source_health
@@ -107,6 +108,7 @@ FRESHNESS_PATH = (Path(os.environ["KERF_FRESHNESS"])
 
 app = FastAPI(title="Kerf", version="1.5")
 app.include_router(decision_passages_router(lambda: DATA_DIR))
+app.include_router(rii_router)
 # Norm-level Git semantics (log/at/diff/blame) and role-typed legislative
 # materials.  Both validate their own query strings and answer with the typed
 # evidence envelope from api.evidence.
@@ -223,6 +225,8 @@ def capabilities():
                                         "mentions": "every other reference"}},
             "operations": ["search", "acts/{id}/markdown", "acts/{id}/markdown.json", "acts/{id}/history", "changes", "decisions",
                            "decision-passages", "decisions/{id}/passages/{passage_id}", "decisions/{id}/relations",
+                           "rii/decisions/{document}", "rii/decisions/{document}/passages",
+                           "rii/decisions/{document}/passages/{anchor}", "rii/decisions/{document}/source",
                            "norms/resolve", "norms/{id}/log", "norms/{id}/at", "norms/{id}/diff", "norms/{id}/blame",
                            "norms/{id}/materials", "materials"]}
 
