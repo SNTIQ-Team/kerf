@@ -131,6 +131,40 @@ def test_selection_rejects_untrusted_or_mismatched_publication_url(url):
                                            "2006-01-01", "2022-12-31") == []
 
 
+@pytest.mark.parametrize("kind, derives_changes", [
+    ("Gesetz", True), ("Berichtigung", False), ("Bekanntmachung", False),
+    (None, False),
+])
+def test_shared_page_uses_dip_selector_and_publication_kind(tmp_path, kind, derives_changes):
+    item = procedure()
+    notice = item["verkuendung"][0]
+    notice.update(seite="926b", einleitungstext=kind,
+                  pdf_url=notice["pdf_url"].replace("0926.pdf", "0926b.pdf"))
+    selected, = legacy.select_legacy_documents([item], [act()], "2006-01-01", "2006-12-31")
+    assert selected["source_filename"] == "bgbl106s0926b.pdf"
+    assert selected["document_id"] == "bgbl-1-2006-s926b"
+    assert selected["page"] == "926b" and selected["printed_page"] == "926"
+    archive = legacy.LegacyArchive(tmp_path, max_bytes=1000000, min_free_bytes=0)
+    document = legacy.capture_legacy_bytes(selected, pdf_bytes(), archive)
+    assert document["publication_kind"] == (kind or "unknown")
+    assert bool(legacy.build_legacy_inventory([document], archive, [act()])) == derives_changes
+    mismatched = {**notice, "seite": "926a"}
+    with pytest.raises(legacy.SourceIntegrityError, match="identity disagrees"):
+        legacy.legacy_source(mismatched)
+
+
+def test_shared_page_records_have_distinct_document_ids():
+    import copy
+    first = procedure()
+    second = copy.deepcopy(first)
+    for item, suffix in ((first, "a"), (second, "b")):
+        note = item["verkuendung"][0]
+        note.update(seite="926" + suffix, einleitungstext="Gesetz",
+                    pdf_url=note["pdf_url"].replace("0926.pdf", "0926" + suffix + ".pdf"))
+    selected = legacy.select_legacy_documents([second, first], [act()], "2006-01-01", "2006-12-31")
+    assert [row["document_id"] for row in selected] == ["bgbl-1-2006-s926a", "bgbl-1-2006-s926b"]
+
+
 def test_distinct_laws_in_same_issue_remain_distinct_documents():
     second = procedure(page="930")
     second["id"] = "1235"
