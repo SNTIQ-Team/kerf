@@ -73,6 +73,7 @@ from retrospective_history import (                       # noqa: E402
     materialize_history,
     write_sqlite as write_retrospective_sqlite,
 )
+from verified_editions import add_reviewed_editions  # noqa: E402
 from verified_reconstruction import (                     # noqa: E402
     build_from_paths as build_verified_reconstructions,
 )
@@ -1759,6 +1760,7 @@ def main() -> int:
     retrospective_candidates.extend(load_reviewed_candidates())
     verified_reconstructions = build_verified_reconstructions(
         built_at=built_at)
+    add_reviewed_editions(verified_reconstructions, official_states, official_state_objects)
     derived_states = verified_reconstructions.get("state_objects") or {}
     derived_metadata = {}
     for digest, state in sorted(derived_states.items()):
