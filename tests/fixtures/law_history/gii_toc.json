@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "kind": "lexgraph-gii-table-of-contents",
+ "kind": "kerf-gii-table-of-contents",
  "source_policy": {
   "source": "GII index.html per act",
   "url_construction": "never from a bare number; only links published in the captured TOC"

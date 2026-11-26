@@ -62,7 +62,7 @@ def page(body, offset):
 
 def capture(directory, day):
     http = Http(delay=1.0)
-    http.s.headers["User-Agent"] = "SNTIQ-Lexgraph/1 (+https://sntiq.com/)"
+    http.s.headers["User-Agent"] = "SNTIQ-Kerf/1 (+https://sntiq.com/)"
     pages = directory / "pages"
     pages.mkdir(exist_ok=True)
     seen = {}

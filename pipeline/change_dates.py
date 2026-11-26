@@ -31,7 +31,7 @@ from commencement import (
 )
 from promulgation_dates import extract_promulgation_dates
 
-SCHEMA = "lexgraph-change-dates/1"
+SCHEMA = "kerf-change-dates/1"
 ROOT = Path(__file__).resolve().parents[1]
 LEGACY_ID_RE = re.compile(r"bgbl-1-\d{4}-s\d+")
 
@@ -43,13 +43,13 @@ class DocumentTextError(ValueError):
 def default_text_roots() -> list[Path]:
     """Where ``text_object`` paths are resolved, in order."""
     roots = []
-    for key in ("LEXGRAPH_DATA_ROOT",):
+    for key in ("KERF_DATA_ROOT",):
         if os.environ.get(key):
             roots.append(Path(os.environ[key]))
     roots.append(ROOT)
     roots.append(ROOT / "data" / "legacy_bgbl_history")
-    archive = os.environ.get("LEXGRAPH_LEGACY_ARCHIVE") or str(
-        Path.home() / ".local/share/sntiq-legal/lexgraph-archive/data/"
+    archive = os.environ.get("KERF_LEGACY_ARCHIVE") or str(
+        Path.home() / ".local/share/sntiq-legal/kerf-archive/data/"
         "legacy_bgbl_history")
     roots.append(Path(archive))
     return roots

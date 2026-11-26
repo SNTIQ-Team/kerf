@@ -34,8 +34,8 @@ def run_script(tmp_path: Path, eu_rc: int) -> tuple[subprocess.CompletedProcess,
     log = tmp_path / 'calls.log'
     env = {
         'PATH': os.environ.get('PATH', '/usr/bin:/bin'),
-        'LEXGRAPH_PYTHON': str(stub),
-        'LEXGRAPH_REFRESH_LOCK': str(tmp_path / 'refresh.lock'),
+        'KERF_PYTHON': str(stub),
+        'KERF_REFRESH_LOCK': str(tmp_path / 'refresh.lock'),
         'STUB_LOG': str(log),
         'STUB_EU_RC': str(eu_rc),
     }

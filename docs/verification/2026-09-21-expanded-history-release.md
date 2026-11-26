@@ -100,7 +100,7 @@ Rollback releases and the private letter store were retained.
 
 - Backend: `python -m pytest -q tests`: **384 passed**, one existing
   Starlette/httpx deprecation warning.
-- Frontend Lexgraph tests: **83 passed**.
+- Frontend Kerf tests: **83 passed**.
 - Next.js production build, TypeScript and lint: passed. Existing `::highlight`
   optimizer and Node loader deprecation warnings remain.
 - Both repositories' tracked-file `git diff --check`: passed.

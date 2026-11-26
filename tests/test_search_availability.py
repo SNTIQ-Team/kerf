@@ -58,6 +58,6 @@ def test_http_rejects_ignored_dates_and_duplicate_constraints():
 def test_deployed_composition_root_keeps_constraint_checks():
     from fastapi.testclient import TestClient
     from api.server import server
-    response = TestClient(server, root_path='/lex').get('/search?q=x&known_at=2020-01-01')
+    response = TestClient(server, root_path='/kerf').get('/search?q=x&known_at=2020-01-01')
     assert response.status_code == 422
     assert response.json()['status'] == 'unsupported_temporal_request'

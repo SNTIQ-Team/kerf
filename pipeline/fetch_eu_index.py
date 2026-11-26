@@ -1,6 +1,6 @@
 """Full index of in-force EU directives and (basic) regulations from CELLAR.
 
-The curated Lexgraph corpus tracks ~47 instruments in depth; this index adds
+The curated Kerf corpus tracks ~47 instruments in depth; this index adds
 BREADTH: every directive in force (incl. delegated/implementing, ~1.3k) and
 every basic Council/EP regulation in force (~6.6k) as metadata rows — CELEX,
 type, document date, German title (English fallback). No texts: EUR-Lex is
@@ -24,7 +24,7 @@ import requests
 from common import snapshot_dir, write_jsonl
 
 ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql"
-UA = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
+UA = "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)"
 PAGE = 1000
 
 TYPES = ["DIR", "DIR_DEL", "DIR_IMPL", "REG"]

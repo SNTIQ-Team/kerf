@@ -101,7 +101,7 @@ garbage collection.
 
 ## Runnable commands
 
-Run these commands from the root of the Lexgraph checkout.
+Run these commands from the root of the Kerf checkout.
 
 ```sh
 # Read-only inventory and exact gzip budget calculation.
@@ -126,12 +126,12 @@ Run these commands from the root of the Lexgraph checkout.
 Use `--snapshots-root /absolute/path/to/snapshots` for an isolated copy or another
 checkout. `--details` includes every excluded path in the JSON report. Omitted
 `--apply` always means dry-run for compact/restore. The default lock is
-`$LEXGRAPH_REFRESH_LOCK` when set, otherwise `$XDG_RUNTIME_DIR/lexgraph-refresh.lock`
-(or `/tmp/lexgraph-refresh.lock`) locally and `/run/lock/lexgraph-refresh.lock`
+`$KERF_REFRESH_LOCK` when set, otherwise `$XDG_RUNTIME_DIR/kerf-refresh.lock`
+(or `/tmp/kerf-refresh.lock`) locally and `/run/lock/kerf-refresh.lock`
 when the checkout is under `/srv`.
 
 Inside an existing refresh transaction with an inherited, locked descriptor 9,
-run the compactor with both `--lock-file /run/lock/lexgraph-refresh.lock` and
+run the compactor with both `--lock-file /run/lock/kerf-refresh.lock` and
 `--lock-fd 9`. The descriptor must name that exact regular lock file. The
 compactor keeps the inherited lock held when it returns.
 

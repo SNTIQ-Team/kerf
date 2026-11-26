@@ -47,7 +47,7 @@ from common import latest_snapshot, read_jsonl, snapshot_dir, write_jsonl  # noq
 import fetch_bayern_wayback as wayback  # noqa: E402
 from tools import bavarian_history  # noqa: E402  (the workstation Bavarian parsers)
 
-UA = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
+UA = "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)"
 ZIP_URL = "https://www.gesetze-bayern.de/Content/Zip/{key}"
 CDX = ("https://web.archive.org/cdx/search/cdx?url=gesetze-bayern.de/Content/Zip/{key}"
        "&output=json&filter=statuscode:200&collapse=digest&fl=timestamp,digest,length,original")

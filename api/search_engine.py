@@ -1,4 +1,4 @@
-"""Deterministic full-text search for the static Lexgraph data plane.
+"""Deterministic full-text search for the static Kerf data plane.
 
 The build step writes ``search.sqlite`` next to the other ``web/data``
 artifacts.  The API opens it read-only and lets SQLite FTS5 do the candidate
@@ -328,7 +328,7 @@ class SearchEngine:
         # metadata. Version 2 has the same physical schema during rollouts.
         if not version or version[0] not in {"2", SCHEMA_VERSION}:
             self.conn.close()
-            raise RuntimeError("unsupported Lexgraph search index schema")
+            raise RuntimeError("unsupported Kerf search index schema")
         self.legacy_sources = version[0] == "2"
         self.synonym_groups = self._load_synonyms()
         self.act_aliases = self._load_act_aliases()

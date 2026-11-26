@@ -1,4 +1,4 @@
-"""Lexgraph — temporal legislation and procedure API.
+"""Kerf — temporal legislation and procedure API.
 
 Serves the pre-built web data plane (`web/data/*.json`) as a small, honest
 REST API. It does NOT recompute anything: `tools/build_web_data.py` is the
@@ -40,7 +40,7 @@ Endpoints (see docs/API.md → "C) REST API"):
 
 Small JSON metadata is loaded lazily and cached in-process; large search and
 citation indexes are queried read-only in SQLite. The dataset is static per
-deploy. Override the data directory with LEXGRAPH_DATA=/path/to/web/data.
+deploy. Override the data directory with KERF_DATA=/path/to/web/data.
 """
 from __future__ import annotations
 
@@ -96,16 +96,16 @@ from api.retrospective_store import (
     validate_manifest as validate_retrospective_manifest,
 )
 
-# Deployment override: LEXGRAPH_DATA=/path/to/web/data (default: repo layout)
+# Deployment override: KERF_DATA=/path/to/web/data (default: repo layout)
 DATA_DIR = Path(os.environ.get(
-    "LEXGRAPH_DATA",
+    "KERF_DATA",
     Path(__file__).resolve().parent.parent / "web" / "data")).resolve()
 READER_DIR = Path(os.environ.get(
-    "LEX_READER_DIR", Path(__file__).resolve().parent.parent / "data" / "reader"))
-FRESHNESS_PATH = (Path(os.environ["LEXGRAPH_FRESHNESS"])
-                  if os.environ.get("LEXGRAPH_FRESHNESS") else None)
+    "KERF_READER_DIR", Path(__file__).resolve().parent.parent / "data" / "reader"))
+FRESHNESS_PATH = (Path(os.environ["KERF_FRESHNESS"])
+                  if os.environ.get("KERF_FRESHNESS") else None)
 
-app = FastAPI(title="Lexgraph", version="1.5")
+app = FastAPI(title="Kerf", version="1.5")
 app.include_router(decision_passages_router(lambda: DATA_DIR))
 # Norm-level Git semantics (log/at/diff/blame) and role-typed legislative
 # materials.  Both validate their own query strings and answer with the typed
@@ -122,7 +122,7 @@ _SELF_VALIDATING_PREFIXES = ("/norms/", "/materials")
 _SELF_VALIDATING_PATHS = re.compile(r"/acts/[a-z0-9_]+/(?:changes|versions)")
 # Transport-only cache keys that deployed clients append (``?t=<ms>``,
 # ``/digest?d=<day>``).  They never select content; they are accepted but
-# disclosed in X-Lexgraph-Ignored-Arguments instead of being silently dropped.
+# disclosed in X-Kerf-Ignored-Arguments instead of being silently dropped.
 _CACHE_KEYS = set(CACHE_KEY_ARGUMENTS)
 _ROUTE_CACHE_KEYS = {"/digest": {"d"}}
 
@@ -171,14 +171,14 @@ async def search_contract(request: Request, call_next):
                     payload["historical_alternative"] = "/norms/{id}/at?date="
                 return JSONResponse(status_code=422, content=payload)
     snapshot = corpus_snapshot()
-    requested = request.headers.get("if-lexgraph-snapshot")
+    requested = request.headers.get("if-kerf-snapshot")
     if requested and requested != snapshot:
         return JSONResponse(status_code=409, content={"status": "stale_snapshot", "snapshot": snapshot})
     response = await call_next(request)
     if snapshot:
-        response.headers["X-Lexgraph-Snapshot"] = snapshot
+        response.headers["X-Kerf-Snapshot"] = snapshot
     if ignored:
-        response.headers["X-Lexgraph-Ignored-Arguments"] = ",".join(ignored)
+        response.headers["X-Kerf-Ignored-Arguments"] = ",".join(ignored)
     return response
 
 
@@ -190,8 +190,8 @@ def corpus_snapshot():
 
 @app.get("/capabilities")
 def capabilities():
-    return {"schema_version": 1, "service": "lexgraph",
-            "snapshot": corpus_snapshot(), "snapshot_precondition": "If-Lexgraph-Snapshot",
+    return {"schema_version": 1, "service": "kerf",
+            "snapshot": corpus_snapshot(), "snapshot_precondition": "If-Kerf-Snapshot",
             "decision_passage_coverage": decision_passage_coverage(DATA_DIR),
             "bavarian_migration_guidance": {
                 "collection": "/bavaria/migration-guidance",
@@ -453,9 +453,9 @@ def health():
 def version():
     """Build/version + built_at from summary.json."""
     summary = _load("summary")
-    return {"dataset": "Lexgraph", "version": app.version,
+    return {"dataset": "Kerf", "version": app.version,
             "built_at": summary.get("built_at"),
-            "source": "https://github.com/SNTIQ-Team/lexgraph"}
+            "source": "https://github.com/SNTIQ-Team/kerf"}
 
 
 @app.get("/stats")
@@ -920,11 +920,11 @@ def _changes_atom(payload: dict, *, act_id: str | None = None,
     ET.register_namespace("", namespace)
     tag = lambda name: f"{{{namespace}}}{name}"
     feed = ET.Element(tag("feed"))
-    title = "Lexgraph — amtliche Änderungen"
+    title = "Kerf — amtliche Änderungen"
     if act_id:
         title += f" — {act_id}"
-    canonical = (f"https://api.sntiq.com/lex/acts/{act_id}/changes.atom"
-                 if act_id else "https://api.sntiq.com/lex/changes.atom")
+    canonical = (f"https://api.sntiq.com/kerf/acts/{act_id}/changes.atom"
+                 if act_id else "https://api.sntiq.com/kerf/changes.atom")
     ET.SubElement(feed, tag("title")).text = title
     ET.SubElement(feed, tag("id")).text = canonical
     ET.SubElement(feed, tag("updated")).text = str(payload["built_at"])
@@ -933,15 +933,15 @@ def _changes_atom(payload: dict, *, act_id: str | None = None,
         "type": "application/atom+xml",
     })
     ET.SubElement(feed, tag("link"), {
-        "rel": "alternate", "href": "https://sntiq.com/dt/lexgraph",
+        "rel": "alternate", "href": "https://sntiq.com/dt/kerf",
         "type": "text/html",
     })
     author = ET.SubElement(feed, tag("author"))
-    ET.SubElement(author, tag("name")).text = "SNTIQ Lexgraph"
+    ET.SubElement(author, tag("name")).text = "SNTIQ Kerf"
     for row in list(payload.get("events") or [])[:limit]:
         entry = ET.SubElement(feed, tag("entry"))
         entry_id = str(row.get("id") or row.get("event_id") or "")
-        ET.SubElement(entry, tag("id")).text = f"urn:lexgraph:{entry_id}"
+        ET.SubElement(entry, tag("id")).text = f"urn:kerf:{entry_id}"
         heading = str(row.get("article_heading") or "Änderung")
         ET.SubElement(entry, tag("title")).text = (
             f"{row.get('jurabk') or row.get('act_id')}: {heading}")
@@ -952,7 +952,7 @@ def _changes_atom(payload: dict, *, act_id: str | None = None,
         document_id = str(row.get("document_id") or "")
         ET.SubElement(entry, tag("link"), {
             "rel": "alternate",
-            "href": f"https://api.sntiq.com/lex/amending-acts/{document_id}",
+            "href": f"https://api.sntiq.com/kerf/amending-acts/{document_id}",
             "type": "application/json",
         })
         if row.get("official_html_url"):
@@ -1080,44 +1080,44 @@ def act_markdown(
 
     headers = {
         "Cache-Control": "public, max-age=3600",
-        "X-Lexgraph-Requested-Date": result["requested_at"],
-        "X-Lexgraph-Resolved-Date": result["resolved_at"],
-        "X-Lexgraph-Head-Date": result["head_date"],
-        "X-Lexgraph-Exact": str(result["exact"]).lower(),
-        "X-Lexgraph-Archive-Status": result["archive_status"],
-        "X-Lexgraph-Complete": str(result["complete"]).lower(),
-        "X-Lexgraph-Source-Exact": str(result["source_exact"]).lower(),
-        "X-Lexgraph-Verified-Reconstruction": str(
+        "X-Kerf-Requested-Date": result["requested_at"],
+        "X-Kerf-Resolved-Date": result["resolved_at"],
+        "X-Kerf-Head-Date": result["head_date"],
+        "X-Kerf-Exact": str(result["exact"]).lower(),
+        "X-Kerf-Archive-Status": result["archive_status"],
+        "X-Kerf-Complete": str(result["complete"]).lower(),
+        "X-Kerf-Source-Exact": str(result["source_exact"]).lower(),
+        "X-Kerf-Verified-Reconstruction": str(
             result["verified_reconstruction"]).lower(),
-        "X-Lexgraph-Missing-Transitions": str(len(result["gaps"])),
+        "X-Kerf-Missing-Transitions": str(len(result["gaps"])),
     }
     if result.get("date_basis"):
-        headers["X-Lexgraph-Date-Basis"] = str(result["date_basis"])
+        headers["X-Kerf-Date-Basis"] = str(result["date_basis"])
     if result.get("state_sha256"):
-        headers["X-Lexgraph-State-SHA256"] = str(result["state_sha256"])
+        headers["X-Kerf-State-SHA256"] = str(result["state_sha256"])
     if result.get("source_url"):
-        headers["X-Lexgraph-Source-URL"] = str(result["source_url"])
+        headers["X-Kerf-Source-URL"] = str(result["source_url"])
     if result.get("legal_effect_verified") is True:
-        headers["X-Lexgraph-Legal-Effect-Verified"] = "true"
+        headers["X-Kerf-Legal-Effect-Verified"] = "true"
     if result.get("published_at"):
-        headers["X-Lexgraph-Published-Date"] = str(result["published_at"])
+        headers["X-Kerf-Published-Date"] = str(result["published_at"])
     if result.get("effective_at"):
-        headers["X-Lexgraph-Effective-Date"] = str(result["effective_at"])
+        headers["X-Kerf-Effective-Date"] = str(result["effective_at"])
     if result.get("review_id"):
-        headers["X-Lexgraph-Review-ID"] = str(result["review_id"])
+        headers["X-Kerf-Review-ID"] = str(result["review_id"])
     if result.get("procedure_id"):
-        headers["X-Lexgraph-Procedure-ID"] = str(result["procedure_id"])
+        headers["X-Kerf-Procedure-ID"] = str(result["procedure_id"])
     retrospective_headers = {
-        "X-Lexgraph-As-Of": "as_of",
-        "X-Lexgraph-Effective-From": "effective_from",
-        "X-Lexgraph-Effective-To": "effective_to",
-        "X-Lexgraph-Knowledge-From": "knowledge_from",
-        "X-Lexgraph-Knowledge-To": "knowledge_to",
-        "X-Lexgraph-Observed-Date": "observed_at",
-        "X-Lexgraph-Text-Status": "text_status",
-        "X-Lexgraph-Date-Status": "date_status",
-        "X-Lexgraph-Verification": "verification",
-        "X-Lexgraph-Verified-Through-Observed-Date":
+        "X-Kerf-As-Of": "as_of",
+        "X-Kerf-Effective-From": "effective_from",
+        "X-Kerf-Effective-To": "effective_to",
+        "X-Kerf-Knowledge-From": "knowledge_from",
+        "X-Kerf-Knowledge-To": "knowledge_to",
+        "X-Kerf-Observed-Date": "observed_at",
+        "X-Kerf-Text-Status": "text_status",
+        "X-Kerf-Date-Status": "date_status",
+        "X-Kerf-Verification": "verification",
+        "X-Kerf-Verified-Through-Observed-Date":
             "verified_through_observed_at",
     }
     for header, field in retrospective_headers.items():
@@ -1132,7 +1132,7 @@ def act_markdown(
             "reason": "additional_gaps",
             "label": f"{len(result['gaps']) - len(header_gaps)} more gaps",
         })
-    headers["X-Lexgraph-Archive-Gaps"] = json.dumps(
+    headers["X-Kerf-Archive-Gaps"] = json.dumps(
         header_gaps, ensure_ascii=True, separators=(",", ":"))
     if download:
         headers["Content-Disposition"] = (
@@ -1142,7 +1142,7 @@ def act_markdown(
 
 
 def parse_front_matter(markdown: str) -> tuple[dict, str]:
-    """Split Lexgraph's Markdown front matter into typed fields.
+    """Split Kerf's Markdown front matter into typed fields.
 
     The exporter writes one ``key: value`` per line with JSON scalars; bare
     ISO dates and booleans are accepted too.  Unknown syntax is kept as the
@@ -1187,7 +1187,7 @@ def act_markdown_json(
     markdown = rendered.body.decode("utf-8")
     front, body = parse_front_matter(markdown)
     headers = {key.lower(): value for key, value in rendered.headers.items()
-               if key.lower().startswith("x-lexgraph-")}
+               if key.lower().startswith("x-kerf-")}
     warnings = []
     if front.get("source_exact") is False:
         warnings.append("text is not an exact official source capture"
@@ -1202,7 +1202,7 @@ def act_markdown_json(
     if gaps:
         warnings.append(f"{gaps} known coverage gap(s) in this snapshot")
     return JSONResponse({
-        "schema": "lexgraph-evidence-envelope/1",
+        "schema": "kerf-evidence-envelope/1",
         "status": "ok" if front.get("complete", True) else "partial",
         "operation": "act_markdown",
         "request_scope": {"act_id": act_id, "at": at.isoformat() if at else None,
@@ -1235,7 +1235,7 @@ def retrospective_sqlite():
         raise HTTPException(404, "retrospective SQLite database is not built")
     return FileResponse(
         path, media_type="application/vnd.sqlite3",
-        filename="lexgraph-retrospective-history.sqlite",
+        filename="kerf-retrospective-history.sqlite",
         headers={"Cache-Control": "public, max-age=3600"})
 
 
@@ -1394,7 +1394,7 @@ def amendment_fates(
         procedure_id: str | None = Query(
             None, description="official DIP procedure id"),
         validation_id: str | None = Query(
-            None, description="Lexgraph validation record id"),
+            None, description="Kerf validation record id"),
 ):
     """Reviewed parliamentary document chains and current-law checks."""
     data = _load("amendment_fates")

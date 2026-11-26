@@ -17,9 +17,9 @@ except ImportError:
     from snapshot_storage import open_snapshot_text
 
 ROOT = Path(__file__).resolve().parent.parent
-# LEXGRAPH_SNAPSHOTS lets workstation tools (deploy/legacy-rebuild-push.sh)
+# KERF_SNAPSHOTS lets workstation tools (deploy/legacy-rebuild-push.sh)
 # read the pulled VPS snapshots instead of this checkout's own.
-SNAPSHOTS = Path(os.environ.get("LEXGRAPH_SNAPSHOTS") or ROOT / "data" / "snapshots")
+SNAPSHOTS = Path(os.environ.get("KERF_SNAPSHOTS") or ROOT / "data" / "snapshots")
 
 
 def snapshot_dir(source: str, day: str | None = None) -> Path:
@@ -83,7 +83,7 @@ class Http:
         self.retries = retries
         self.s = requests.Session()
         self.s.headers["User-Agent"] = (
-            "Amtsgraph/1.0 (open-data pipeline; contact: see repo)")
+            "Taper/1.0 (open-data pipeline; contact: see repo)")
         self._last = 0.0
 
     def get(self, url: str, **kw) -> requests.Response:

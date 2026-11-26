@@ -40,7 +40,7 @@ the ledger.
 
 Usage::
 
-    LEXGRAPH_WEB_DATA=/path/to/Gesetz/web/data \
+    KERF_WEB_DATA=/path/to/Gesetz/web/data \
     python3 pipeline/fetch_history_wayback.py [--acts fed_sgb_2,fed_gg] \
         [--kinds act_html,xml_zip] [--max-requests 500] [--max-bytes 2G]
 """

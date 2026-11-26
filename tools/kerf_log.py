@@ -1,15 +1,15 @@
-"""`git log` for a German act — every layer of Lexgraph in one view.
+"""`git log` for a German act — every layer of Kerf in one view.
 
-    python3 tools/lex_log.py AsylbLG          # federal corpus
-    python3 tools/lex_log.py AufnG            # Bavarian corpus
-    python3 tools/lex_log.py "SGB 2" --all
+    python3 tools/kerf_log.py AsylbLG          # federal corpus
+    python3 tools/kerf_log.py AufnG            # Bavarian corpus
+    python3 tools/kerf_log.py "SGB 2" --all
 
 Federal sections: HEAD (GII), exact content-addressed GII observations,
 observed state-pair diffs, separately verified BGBl/DIP legal transitions,
 and pending patches in the Bundestag pipeline (DIP, status ladder). An
 observation is never labelled as a legal effective date. Private Buzer
 candidates are shown only with the explicit
-``LEXGRAPH_INCLUDE_QUARANTINED=1`` research switch.
+``KERF_INCLUDE_QUARANTINED=1`` research switch.
 Bavarian sections: HEAD (BAYERN.RECHT XML), Landtag WP19 bills touching
 the act, GVBl/BayMBl promulgations (BayRS-Gliederungsnummer join),
 back-history (ffn Fortführungsnachweis + XML aenderungsverlauf).
@@ -59,7 +59,7 @@ def load(source: str, name: str) -> list[dict]:
 
 
 def include_private_candidates() -> bool:
-    return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
+    return os.environ.get("KERF_INCLUDE_QUARANTINED") == "1"
 
 
 def official_history(jurabk: str) -> dict[str, list[dict]]:

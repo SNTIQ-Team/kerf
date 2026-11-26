@@ -1,7 +1,7 @@
 """Typed notes from the GII ``Stand`` block (standangabe entries).
 
 GII publishes each consolidation with typed status entries, flattened by
-Lexgraph's fetcher into ``"Neuf: … | Stand: … | Hinweis: … | Sonst: …"``.
+Kerf's fetcher into ``"Neuf: … | Stand: … | Hinweis: … | Sonst: …"``.
 The wording carries legally relevant, *source-declared* facts that were so
 far only exposed as free text:
 
@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-NOTE_SCHEMA = "lexgraph-gii-stand-note/1"
+NOTE_SCHEMA = "kerf-gii-stand-note/1"
 
 _ENTRY = re.compile(r"(?:^|\s\|\s)(Stand|Neuf|Hinweis|Sonst|Aufh|Ausfertigung)"
                     r"\s*:\s*")

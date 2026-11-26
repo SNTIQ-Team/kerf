@@ -5,14 +5,14 @@ Store layout (written by ``tools/build_materials.py``)::
     <materials dir>/index.json        documents, counts, sha256 of the database
     <materials dir>/materials.sqlite  fragments + relation links
 
-The materials directory is ``$LEX_MATERIALS_DIR`` when that variable is set,
+The materials directory is ``$KERF_MATERIALS_DIR`` when that variable is set,
 otherwise ``<data_dir>/materials``.  The service is memory-light: the
 database is opened read-only (``mode=ro&immutable=1``) with one short-lived
 connection per request, only the fragments of the requested page are
 decoded, and the only cached state is the sha256 verdict per database file
 (keyed by path, inode, size and mtime).
 
-Every response is a ``lexgraph-evidence-envelope/1`` (``api.evidence``):
+Every response is a ``kerf-evidence-envelope/1`` (``api.evidence``):
 
 * ``unavailable`` (HTTP 503, ``total: null``) when the store is missing or
   its index is unreadable;
@@ -44,10 +44,10 @@ from api.legislative_materials import (RELATION_TYPES, ROLES, compact_norm,
                                        expand_norm, mention_context,
                                        parse_citation, relation_row)
 
-INDEX_SCHEMA = "lexgraph-materials-index/2"
-DB_SCHEMA = "lexgraph-materials-sqlite/1"
+INDEX_SCHEMA = "kerf-materials-index/2"
+DB_SCHEMA = "kerf-materials-sqlite/1"
 DB_FILE = "materials.sqlite"
-ENV_DIR = "LEX_MATERIALS_DIR"
+ENV_DIR = "KERF_MATERIALS_DIR"
 MAX_LIMIT = 200
 DEFAULT_LIMIT = 50
 SEARCH_ARGUMENTS = frozenset({"drucksache", "role", "target", "relation",

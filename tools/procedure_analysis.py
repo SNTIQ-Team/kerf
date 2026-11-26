@@ -725,7 +725,7 @@ def _analyse_retrospective(row: dict, config: dict, fate: dict,
                "Die behauptete Nichtübernahme wird am verkündeten Gesetz geprüft.", chain_urls),
         _check("consolidated_current_law_checked", "current_law", "Geltendes Recht mechanisch geprüft",
                "passed" if current_passed else "failed",
-               ("Alle deklarierten Kontrollen im aktuellen Lexgraph-Korpus sind bestanden."
+               ("Alle deklarierten Kontrollen im aktuellen Kerf-Korpus sind bestanden."
                 if current_passed else
                 "Mindestens eine deklarierte Kontrolle des aktuellen Normtexts ist nicht bestanden."),
                [source.get("url") for source in fate.get("current_sources") or []

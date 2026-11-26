@@ -1,8 +1,8 @@
 """Complete index of electronic BGBl I issues (recht.bund.de, 2023+).
 
-Lexgraph used to capture only the BGBl documents that GII's "zuletzt
+Kerf used to capture only the BGBl documents that GII's "zuletzt
 geändert durch" note cited at some point, so an amendment that was never an
-act's *latest* amendment during Lexgraph's lifetime was missing from the
+act's *latest* amendment during Kerf's lifetime was missing from the
 event history.  Since 2023 every promulgation has an official page
 (``/bgbl/1/<year>/<nr>/VO.html``) whose metadata lists the FNA numbers of
 every amended act.  This tool enumerates every issue of a year, parses that

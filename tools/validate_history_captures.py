@@ -3,10 +3,10 @@
 Three checks, all by :func:`api.history_identity.norm_identity`:
 
 1. **daily-state check** - every parsed capture whose capture date falls into
-   the period covered by Lexgraph's daily GII states
+   the period covered by Kerf's daily GII states
    (``web/data/acts/<id>.json`` ``official_states``) is compared with the
    state observed on or before that date and with the best-matching state of
-   the period (GII may publish a build a day before Lexgraph observes it).
+   the period (GII may publish a build a day before Kerf observes it).
    Match rate = reference norms whose identity occurs in the capture.
 2. **xml cross-check** - every archived ``xml.zip`` (parsed with
    ``fetch_gii.parse_law``) is compared with the HTML captures of the same
@@ -14,11 +14,11 @@ Three checks, all by :func:`api.history_identity.norm_identity`:
    layouts (2012+) against official XML of the same moment.
 3. **statistics** - captures listed/fetched/failed, parsed complete/
    incomplete, distinct act-level texts and distinct norm versions compared
-   with the distinct norm identities over Lexgraph's official states.
+   with the distinct norm identities over Kerf's official states.
 
 Usage::
 
-    LEXGRAPH_WEB_DATA=/path/to/Gesetz/web/data \
+    KERF_WEB_DATA=/path/to/Gesetz/web/data \
     python3 tools/validate_history_captures.py [--acts fed_sgb_2] \
         [--json report.json] [--show-mismatches 5]
 """
@@ -156,8 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         for obj in objects.values():
             lex_ids.update(identities(obj["norms"]))
         period_start = states[0]["observed_at"] if states else None
-        entry: dict = {"lexgraph_states": len(objects),
-                       "lexgraph_distinct_norm_versions": len(lex_ids),
+        entry: dict = {"kerf_states": len(objects),
+                       "kerf_distinct_norm_versions": len(lex_ids),
                        "period_start": period_start}
 
         # 1. daily-state check
@@ -247,8 +247,8 @@ def main(argv: list[str] | None = None) -> int:
             "layouts": dict(Counter(r.get("layout") for r in records)),
             "distinct_act_texts": len(act_texts),
             "distinct_norm_versions": len(all_ids),
-            "new_vs_lexgraph": len(all_ids - lex_ids),
-            "lexgraph_covered": len(lex_ids & all_ids),
+            "new_vs_kerf": len(all_ids - lex_ids),
+            "kerf_covered": len(lex_ids & all_ids),
             "earliest_capture": min(dates) if dates else None,
             "latest_capture": max(dates) if dates else None,
         })
@@ -266,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"{check['captured_at'][:10]}")
 
     print(f"{'act':18} {'listed':>6} {'ok':>4} {'dup':>4} {'fail':>4} {'parsed':>6} "
-          f"{'incompl':>7} {'acttexts':>8} {'normvers':>8} {'lexgraph':>8} "
+          f"{'incompl':>7} {'acttexts':>8} {'normvers':>8} {'kerf':>8} "
           f"{'new':>5} {'wayback newest in period':>25} "
           f"{'neuris newest':>21} {'xml-check':>9} captures")
     for act_id, entry, newest, xml_rates in table:
@@ -279,8 +279,8 @@ def main(argv: list[str] | None = None) -> int:
               f"{entry['parsed_wayback'] + entry['parsed_neuris']:6} "
               f"{entry['incomplete']:7} {entry['distinct_act_texts']:8} "
               f"{entry['distinct_norm_versions']:8} "
-              f"{entry['lexgraph_distinct_norm_versions']:8} "
-              f"{entry['new_vs_lexgraph']:5} {cell(newest['wayback_gii']):>25} "
+              f"{entry['kerf_distinct_norm_versions']:8} "
+              f"{entry['new_vs_kerf']:5} {cell(newest['wayback_gii']):>25} "
               f"{cell(newest['neuris']):>21} {xml_s:>9} "
               f"{(entry['earliest_capture'] or '')[:10]}..{(entry['latest_capture'] or '')[:10]}")
         if args.show_mismatches:

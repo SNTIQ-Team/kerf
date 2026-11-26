@@ -439,8 +439,10 @@ def _init_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version not in (0, 1, 2, 3, SCHEMA_VERSION):
         raise RuntimeError(f"database schema v{version} != code schema v{SCHEMA_VERSION}")
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name='amtsgraph_courts'").fetchone():
+        conn.execute("ALTER TABLE amtsgraph_courts RENAME TO taper_courts")
     if version in (1, 2):
-        # v2 -> v3: decisions.court_id becomes the Amtsgraph id (when mapped); the corpus slug moves to
+        # v2 -> v3: decisions.court_id becomes the Taper id (when mapped); the corpus slug moves to
         # decisions.court_slug (alias, used in synthetic decision ids and citation linking).
         columns = {r[1] for r in conn.execute("PRAGMA table_info(decisions)")}
         if columns and "court_slug" not in columns:

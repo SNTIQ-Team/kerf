@@ -14,7 +14,7 @@ files produced by QfsWriter load in the stock qfs_visualizer (nodes, edges
 incl. hyperedges with roles, blobs, beliefs, states, transitions, worlds,
 timeline via bornTick).
 
-Semantic mapping used by Lexgraph (see docs/VISION.md):
+Semantic mapping used by Kerf (see docs/VISION.md):
     QNode      norm / act / institution / origin (label -> Blob)
     QEdge      AMENDS / IMPLEMENTS / REFERS_TO ... (delta, trust)
     QBelief    "norm is in force" claim: pTrue=gilt, pBoth=contested/

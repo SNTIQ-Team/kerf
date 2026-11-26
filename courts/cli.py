@@ -381,8 +381,8 @@ def cmd_ecli_codes(args) -> int:
     logs.mkdir(parents=True, exist_ok=True)
     path = logs / ("ecli-codes-report.json" if not args.dry_run else "ecli-codes-report.dry-run.json")
     path.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
-    summary = {k: v for k, v in report.items() if k not in ("assigned", "ambiguous", "codes_new_to_amtsgraph")}
-    summary["codes_new_to_amtsgraph"] = len(report["codes_new_to_amtsgraph"])
+    summary = {k: v for k, v in report.items() if k not in ("assigned", "ambiguous", "codes_new_to_taper")}
+    summary["codes_new_to_taper"] = len(report["codes_new_to_taper"])
     summary["ambiguous"] = sorted(report["ambiguous"])
     summary["report"] = str(path)
     summary["stored"] = not args.dry_run
@@ -516,7 +516,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--source", help="one source (default: all)")
     p.add_argument("--decision", action="append", help="only these decision ids (repeatable)")
     p.add_argument("--stale-norm-ids", action="store_true",
-                   help="only decisions with federal norm ids that the Lexgraph resolver does not know")
+                   help="only decisions with federal norm ids that the Kerf resolver does not know")
     p.add_argument("--force", action="store_true", help="rewrite even if text and parser version are unchanged")
     p.add_argument("--include-skipped", action="store_true",
                    help="also re-examine skipped duplicates (store from their capture, or re-queue them when the "
@@ -563,9 +563,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--rerun", type=int, help="re-check exactly the pairs of an earlier run (offline)")
     p.add_argument("--interval", type=float, default=8.0, help="seconds between requests per host (default 8)")
     p.set_defaults(func=cmd_verify)
-    p = sub.add_parser("check-norm-ids", help="every relation norm id must be canonical for Lexgraph's resolver")
+    p = sub.add_parser("check-norm-ids", help="every relation norm id must be canonical for Kerf's resolver")
     p.set_defaults(func=cmd_check_norm_ids)
-    p = sub.add_parser("courts-map", help="map corpus court slugs to Amtsgraph court ids (court:de:<XJustiz-ID>)")
+    p = sub.add_parser("courts-map", help="map corpus court slugs to Taper court ids (court:de:<XJustiz-ID>)")
     p.add_argument("--file", help="use a saved /v1/courts/mapping payload instead of fetching it")
     p.set_defaults(func=cmd_courts_map)
     p = sub.add_parser("ingest-capture", help="ingest ONE decision page saved from the operator's browser "

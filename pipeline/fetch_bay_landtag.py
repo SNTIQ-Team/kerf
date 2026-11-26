@@ -84,7 +84,7 @@ def iso(d: str) -> str | None:
 def new_http() -> Http:
     http = Http(delay=0.8)
     http.s.headers["User-Agent"] = (
-        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)")
+        "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)")
     return http
 
 

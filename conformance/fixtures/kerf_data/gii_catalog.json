@@ -2,7 +2,7 @@
 "schema_version": 1,
 "built_at": "2026-09-28",
 "total": 6137,
-"note": "trimmed snapshot of Lexgraph web/data/gii_catalog.json for the conformance suite (abbrev only)",
+"note": "trimmed snapshot of Kerf web/data/gii_catalog.json for the conformance suite (abbrev only)",
 "acts": [
 {
 "abbrev": "1-dm-goldm_nzg"

@@ -63,7 +63,7 @@ class MixedIndexTests(unittest.TestCase):
    self.assertEqual(data['source']['observed_at'],'2026-09-27T08:00:00+00:00')
    raw=client.get('/decisions/eu-example/source');self.assertEqual(raw.content,EU);self.assertIn('application/xhtml+xml',raw.headers['content-type'])
    self.assertIn('filename="eu-example.xhtml"',raw.headers['content-disposition'])
-   self.assertEqual(raw.headers['x-lexgraph-source-sha256'],digest)
+   self.assertEqual(raw.headers['x-kerf-source-sha256'],digest)
 
 class PortalTests(unittest.TestCase):
  def test_portal_json_checks_case_court_date_and_does_not_invent_numbering(self):

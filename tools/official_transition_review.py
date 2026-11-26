@@ -98,7 +98,7 @@ def article_scope_is_ambiguous(reference: str, explanation: str) -> bool:
 
     GII's ``stand`` often says only ``Art. 1`` while DIP assigns different
     dates to individual Nummern/Buchstaben inside that article.  One matching
-    exception date is still not enough: without the sub-reference Lexgraph
+    exception date is still not enough: without the sub-reference Kerf
     cannot know whether the observed norm change belongs to that exception.
     """
     ref = _ARTICLE_REF.match(str(reference or "").strip())
@@ -285,7 +285,7 @@ def review_transitions(transitions: Iterable[dict],
                  "state_sha256": transition["state_sha256"]},
             ],
             "derivation": {
-                "tool": "lexgraph-official-transition-review",
+                "tool": "kerf-official-transition-review",
                 "algorithm": "gii-state-pair+bgbl-final-command+dip-commencement",
                 "effective_dates_inferred": False,
             },

@@ -16,7 +16,7 @@ from api.server import INDEX_HTML, SERVICE_INDEX
 def _payload() -> dict:
     return {
         "schema_version": 1,
-        "kind": "lexgraph-reviewed-verified-reconstructions",
+        "kind": "kerf-reviewed-verified-reconstructions",
         "built_at": "2026-07-16T12:00:00Z",
         "source_policy": {"official_only": True},
         "reconstructions": [{
@@ -52,7 +52,7 @@ def test_verified_reconstructions_route_filters_without_crossing_boundary(
     result = response.json()
 
     assert result["kind"] == \
-        "lexgraph-reviewed-verified-reconstructions"
+        "kerf-reviewed-verified-reconstructions"
     assert result["total"] == 1
     row = result["reconstructions"][0]
     assert row["body_complete"] is True

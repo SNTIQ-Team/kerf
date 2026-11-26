@@ -1,7 +1,7 @@
 """Legal structure is not visual structure (audit finding b).
 
 Fixtures are real: the canonical GII bodies of § 37 SGB XIV, § 1 AsylbLG and
-Art. 1 GG from Lexgraph's content-addressed state store, the official reader
+Art. 1 GG from Kerf's content-addressed state store, the official reader
 blocks of § 37 SGB XIV, and an archived BAYERN.RECHT page pair of Art. 80
 AGSG (see tests/fixtures/law_structure/norm_texts.json for provenance).
 """

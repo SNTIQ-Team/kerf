@@ -78,7 +78,7 @@ def query_citations(path: Path, *, act: str | None, norm: str | None,
             ).fetchone()
             if not version or version[0] != SCHEMA_VERSION:
                 raise CitationStoreError(
-                    "unsupported Lexgraph citation index schema")
+                    "unsupported Kerf citation index schema")
             matched = conn.execute(
                 "SELECT COUNT(*) FROM citation" + where, parameters
             ).fetchone()[0]

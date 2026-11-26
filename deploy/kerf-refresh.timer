@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily Lexgraph refresh at 04:37 UTC (off-peak)
+Description=Daily Kerf refresh at 04:37 UTC (off-peak)
 
 [Timer]
 OnCalendar=*-*-* 04:37:00 UTC

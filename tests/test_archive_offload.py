@@ -47,7 +47,7 @@ def signer(tmp_path, monkeypatch):
     signers.write_text(
         f'{receipts.PRINCIPAL} namespaces="{receipts.RECEIPT_NAMESPACE},'
         f'{receipts.ATTESTATION_NAMESPACE}" {public}\n')
-    monkeypatch.setenv("LEXGRAPH_ARCHIVE_SIGNERS", str(signers))
+    monkeypatch.setenv("KERF_ARCHIVE_SIGNERS", str(signers))
     return key
 
 

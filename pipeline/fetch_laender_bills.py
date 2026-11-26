@@ -150,13 +150,13 @@ def parse_vorgang(block, fetched_at: str) -> dict | None:
 
 
 def main() -> int:
-    if os.environ.get("LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL_BULK") != "1":
+    if os.environ.get("KERF_ENABLE_PARLAMENTSSPIEGEL_BULK") != "1":
         print("broad Parlamentsspiegel extraction is quarantined: explicit "
               "reuse permission required", file=sys.stderr)
         return 2
     http = Http(delay=1.0)
     http.s.headers["User-Agent"] = (
-        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)")
+        "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)")
     fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     window = WINDOW_DAYS

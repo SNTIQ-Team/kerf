@@ -37,7 +37,7 @@ from bgbl_text import (
     page_index,
 )
 
-SCHEMA = "lexgraph-promulgation-dates/1"
+SCHEMA = "kerf-promulgation-dates/1"
 
 # Electronic BGBl masthead: "2023 Ausgegeben zu Bonn am 18. August 2023 Nr. 217"
 MASTHEAD_RE = re.compile(

@@ -5,7 +5,7 @@ captured bytes: the #content element of archived BAYERN.RECHT pages
 (web.archive.org id_ captures), the .tx-gvbl element of a
 www.verkuendung-bayern.de GVBl detail page, one page of pdftotext output of a
 GVBl issue PDF, an excerpt of an archived /Content/Zip XML, and verbatim rows
-of Lexgraph's BAYERN.RECHT snapshot of 2026-09-17.
+of Kerf's BAYERN.RECHT snapshot of 2026-09-17.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def test_archive_roundtrip_verifies_hash(tmp_path):
     with pytest.raises(bh.HistoryArchiveError):
         bh.get_raw("gvbl", digest, "html", tmp_path)
     row = bh.append_ledger("gvbl", {"act_id": None, "status": "ok"}, tmp_path)
-    assert row["schema"] == "lexgraph-history-capture/1"
+    assert row["schema"] == "kerf-history-capture/1"
     assert bh.read_ledger("gvbl", tmp_path) == [row]
     with pytest.raises(bh.HistoryArchiveError):
         bh.put_raw("other", b"x", "html", tmp_path)
@@ -211,7 +211,7 @@ def _snapshot(tmp_path: Path) -> Path:
 
 
 def test_version_log_joins_aenderungsverlauf_and_ffn(tmp_path, monkeypatch):
-    monkeypatch.setenv("LEXGRAPH_SNAPSHOTS", str(tmp_path / "snapshots"))
+    monkeypatch.setenv("KERF_SNAPSHOTS", str(tmp_path / "snapshots"))
     _snapshot(tmp_path)
     log = bh.load_version_log("by_dvasyl")
     by_page = {e["page"]: e for e in log}
@@ -244,7 +244,7 @@ def _capture(root: Path, name: str, document: str, timestamp: str) -> None:
 
 def test_end_to_end_change_bracketed_by_captures(tmp_path, monkeypatch):
     root = tmp_path / "archive"
-    monkeypatch.setenv("LEXGRAPH_SNAPSHOTS", str(tmp_path / "snapshots"))
+    monkeypatch.setenv("KERF_SNAPSHOTS", str(tmp_path / "snapshots"))
     _snapshot(tmp_path)
     current = json.loads(_read("dvasyl-norm12-20260917.jsonl").decode("utf-8"))
     acts = tmp_path / "main" / "web" / "data" / "acts"

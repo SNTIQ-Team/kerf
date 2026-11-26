@@ -59,7 +59,7 @@ def test_one_commit_per_version_dated_by_valid_from(data, tmp_path):
     repo = tmp_path / "law-git"
     result = export(repo, commits)
     log = _git(repo, "log", "--reverse", "--date=short",
-               "--format=%ad|%s|%(trailers:key=Lexgraph-Author-Date-Basis,"
+               "--format=%ad|%s|%(trailers:key=Kerf-Author-Date-Basis,"
                "valueonly,separator=)", "--",
                "de/bund/asylvfg_1992/_act.md").splitlines()
     assert [line.split("|")[0] for line in log] == [
@@ -72,7 +72,7 @@ def test_one_commit_per_version_dated_by_valid_from(data, tmp_path):
                    "BGBl. 2026 I Nr. 199")
     assert "Commencement basis: official_bgbl_command_and_commencement_clause" \
         in message
-    assert "Lexgraph-Amending-Document: bgbl-1-2026-199" in message
+    assert "Kerf-Amending-Document: bgbl-1-2026-199" in message
     assert result["commits_written"] == len(commits)
 
 
@@ -143,6 +143,6 @@ def test_changed_knowledge_rewrites_only_from_the_changed_version(
     commits[-1].body += "\nCorrected evidence."
     after = export(repo, commits)
     assert after["commits_reused"] == len(commits) - 1
-    assert after["superseded_ref"] == "refs/lexgraph/superseded/1"
+    assert after["superseded_ref"] == "refs/kerf/superseded/1"
     assert _git(repo, "rev-parse", after["superseded_ref"]).strip() == \
         before["head"]

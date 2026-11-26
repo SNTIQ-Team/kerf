@@ -1,6 +1,6 @@
-"""Per-norm version chains derived from Lexgraph's canonical stores.
+"""Per-norm version chains derived from Kerf's canonical stores.
 
-Lexgraph stays canonical.  This module only *projects* what the data plane
+Kerf stays canonical.  This module only *projects* what the data plane
 already proves into per-norm versions, which both the REST operations
 (``log``/``at``/``diff``/``blame``) and the Git export consume:
 
@@ -12,7 +12,7 @@ Federal (deep GII corpus)
     ``valid_from: null`` — a retrieval date is never promoted to a legal date.
 
 Bavaria (BAYERN.RECHT)
-    per-norm old/new texts from Lexgraph's archived official pages (Wayback
+    per-norm old/new texts from Kerf's archived official pages (Wayback
     captures of gesetze-bayern.de) and its own daily snapshots, chained
     backwards from the current consolidated text.  Chains stop at the first
     missing or inconsistent link rather than guessing.
@@ -62,7 +62,7 @@ from api.retrospective_store import (
     act_history,
 )
 
-HISTORY_SCHEMA = "lexgraph-norm-history/1"
+HISTORY_SCHEMA = "kerf-norm-history/1"
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 
 
@@ -316,7 +316,7 @@ class NormHistoryStore:
             if not candidates:
                 raise EnvelopeError(
                     "not_in_corpus",
-                    f"{juris}/{slug} is not in Lexgraph's text corpus (EU "
+                    f"{juris}/{slug} is not in Kerf's text corpus (EU "
                     "instruments outside the curated corpus are metadata "
                     "only)",
                     searched=[{"source": "act_index", "status": "ok",
@@ -368,7 +368,7 @@ class NormHistoryStore:
 
     def resolve_act_norm(self, act_id: str, designator: str
                          ) -> dict[str, Any]:
-        """Lexgraph act id + source designator (``§ 29a``) → identity."""
+        """Kerf act id + source designator (``§ 29a``) → identity."""
         rows = [row for row in self.act_index() if row.get("id") == act_id]
         unit, number = designator_unit(designator)
         return self._one(rows, f"{act_id} {designator}", unit, number, "")
@@ -377,7 +377,7 @@ class NormHistoryStore:
              number: str, sub: str) -> dict[str, Any]:
         if not candidates:
             raise EnvelopeError(
-                "not_in_corpus", f"no act in the Lexgraph corpus for {raw!r}",
+                "not_in_corpus", f"no act in the Kerf corpus for {raw!r}",
                 searched=[{"source": "act_index", "status": "ok",
                            "count": 0}])
         if len(candidates) > 1:
@@ -1096,7 +1096,7 @@ def select_version(versions: list[NormVersion], on: str,
         return "temporally_unresolved", versions[-1], {
             "resolution": "after_last_observation",
             "last_observed_at": last_seen,
-            "note": f"latest wording Lexgraph observed (last on {last_seen}); "
+            "note": f"latest wording Kerf observed (last on {last_seen}); "
                     "later changes may not be recorded yet"}
     earliest = min((s.first_observed_at or s.valid_from or "9999"
                     for v in versions for s in v.states), default=None)
@@ -1174,7 +1174,7 @@ def blame(versions: list[NormVersion], target: NormVersion,
     """Attribute each sentence of ``target`` to the version introducing it.
 
     A sentence present since the earliest stored text is *not* attributed to
-    that version: its origin predates Lexgraph's text history.  Only then are
+    that version: its origin predates Kerf's text history.  Only then are
     amendment commands whose quoted new wording contains the sentence offered
     as parser-derived candidates.
     """

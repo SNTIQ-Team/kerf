@@ -48,7 +48,7 @@ from bgbl_text import (
     german_date, normalise, quote_spans,
 )
 
-SCHEMA = "lexgraph-commencement/1"
+SCHEMA = "kerf-commencement/1"
 LEVELS = ("article", "para", "absatz", "satz", "nummer", "buchstabe",
           "doppelbuchstabe", "dreifachbuchstabe",
           # Units of the *amended* law named inside an amending item

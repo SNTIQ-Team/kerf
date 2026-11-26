@@ -1,4 +1,4 @@
-"""Shared conformance suite (conformance/README.md): every case, courts and Lexgraph."""
+"""Shared conformance suite (conformance/README.md): every case, courts and Kerf."""
 import pytest
 
 from conformance.runner import load_cases, matches, run_case
@@ -19,5 +19,5 @@ def test_federal_alias_targets_exist_in_the_gii_catalogue():
     from pathlib import Path
     from api.norm_identity import FEDERAL_ALIASES
     catalog = {a["abbrev"] for a in json.loads((Path(__file__).parents[1] / "conformance" / "fixtures" /
-                                                "lexgraph_data" / "gii_catalog.json").read_text())["acts"]}
+                                                "kerf_data" / "gii_catalog.json").read_text())["acts"]}
     assert {k: v for k, v in FEDERAL_ALIASES.items() if v not in catalog} == {}

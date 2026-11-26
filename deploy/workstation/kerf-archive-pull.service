@@ -1,0 +1,16 @@
+[Unit]
+Description=Pull Kerf source archives from the VPS, receipt them, prune the VPS
+Documentation=https://github.com/SNTIQ-Team/kerf/blob/main/deploy/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/kerf-checkout
+Environment=PATH=%h/.local/share/kerf-checkout/.venv/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/.local/share/kerf-checkout/deploy/archive-pull.sh
+TimeoutStartSec=3h
+SuccessExitStatus=75
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6

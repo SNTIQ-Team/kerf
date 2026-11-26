@@ -1,7 +1,7 @@
-# Lexgraph — an event-sourced normative state engine
+# Kerf — an event-sourced normative state engine
 
-> Sibling of [Amtsgraph](https://github.com/SNTIQ-Team/amtsgraph).
-> Amtsgraph answers **who** may decide. Lexgraph answers **what law
+> Sibling of [Taper](https://github.com/SNTIQ-Team/taper).
+> Taper answers **who** may decide. Kerf answers **what law
 > applies, in what version, and why** — what the law *was*, *is*, and
 > *may become* — with status, source tier and caveats on every answer.
 
@@ -138,7 +138,7 @@ EU:  commission_proposal → EP/Council procedure → adoption
 | `published_at` | Verkündung (BGBl) |
 | `valid_from` / `valid_until` | Inkrafttreten / Außerkrafttreten |
 | `applicable_from/to` | facts covered — transitional law, Rückwirkung |
-| `known_since` | when Lexgraph learned it |
+| `known_since` | when Kerf learned it |
 | `fetched_at` | when the source was fetched |
 
 `valid_from` and `applicable_from` must never be conflated (transitional
@@ -188,7 +188,7 @@ semantic         REFERS_TO, APPLIES_TO_FACT_PATTERN (thematic)
 The load-bearing distinctions: `PROPOSES_PATCH ≠ ADOPTS_PATCH`,
 `PUBLISHED_IN ≠ ENTERS_INTO_FORCE`, `IMPLEMENTS ≠ ACTIVATES`,
 `LEGAL_BASIS_OF ≠ MOTIVATED_BY`. All edges additionally carry
-Amtsgraph-style `delta` (directionality) and `trust` (source tier).
+Taper-style `delta` (directionality) and `trust` (source tier).
 
 ## Source tiers (root-of-truth discipline)
 
@@ -252,7 +252,7 @@ interpretation · case_backlink · caveat
 
 `source_document ≠ lex_event ≠ patch_instruction ≠ norm_version` — mixing
 these makes the system confuse "a document contains a proposal" with "the
-norm changed". That confusion is precisely the failure mode Lexgraph
+norm changed". That confusion is precisely the failure mode Kerf
 exists to kill.
 
 ## MVP scope
@@ -292,4 +292,4 @@ Classification: recommended-but-not-merged patch → no effect on
 Caveat:    the proposal remains historically relevant legislative material.
 ```
 
-If Lexgraph answers like this, the architecture is right.
+If Kerf answers like this, the architecture is right.

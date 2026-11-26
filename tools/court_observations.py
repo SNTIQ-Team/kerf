@@ -72,7 +72,7 @@ def source_rows(scope):
             url = d["source_url"] if s == "by" else item["url"]
             parsed=adapters[s].parse(Capture(body,url,d["media_type"],item["extension"]),item)
             if s in {"by", "by-recht"}:
-                register = db.execute("SELECT land_code FROM amtsgraph_courts WHERE court_id=?", (d["court_id"],)).fetchone()
+                register = db.execute("SELECT land_code FROM taper_courts WHERE court_id=?", (d["court_id"],)).fetchone()
                 if d["land"] != "by" or parsed.land != "by" or not register or register["land_code"] != "09":
                     excluded.append({"id":key,"reason":"bavarian_court_not_verified_in_register"})
                     continue

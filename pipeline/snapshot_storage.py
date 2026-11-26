@@ -24,7 +24,10 @@ from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-REFERENCE_MAGIC = b"LEXGRAPH-SNAPSHOT-REF/1\n"
+REFERENCE_MAGIC = b"KERF-SNAPSHOT-REF/1\n"
+# Original archive references can only be verified against their retained bytes.
+_ARCHIVE_HEADERS = (REFERENCE_MAGIC, b"LEXGRAPH-SNAPSHOT-REF/1\n")
+_HEADER_LIMIT = max(map(len, _ARCHIVE_HEADERS))
 STORE_NAME = ".compact"
 MAX_ARCHIVE_BYTES = 500 * 1024 * 1024
 DEFAULT_MIN_FREE_BYTES = 128 * 1024 * 1024
@@ -199,7 +202,7 @@ def _object_path(digest: str) -> str:
 
 def _empty_manifest() -> dict:
     return {
-        "schema_version": 1, "kind": "lexgraph-snapshot-byte-archive",
+        "schema_version": 1, "kind": "kerf-snapshot-byte-archive",
         "date_basis": "snapshot_observation_not_legal_effective_date",
         "compression": "gzip-mtime-0-empty-filename",
         "objects": {}, "files": {},
@@ -217,6 +220,8 @@ def load_manifest(root: Path) -> dict:
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SnapshotArchiveError(f"invalid archive manifest: {path}") from exc
     template = _empty_manifest()
+    if isinstance(value, dict) and value.get("kind") == "lexgraph-snapshot-byte-archive":
+        value["kind"] = template["kind"]
     if not isinstance(value, dict) or any(value.get(k) != v for k, v in
             template.items() if k not in ("objects", "files")) or \
             not isinstance(value.get("objects"), dict) or \
@@ -264,10 +269,10 @@ def _reference(relative: str, record: dict, obj: dict) -> dict:
 
 
 def _parse_reference(raw: bytes) -> dict:
-    if len(raw) > 4096 or not raw.startswith(REFERENCE_MAGIC):
+    if len(raw) > 4096 or not raw.startswith(_ARCHIVE_HEADERS):
         raise SnapshotArchiveError("invalid snapshot reference")
     try:
-        value = json.loads(raw[len(REFERENCE_MAGIC):])
+        value = json.loads(raw.split(b"\n", 1)[1])
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SnapshotArchiveError("invalid snapshot reference JSON") from exc
     if not isinstance(value, dict):
@@ -292,7 +297,7 @@ def is_snapshot_reference(path: Path) -> bool:
         with os.fdopen(fd, "rb") as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise SnapshotArchiveError(f"non-file boundary: {path}")
-            return stream.read(len(REFERENCE_MAGIC)) == REFERENCE_MAGIC
+            return stream.readline(_HEADER_LIMIT) in _ARCHIVE_HEADERS
 
 
 def _object_present(root: Path, obj: dict) -> bool:
@@ -313,7 +318,7 @@ def _verified_object(root: Path, digest: str, obj: dict) -> bytes:
         raise SnapshotArchiveError(
             f"archived bytes {digest} were offloaded to the workstation "
             f"archive (receipt {obj['offloaded']['receipt']}); restore the "
-            "object from ~/.local/share/sntiq-legal/lexgraph-archive to read it")
+            "object from ~/.local/share/sntiq-legal/kerf-archive to read it")
     compressed, _ = _read_regular(root / STORE_NAME / obj["path"])
     if len(compressed) != obj["gzip_bytes"] or _sha(compressed) != obj["gzip_sha256"]:
         raise SnapshotArchiveError(f"compressed object integrity mismatch: {digest}")
@@ -337,8 +342,8 @@ def open_snapshot_text(path: Path):
     """Open ordinary JSONL or an integrity-checked original archived stream."""
     path = Path(path)
     with path.open("rb") as stream:
-        prefix = stream.read(len(REFERENCE_MAGIC))
-        if prefix != REFERENCE_MAGIC:
+        prefix = stream.readline(_HEADER_LIMIT)
+        if prefix not in _ARCHIVE_HEADERS:
             stream.seek(0)
             with io.TextIOWrapper(stream, encoding="utf-8") as text:
                 yield text
@@ -371,7 +376,7 @@ def _file_state(root: Path, relative: str, record: dict, obj: dict,
         if allow_missing:
             return "missing", _MISSING
         raise SnapshotArchiveError(f"archived snapshot path is missing: {relative}")
-    if raw.startswith(REFERENCE_MAGIC):
+    if raw.startswith(_ARCHIVE_HEADERS):
         if _parse_reference(raw) != _reference(relative, record, obj):
             raise SnapshotArchiveError(f"snapshot reference integrity mismatch: {relative}")
         return "reference", info
@@ -567,14 +572,14 @@ def _compact(root: Path, keep: int, dry_run: bool, budget: int,
     for path in recent:
         relative = path.relative_to(root).as_posix()
         raw, _ = _read_regular(path)
-        if raw.startswith(REFERENCE_MAGIC):
+        if raw.startswith(_ARCHIVE_HEADERS):
             if relative not in manifest["files"]:
                 raise SnapshotArchiveError(f"untracked recent reference: {path}")
             recent_refs.append(relative)
     for path in candidates:
         relative = path.relative_to(root).as_posix()
         raw, info = _read_regular(path)
-        if raw.startswith(REFERENCE_MAGIC):
+        if raw.startswith(_ARCHIVE_HEADERS):
             if relative not in manifest["files"]:
                 raise SnapshotArchiveError(f"untracked snapshot reference: {path}")
             already += 1

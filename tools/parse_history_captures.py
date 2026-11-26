@@ -3,7 +3,7 @@
 For each raw object ``R/raw/<source>/sha256/<xx>/<sha>.<ext>.gz`` referenced
 by an ``ok``/``skipped`` row of ``R/ledger/<source>.jsonl`` this writes
 ``R/parsed/<source>/<act_id>/<sha>.json.gz`` (schema
-``lexgraph-history-parsed/1``).  The run is idempotent: an existing parse is
+``kerf-history-parsed/1``).  The run is idempotent: an existing parse is
 kept when its parser version and capture list are unchanged (``--force``
 re-parses everything).
 

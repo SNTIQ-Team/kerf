@@ -15,7 +15,7 @@ Open the result in qfs_visualizer: timeline mode replays the legislature;
 belief masses separate geltendes Recht (pTrue) from pipeline noise (pNone)
 and killed bills (pFalse) — the 12-Monatsfrist discipline, visual.
 
-    python3 tools/build_qfs.py [--out data/lexgraph_de_wp21.qfs]
+    python3 tools/build_qfs.py [--out data/kerf_de_wp21.qfs]
 """
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ def month_ord(iso: str) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=str(ROOT / "data" / "lexgraph_de_wp21.qfs"))
+    ap.add_argument("--out", default=str(ROOT / "data" / "kerf_de_wp21.qfs"))
     args = ap.parse_args()
 
     snap = latest_snapshot("dip")
@@ -87,7 +87,7 @@ def main() -> int:
     ev_snap = latest_snapshot("bgbl_events")
     events = list(read_jsonl(ev_snap / "events.jsonl")) if ev_snap else []
     include_quarantined = os.environ.get(
-        "LEXGRAPH_INCLUDE_QUARANTINED") == "1"
+        "KERF_INCLUDE_QUARANTINED") == "1"
     bz = latest_snapshot("buzer") if include_quarantined else None
     versions = list(read_jsonl(bz / "versions.jsonl")) if bz else []
     upcoming = list(read_jsonl(bz / "upcoming.jsonl")) if bz else []

@@ -390,7 +390,7 @@ def _item_relations(item: _Item, ref: ActIdentity | None, raw_act: str, text: st
                                                    ("buchst", "Buchst.")) if values.get(lv)) + f" {raw_act}"
         detail = {"act": raw_act, "act_prefix": ref.prefix if ref else None,
                   "act_resolution": ref.basis if ref else "unresolved",
-                  "lexgraph_act_id": ref.act_id if ref else None, "unit_type": item.unit_type,
+                  "kerf_act_id": ref.act_id if ref else None, "unit_type": item.unit_type,
                   "chain": chain_text, "chain_no": chain_no}
         if item.following:
             detail["following"] = item.following

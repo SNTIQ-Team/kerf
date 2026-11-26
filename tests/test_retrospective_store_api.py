@@ -61,7 +61,7 @@ def _fixture(tmp_path: Path) -> tuple[dict, Path, str, str]:
     old, new = (row["state_sha256"] for row in observations)
     retro = {
         "schema_version": 1,
-        "kind": "lexgraph-retrospective-history",
+        "kind": "kerf-retrospective-history",
         "built_at": "2026-07-16T12:00:00Z",
         "state_identity": "sha256-canonical-uncompressed-json",
         "objects": manifest["objects"],

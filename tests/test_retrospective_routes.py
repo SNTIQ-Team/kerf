@@ -79,7 +79,7 @@ def _data_plane(tmp_path: Path) -> Path:
     }
     _write(data / "retrospective_history.json", {
         "schema_version": 1,
-        "kind": "lexgraph-retrospective-history",
+        "kind": "kerf-retrospective-history",
         "built_at": "2026-07-16T12:00:00Z",
         "state_identity": "sha256-canonical-uncompressed-json",
         "date_semantics": {
@@ -170,7 +170,7 @@ def test_history_archive_diff_and_markdown_use_bitemporal_manifest(
     known = datetime(2026, 7, 16, 11, tzinfo=timezone.utc)
 
     history = _json(main.retrospective_history("fed_testg", known))
-    assert history["kind"] == "lexgraph-retrospective-history"
+    assert history["kind"] == "kerf-retrospective-history"
     assert history["as_of"] == "2026-07-16T11:00:00Z"
     assert len(history["intervals"]) == 2
 
@@ -190,12 +190,12 @@ def test_history_archive_diff_and_markdown_use_bitemporal_manifest(
     markdown = main.act_markdown(
         "fed_testg", date(2024, 6, 1), known, "§ 1", False)
     assert "Alt" in markdown.body.decode("utf-8")
-    assert markdown.headers["x-lexgraph-as-of"] == \
+    assert markdown.headers["x-kerf-as-of"] == \
         "2026-07-16T11:00:00Z"
-    assert markdown.headers["x-lexgraph-effective-from"] == "2024-01-01"
-    assert markdown.headers["x-lexgraph-knowledge-from"] == \
+    assert markdown.headers["x-kerf-effective-from"] == "2024-01-01"
+    assert markdown.headers["x-kerf-knowledge-from"] == \
         "2026-07-16T10:00:00Z"
-    assert markdown.headers["x-lexgraph-state-sha256"]
+    assert markdown.headers["x-kerf-state-sha256"]
 
 
 def test_sqlite_download_has_stable_name(tmp_path: Path, monkeypatch) -> None:
@@ -205,7 +205,7 @@ def test_sqlite_download_has_stable_name(tmp_path: Path, monkeypatch) -> None:
     assert Path(response.path) == data / "retrospective_history.sqlite"
     assert response.media_type == "application/vnd.sqlite3"
     assert response.headers["content-disposition"] == \
-        'attachment; filename="lexgraph-retrospective-history.sqlite"'
+        'attachment; filename="kerf-retrospective-history.sqlite"'
 
 
 def test_markdown_route_preserves_verified_reconstruction_truth_flags(
@@ -230,12 +230,12 @@ def test_markdown_route_preserves_verified_reconstruction_truth_flags(
             params={"at": "2024-06-01", "norm": "§ 1"})
 
     assert response.status_code == 200
-    assert response.headers["x-lexgraph-exact"] == "false"
-    assert response.headers["x-lexgraph-archive-status"] == \
+    assert response.headers["x-kerf-exact"] == "false"
+    assert response.headers["x-kerf-archive-status"] == \
         "verified_reconstruction"
-    assert response.headers["x-lexgraph-complete"] == "true"
-    assert response.headers["x-lexgraph-source-exact"] == "false"
-    assert response.headers["x-lexgraph-verified-reconstruction"] == "true"
+    assert response.headers["x-kerf-complete"] == "true"
+    assert response.headers["x-kerf-source-exact"] == "false"
+    assert response.headers["x-kerf-verified-reconstruction"] == "true"
     assert "archive_status: verified_reconstruction" in response.text
     assert "complete: true" in response.text
     assert "source_exact: false" in response.text
@@ -251,7 +251,7 @@ def test_changes_and_amending_act_preserve_dates_commands_and_evidence(
     result = _json(main.changes(
         "neu gefasst", "fed_testg", "§ 1", None, None, False,
         known, 10, 0))
-    assert result["kind"] == "lexgraph-amendment-events"
+    assert result["kind"] == "kerf-amendment-events"
     assert result["matched"] == 1
     event = result["events"][0]
     assert event["published_at"] == "2024-12-20"
@@ -260,7 +260,7 @@ def test_changes_and_amending_act_preserve_dates_commands_and_evidence(
     assert event["commands"][0]["old_text_constraint"] == "Alt"
 
     document = _json(main.amending_act("bgbl-1-2024-999", known))
-    assert document["kind"] == "lexgraph-amending-act"
+    assert document["kind"] == "kerf-amending-act"
     assert document["published_at"] == "2024-12-20"
     assert document["title"] == "Teständerungsgesetz"
     assert document["event_count"] == 1

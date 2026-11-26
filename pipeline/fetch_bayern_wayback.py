@@ -47,7 +47,7 @@ from common import latest_snapshot, read_jsonl
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "snapshots" / "wayback_by"
-UA = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
+UA = "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)"
 
 CDX_ACT = (
     "https://web.archive.org/cdx/search/cdx?url="

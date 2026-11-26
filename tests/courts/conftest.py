@@ -23,8 +23,8 @@ def isolated_corpus(tmp_path, monkeypatch):
     monkeypatch.setenv("SNTIQ_COURTS_HOME", str(tmp_path / "corpus"))
     # The btrfs space guard is exercised explicitly in test_packs_policy_space.py.
     monkeypatch.setenv("SNTIQ_COURTS_SPACE_GUARD", "off")
-    # Deterministic Lexgraph act index + GII catalogue snapshot for norm resolution.
-    monkeypatch.setenv("LEXGRAPH_DATA_DIR", str(ROOT / "conformance" / "fixtures" / "lexgraph_data"))
+    # Deterministic Kerf act index + GII catalogue snapshot for norm resolution.
+    monkeypatch.setenv("KERF_DATA_DIR", str(ROOT / "conformance" / "fixtures" / "kerf_data"))
     from courts.acts import resolver
     resolver.cache_clear()
     return tmp_path / "corpus"

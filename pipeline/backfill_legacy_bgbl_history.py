@@ -107,7 +107,7 @@ class BoundedHttp:
         self.max_bytes = max_bytes
         self.delay = delay
         self.session = session or requests.Session()
-        self.session.headers["User-Agent"] = "Lexgraph/1.0 (official history import)"
+        self.session.headers["User-Agent"] = "Kerf/1.0 (official history import)"
         self.requests = 0
         self.downloaded_bytes = 0
         self._last = 0.0
@@ -244,7 +244,7 @@ class LegacyArchive:
             return False
         key = f"{self.root.name}/{Path(relative).as_posix()}"
         offload_root = Path(os.environ.get(
-            "LEXGRAPH_OFFLOAD_ROOT", self.root.parent / "archive-offload"))
+            "KERF_OFFLOAD_ROOT", self.root.parent / "archive-offload"))
         return digest in receipted_hashes(offload_root).get(key, set())
 
     def read(self, relative: str, digest: str) -> bytes:

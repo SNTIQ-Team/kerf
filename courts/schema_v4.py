@@ -54,10 +54,17 @@ def _v4_blocks(blocks: str) -> str:
     return json.dumps(out, ensure_ascii=False, separators=(",", ":"))
 
 
+def _archived_detail(raw: str) -> dict:
+    value = json.loads(raw or "{}")
+    if "lexgraph_act_id" in value:
+        value["kerf_act_id"] = value.pop("lexgraph_act_id")
+    return value
+
+
 def _v4_detail(detail, target_kind, target_id, target_raw, target_court_id, target_date, target_case_key) -> str:
     row = {"target_kind": target_kind, "target_id": target_id, "target_raw": target_raw,
            "target_court_id": target_court_id, "target_date": target_date, "target_case_key": target_case_key}
-    return trim_detail(json.loads(detail or "{}"), row)
+    return trim_detail(_archived_detail(detail), row)
 
 
 def register_functions(conn: sqlite3.Connection) -> None:
@@ -176,15 +183,17 @@ def build_copy(source: Path, target: Path, create_schema, log=print) -> dict:
     log(f"[{time.monotonic() - started:6.0f}s] paragraphs, relations, assessments copied: {counts}")
     names = [r[0] for r in conn.execute("SELECT name FROM main.sqlite_master WHERE type='table' AND name NOT LIKE "
                                         "'sqlite_%'")]
+    archived_courts = conn.execute("SELECT 1 FROM v3.sqlite_master WHERE name='amtsgraph_courts'").fetchone()
     for name in names:
+        source_name = "amtsgraph_courts" if archived_courts and name == "taper_courts" else name
         if name in TABLES or name in FTS_SHADOW or name == "paragraphs_fts":
             continue
         columns = [r[1] for r in conn.execute(f"PRAGMA main.table_info({name})")]
-        present = {r[1] for r in conn.execute(f"PRAGMA v3.table_info({name})")}
+        present = {r[1] for r in conn.execute(f"PRAGMA v3.table_info({source_name})")}
         if not present:
             continue
         cols = ", ".join(c for c in columns if c in present)
-        counts[name] = conn.execute(f"INSERT INTO main.{name}({cols}) SELECT {cols} FROM v3.{name}").rowcount
+        counts[name] = conn.execute(f"INSERT INTO main.{name}({cols}) SELECT {cols} FROM v3.{source_name}").rowcount
     for shadow in FTS_SHADOW:
         conn.execute(f"DELETE FROM main.{shadow}")
         counts[shadow] = conn.execute(f"INSERT INTO main.{shadow} SELECT * FROM v3.{shadow}").rowcount
@@ -213,7 +222,8 @@ def verify(source: Path, target: Path, *, sample: int = 20000, log=print) -> dic
     counts = {}
     for name in tables:
         old = conn.execute(f"SELECT count(*) FROM v3.{name}").fetchone()[0]
-        new = conn.execute(f"SELECT count(*) FROM main.{name}").fetchone()[0]
+        target_name = "taper_courts" if name == "amtsgraph_courts" else name
+        new = conn.execute(f"SELECT count(*) FROM main.{target_name}").fetchone()[0]
         counts[name] = [old, new]
         if old != new and not (name == "meta" and new == old + 1):   # + migrated_v3_v4_at
             report["problems"].append(f"{name}: {old} rows in v3, {new} in v4")
@@ -267,7 +277,7 @@ def verify(source: Path, target: Path, *, sample: int = 20000, log=print) -> dic
     for row in conn.execute("SELECT o.detail AS old, n.detail, n.target_kind, n.target_id, n.target_raw, "
                             "n.target_court_id, n.target_date, n.target_case_key FROM v3.relations o "
                             "JOIN main.relations n ON n.id = o.id"):
-        if expand_detail(row["detail"], row) != json.loads(row["old"]):
+        if expand_detail(row["detail"], row) != _archived_detail(row["old"]):
             bad_detail += 1
     conn.row_factory = None
     report["details_differing"] = bad_detail

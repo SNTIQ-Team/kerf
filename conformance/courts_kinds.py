@@ -7,23 +7,23 @@ from pathlib import Path
 
 from conformance.runner import ROOT, read_input
 
-SNAPSHOT = ROOT / "conformance" / "fixtures" / "lexgraph_data"
+SNAPSHOT = ROOT / "conformance" / "fixtures" / "kerf_data"
 
 
 @contextlib.contextmanager
-def lexgraph_snapshot():
-    """Norm resolution against the committed Lexgraph act index + GII catalogue snapshot."""
+def kerf_snapshot():
+    """Norm resolution against the committed Kerf act index + GII catalogue snapshot."""
     from courts.acts import resolver
-    previous = os.environ.get("LEXGRAPH_DATA_DIR")
-    os.environ["LEXGRAPH_DATA_DIR"] = str(SNAPSHOT)
+    previous = os.environ.get("KERF_DATA_DIR")
+    os.environ["KERF_DATA_DIR"] = str(SNAPSHOT)
     resolver.cache_clear()
     try:
         yield
     finally:
         if previous is None:
-            os.environ.pop("LEXGRAPH_DATA_DIR", None)
+            os.environ.pop("KERF_DATA_DIR", None)
         else:
-            os.environ["LEXGRAPH_DATA_DIR"] = previous
+            os.environ["KERF_DATA_DIR"] = previous
         resolver.cache_clear()
 
 
@@ -40,7 +40,7 @@ def _parsed(inp: dict):
     body = read_input(fixture)
     capture = Capture(body, inp.get("url") or inp["item"].get("url", ""), MEDIA.get(ext, ""), ext)
     item = {"listed_date": None, "listed_court": None, "listed_case_numbers": None, "extra": {}, **inp["item"]}
-    with lexgraph_snapshot():
+    with kerf_snapshot():
         return finalise(get_adapter(inp["adapter"]).parse(capture, item))
 
 
@@ -86,7 +86,7 @@ def page_classification(inp: dict) -> dict:
 
 def norm_citations(inp: dict) -> dict:
     from courts.citations import extract_norms
-    with lexgraph_snapshot():
+    with kerf_snapshot():
         rels = extract_norms(inp["text"], "p", land=inp.get("land"))
     return {"targets": [r.target_id for r in rels], "target_set": sorted({r.target_id or "" for r in rels}),
             "relations": [r.relation for r in rels]}
@@ -105,7 +105,7 @@ def decision_citations(inp: dict) -> dict:
 def relation_assessments(inp: dict) -> dict:
     from courts.citations import extract_all
     from courts.polarity import assess
-    with lexgraph_snapshot():
+    with kerf_snapshot():
         rels = extract_all(inp["text"], "p", own_court_id=inp.get("own_court_id"), own_land=inp.get("land"))
     assessments = []
     for r in rels:
@@ -119,7 +119,7 @@ def relation_assessments(inp: dict) -> dict:
 
 def act_resolution(inp: dict) -> dict:
     from courts.acts import resolve_act
-    with lexgraph_snapshot():
+    with kerf_snapshot():
         identity = resolve_act(inp["abbreviation"], land=inp.get("land"))
     return {"prefix": identity.prefix, "basis": identity.basis, "in_corpus": identity.in_corpus,
             "act_id": identity.act_id}
@@ -168,7 +168,7 @@ def assessment_attachment(inp: dict) -> dict:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     init_db(conn)
-    with lexgraph_snapshot():
+    with kerf_snapshot():
         for d in inp["decisions"]:
             parsed = ParsedDecision(
                 source_id="rii", source_doc_id=d["doc"], source_url=f"https://example.invalid/{d['doc']}",
@@ -221,7 +221,7 @@ def capture_acceptance(inp: dict) -> dict:
     try:
         prepared = check_arguments(inp["source"], inp["url"], body, captured_at=inp.get("captured_at"),
                                    captured_at_basis=None, now=time.time())
-        with lexgraph_snapshot():
+        with kerf_snapshot():
             check_content(prepared)
     except CaptureRefused as refused:
         return {"accepted": False, "status": refused.status, "reason": refused.reason}
@@ -240,7 +240,7 @@ def ecli_court_codes(inp: dict) -> dict:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     init_db(conn)
-    with lexgraph_snapshot():
+    with kerf_snapshot():
         for d in inp["decisions"]:
             parsed = ParsedDecision(
                 source_id=d.get("source", "rii"), source_doc_id=d["doc"], source_url=f"https://example.invalid/{d['doc']}",

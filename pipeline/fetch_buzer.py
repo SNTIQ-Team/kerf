@@ -2,7 +2,7 @@
 
 The service is useful for manual cross-checking, but permissive robots does
 not grant database-reuse rights.  This fetcher is quarantined and refuses to
-run unless ``LEXGRAPH_ENABLE_BUZER=1`` is set after permission/risk review.
+run unless ``KERF_ENABLE_BUZER=1`` is set after permission/risk review.
 
 Fetched per corpus act (log level only — one request per act):
   /<Abk>.htm            act index -> internal act id
@@ -176,8 +176,8 @@ def upcoming(http: Http) -> list[dict]:
 
 
 def main() -> int:
-    if os.environ.get("LEXGRAPH_ENABLE_BUZER") != "1":
-        print("buzer fetch quarantined: set LEXGRAPH_ENABLE_BUZER=1 only "
+    if os.environ.get("KERF_ENABLE_BUZER") != "1":
+        print("buzer fetch quarantined: set KERF_ENABLE_BUZER=1 only "
               "for authorised private research", file=sys.stderr)
         return 2
     gii = latest_snapshot("gii")

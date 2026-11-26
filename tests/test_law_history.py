@@ -102,7 +102,7 @@ def _capture(state_path: Path, *, edit=None) -> dict:
               "text": n.get("text") or ""} for n in state["norms"]]
     if edit:
         edit(norms)
-    return {"schema": "lexgraph-history-parsed/1", "parser": "test/1",
+    return {"schema": "kerf-history-parsed/1", "parser": "test/1",
             "source": "wayback_gii", "act_id": "fed_asylvfg_1992",
             "sha256": "a" * 64, "captured_at": "2023-06-01T10:00:00Z",
             "original_url": "https://www.gesetze-im-internet.de/asylvfg_1992/"
@@ -206,7 +206,7 @@ def test_log_at_diff_blame_through_law_history(built):
     assert oldest["temporal"]["known_at"] == "2023-06-01"
     assert oldest["temporal"]["valid_from"] is None
     assert log["searched"][0]["source"] == "law_history"
-    assert log["change_summary"]["schema"] == "lexgraph-change-summary/1"
+    assert log["change_summary"]["schema"] == "kerf-change-summary/1"
     assert log["history"]["versions_by_role"] == {
         "archived_capture": 1, "official_consolidation": 2}
     # the verified interval of a later state still answers an earlier date
@@ -342,7 +342,7 @@ def test_law_git_commits_are_dated_by_in_force(built, tmp_path):
                                 "--acts", "fed_asylvfg_1992"]) == 0
     log = subprocess.run(
         ["git", "-C", str(repo), "log", "--reverse", "--date=short",
-         "--format=%ad%x09%s%x09%(trailers:key=Lexgraph-Author-Date-Basis,"
+         "--format=%ad%x09%s%x09%(trailers:key=Kerf-Author-Date-Basis,"
          "valueonly,separator=)"], capture_output=True, text=True,
         check=True).stdout.strip().splitlines()
     first = log[0].split("\t")

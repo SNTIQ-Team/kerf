@@ -81,12 +81,12 @@ def test_detail_round_trip_and_trimmed_storage():
     row = {"target_kind": "norm", "target_id": "de/bund/gvg/para/198/abs/4", "target_raw": "§ 198 Abs. 4 GVG",
            "target_court_id": None, "target_date": None, "target_case_key": None}
     full = {"act": "GVG", "act_prefix": "de/bund/gvg", "act_resolution": "act_index", "chain": "§ 198 Abs. 4 GVG",
-            "chain_no": 1, "lexgraph_act_id": "fed_gvg", "unit_type": "para"}
+            "chain_no": 1, "kerf_act_id": "fed_gvg", "unit_type": "para"}
     assert json.loads(trim_detail(full, row)) == {"act": "GVG"}
     assert expand_detail(trim_detail(full, row), row) == full
-    other = dict(full, chain="§ 198 Abs. 2 Satz 2, Abs. 4 GVG", chain_no=2, lexgraph_act_id=None)
+    other = dict(full, chain="§ 198 Abs. 2 Satz 2, Abs. 4 GVG", chain_no=2, kerf_act_id=None)
     assert json.loads(trim_detail(other, row)) == {"act": "GVG", "chain": other["chain"], "chain_no": 2,
-                                                    "lexgraph_act_id": None}
+                                                    "kerf_act_id": None}
     assert expand_detail(trim_detail(other, row), row) == other
     ecli_only = {"target_kind": "decision", "target_id": "ECLI:EU:C:2021:89", "target_raw": "ECLI:EU:C:2021:89",
                  "target_court_id": None, "target_date": None, "target_case_key": None}

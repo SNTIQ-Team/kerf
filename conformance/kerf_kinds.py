@@ -1,6 +1,6 @@
-"""Lexgraph conformance kinds (see conformance/README.md, section "Kinds").
+"""Kerf conformance kinds (see conformance/README.md, section "Kinds").
 
-Every kind is a thin adapter: it reads the case input, calls Lexgraph's
+Every kind is a thin adapter: it reads the case input, calls Kerf's
 canonical implementation and projects the result onto plain JSON.  No legal
 logic lives here, so a fix in ``api/`` or ``pipeline/`` shows up in every case.
 
@@ -92,7 +92,7 @@ def material_fragments(inp: dict[str, Any]) -> dict[str, Any]:
 
     Pages not listed in the fixture's ``meta.json`` are passed as ``None``
     (not extracted).  ``act_slugs`` and the document entry come from
-    ``sources`` (Lexgraph's ``data/materials_sources.json``); a Drucksache
+    ``sources`` (Kerf's ``data/materials_sources.json``); a Drucksache
     without an entry there uses ``meta.json``'s ``document_meta``.
     """
     meta, pages = _pages(inp["fixture"])
@@ -153,7 +153,7 @@ def norm_url(inp: dict[str, Any]) -> dict[str, Any]:
     (pipeline.fetch_gii_toc.parse_toc + api.norm_identity.gii_norm_url).
 
     ``toc_html``: a captured GII ``index.html`` of act ``slug``;
-    ``toc_json``: a captured TOC file as Lexgraph serves it; neither (or
+    ``toc_json``: a captured TOC file as Kerf serves it; neither (or
     null): no TOC is available.
     """
     slug = inp["slug"]

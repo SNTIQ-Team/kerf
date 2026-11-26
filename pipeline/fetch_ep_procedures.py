@@ -301,7 +301,7 @@ def proc_rows(http: Http, proc_map: dict[str, dict]) -> tuple[list, int]:
 def main() -> int:
     http = Http(delay=1.0)
     http.s.headers["User-Agent"] = (
-        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)")
+        "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)")
     fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     listable = procedures_list_filter(http)

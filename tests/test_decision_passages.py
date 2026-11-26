@@ -45,7 +45,7 @@ class ApiTests(unittest.TestCase):
   self.assertEqual(data['passages'][0]['paragraph_label'],'7')
   p=self.client.get('/decisions/rii-test1/passages/entscheidungsgruende:rd_7').json()
   self.assertEqual(p['text_sha256'],hashlib.sha256(p['text'].encode()).hexdigest());self.assertEqual(p['source']['xml_sha256'],hashlib.sha256(XML).hexdigest())
-  source=self.client.get('/decisions/rii-test1/source');self.assertEqual(source.content,zipped());self.assertEqual(source.headers['x-lexgraph-source-sha256'],hashlib.sha256(source.content).hexdigest())
+  source=self.client.get('/decisions/rii-test1/source');self.assertEqual(source.content,zipped());self.assertEqual(source.headers['x-kerf-source-sha256'],hashlib.sha256(source.content).hexdigest())
  def test_exact_scope_pagination_and_source_gaps(self):
   d=self.client.get('/decision-passages?decision_id=rii-test1&section=entscheidungsgruende&limit=1&offset=1').json()
   self.assertEqual(d['total'],3);self.assertIsNone(d['passages'][0]['paragraph_label']);self.assertEqual(d['passages'][0]['section'],'entscheidungsgruende')

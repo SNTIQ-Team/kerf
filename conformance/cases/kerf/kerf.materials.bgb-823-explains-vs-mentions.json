@@ -1,13 +1,13 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.materials.bgb-823-explains-vs-mentions",
-  "module": "lexgraph",
+  "id": "kerf.materials.bgb-823-explains-vs-mentions",
+  "module": "kerf",
   "kind": "material_fragments",
-  "description": "§ 823 BGB in legislative materials: only a fragment whose heading targets § 823 BGB 'explains' it; a fragment that merely names § 823 BGB in its body 'mentions' it, also when its heading explains another BGB norm (§ 826). A target repeated in the body stays 'explains' and is not duplicated as a mention. FIXTURE IS SYNTHETIC: no captured material citing § 823 BGB exists in Lexgraph's fixtures, so conformance/fixtures/lexgraph/materials-synthetic-823-bgb reproduces the exact layout of the captured Gegenäußerung pages of BT-Drs. 19/13824 (pages 312/314) under the fictitious Drucksache 99/823 (see its meta.json).",
+  "description": "§ 823 BGB in legislative materials: only a fragment whose heading targets § 823 BGB 'explains' it; a fragment that merely names § 823 BGB in its body 'mentions' it, also when its heading explains another BGB norm (§ 826). A target repeated in the body stays 'explains' and is not duplicated as a mention. FIXTURE IS SYNTHETIC: no captured material citing § 823 BGB exists in Kerf's fixtures, so conformance/fixtures/kerf/materials-synthetic-823-bgb reproduces the exact layout of the captured Gegenäußerung pages of BT-Drs. 19/13824 (pages 312/314) under the fictitious Drucksache 99/823 (see its meta.json).",
   "origin": "spec: Operating principles 2 (§ 823 BGB materials: explains vs mentions); PRIMA audit (relation strength)",
   "status": "active",
   "input": {
-    "fixture": "conformance/fixtures/lexgraph/materials-synthetic-823-bgb",
+    "fixture": "conformance/fixtures/kerf/materials-synthetic-823-bgb",
     "drucksache": "99/823",
     "sources": "data/materials_sources.json"
   },

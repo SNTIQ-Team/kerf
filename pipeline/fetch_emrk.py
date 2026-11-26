@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 
 from fetch_eu_texts import render_blocks  # noqa: E402
 
-UA = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
+UA = "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)"
 CACHE = ROOT / "data" / "cache" / "emrk"
 ORIGINAL = "https://www.echr.coe.int/documents/d/echr/convention_deu"
 # Chosen captures: the newest intact capture of each edition (CDX, 2026-09-29).

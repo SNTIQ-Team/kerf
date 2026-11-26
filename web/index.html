@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lexgraph — Gesetze als git</title>
+<title>Kerf — Gesetze als git</title>
 <link rel="icon" href="sntiq.svg">
 <style>
 :root{
@@ -304,7 +304,7 @@ input.search:focus{border-color:var(--acc)}
 </head>
 <body>
 <header>
-  <div class="brand"><img src="sntiq.svg" class="logo" alt="SNTIQ">Lexgraph <small data-i="tagline"></small></div>
+  <div class="brand"><img src="sntiq.svg" class="logo" alt="SNTIQ">Kerf <small data-i="tagline"></small></div>
   <nav>
     <button data-v="overview" class="on" data-i="nav_overview"></button>
     <button data-v="synopse" data-i="nav_synopse"></button>
@@ -313,8 +313,8 @@ input.search:focus{border-color:var(--acc)}
     <button data-v="graph" data-i="nav_graph"></button>
   </nav>
   <div class="right">
-    <a class="hlink" href="https://github.com/SNTIQ-Team/lexgraph/blob/main/docs/API.md" target="_blank" rel="noopener">Docs</a>
-    <a class="hlink" href="https://api.sntiq.com/lex/docs" target="_blank" rel="noopener">API</a>
+    <a class="hlink" href="https://github.com/SNTIQ-Team/kerf/blob/main/docs/API.md" target="_blank" rel="noopener">Docs</a>
+    <a class="hlink" href="https://api.sntiq.com/kerf/docs" target="_blank" rel="noopener">API</a>
     <div class="lang">
       <button data-l="de" class="on">DE</button>
       <button data-l="en">EN</button>
@@ -392,7 +392,7 @@ input.search:focus{border-color:var(--acc)}
 <script>
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-let DATA={}, LANG=localStorage.getItem('lex_lang')||'de';
+let DATA={}, LANG=localStorage.getItem('kerf_lang')||'de';
 
 /* ================= i18n ================= */
 const T={
@@ -563,7 +563,7 @@ function diffBlock2(o,n,granular){
 }
 
 /* ---- Synopse (buzer-style law history) ---- */
-let synCur=null, synGran=localStorage.getItem('lex_syngran')||'char';
+let synCur=null, synGran=localStorage.getItem('kerf_syngran')||'char';
 function renderSynopse(){
   $('#synsearch').placeholder=t('syn_ph');
   $('#synhint').textContent=t('syn_hint');
@@ -654,7 +654,7 @@ async function openSynopse(id){
   h+=`</div></div>`;
   $('#syndetail').innerHTML=h;
   $$('#syndetail .syn-toggle button').forEach(b=>b.onclick=()=>{
-    synGran=b.dataset.g;localStorage.setItem('lex_syngran',synGran);openSynopse(id);});
+    synGran=b.dataset.g;localStorage.setItem('kerf_syngran',synGran);openSynopse(id);});
   $('#syndetail').scrollTop=0;
 }
 function fmtIso(){return '2026-07-06';}
@@ -681,7 +681,7 @@ function applyLang(){
   $$('.lang button').forEach(b=>b.classList.toggle('on',b.dataset.l===LANG));
 }
 $$('.lang button').forEach(b=>b.onclick=()=>{
-  LANG=b.dataset.l;localStorage.setItem('lex_lang',LANG);
+  LANG=b.dataset.l;localStorage.setItem('kerf_lang',LANG);
   applyLang();if(DATA.summary){renderAll();if(G.ticks){updTick();renderWorldbar();}}
   if($('#modal').classList.contains('on')&&G.curAct)openAct(G.curAct);
 });

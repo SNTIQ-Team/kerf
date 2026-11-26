@@ -212,7 +212,7 @@ def official_state_transition_events(
                  "state_sha256": new_digest},
             ]),
             "derivation": {
-                "tool": "lexgraph-official-states",
+                "tool": "kerf-official-states",
                 "schema_version": SCHEMA_VERSION,
                 "algorithm": (
                     "gii-state-pair+bgbl-final-command+dip-commencement"
@@ -296,7 +296,7 @@ def current_text_correspondence_events(
             "changes": [],
             "evidence": [],
             "derivation": {
-                "tool": "lexgraph-federal-history",
+                "tool": "kerf-federal-history",
                 "schema_version": SCHEMA_VERSION,
                 "algorithm": "dip-draft-current-gii-correspondence",
             },
@@ -423,7 +423,7 @@ def exact_gii_state_events(snapshot_dirs: Iterable[Path]) -> list[dict]:
                      "builddate": new_act.get("builddate")},
                 ],
                 "derivation": {
-                    "tool": "lexgraph-federal-history",
+                    "tool": "kerf-federal-history",
                     "schema_version": SCHEMA_VERSION,
                     "algorithm": "official-state-diff",
                 },

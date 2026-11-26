@@ -146,7 +146,7 @@ def create_router(data_dir):
    row=decision(conn,decision_id);blob=conn.execute('SELECT source_zip FROM decisions WHERE id=?',(decision_id,)).fetchone()[0]
    if hashlib.sha256(blob).hexdigest()!=row['content_sha256']:failure(503,'integrity_check_failed')
    descriptor=json.loads(row['source_data'])
-   return Response(blob,media_type=descriptor['media_type'],headers={'X-Lexgraph-Source-Sha256':row['content_sha256'],'Content-Disposition':f'attachment; filename="{quote(decision_id,safe="")}.{descriptor["extension"]}"'})
+   return Response(blob,media_type=descriptor['media_type'],headers={'X-Kerf-Source-Sha256':row['content_sha256'],'Content-Disposition':f'attachment; filename="{quote(decision_id,safe="")}.{descriptor["extension"]}"'})
   except (sqlite3.Error,ValueError):failure(503,'integrity_check_failed')
   finally:conn.close()
  return router

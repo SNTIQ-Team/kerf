@@ -1,6 +1,6 @@
 """Legal structure of one norm body: Absatz, Satz, Nummer, Buchstabe.
 
-Lexgraph's canonical federal states store each norm body as the flattened
+Kerf's canonical federal states store each norm body as the flattened
 GII text, e.g. ``§ 37 SGB XIV``::
 
     (1) Die ... erfüllen. Am 1. Januar 2021 ... unberührt.(2) Die Vereinbarung

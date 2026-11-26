@@ -1,7 +1,7 @@
 {
  "gii-sgb_2-20260710123039-jnnorm-2022.html.gz": {
   "act_id": "fed_sgb_2",
-  "reference": "Lexgraph daily GII state (fetch_gii.parse_law of GII XML)",
+  "reference": "Kerf daily GII state (fetch_gii.parse_law of GII XML)",
   "state_sha256": "39b758874fc68f44a9c0d121f8bc08921107ed29c04461eab28281d6d34a4c6d",
   "state_first_observed_at": "2026-07-06",
   "norms": [
@@ -29,7 +29,7 @@
  },
  "gii-bgb-live20260928-jnnorm-2022.html.gz": {
   "act_id": "fed_bgb",
-  "reference": "Lexgraph daily GII state (fetch_gii.parse_law of GII XML)",
+  "reference": "Kerf daily GII state (fetch_gii.parse_law of GII XML)",
   "state_sha256": "92f77eadce94deec8b96a4dc441d4814e13788ff8d0f9f1aba6a4e4c32e58440",
   "state_first_observed_at": "2026-07-06",
   "norms": [
@@ -57,7 +57,7 @@
  },
  "gii-zpo-live20260928-jnnorm-2022.html.gz": {
   "act_id": "fed_zpo",
-  "reference": "Lexgraph daily GII state (fetch_gii.parse_law of GII XML)",
+  "reference": "Kerf daily GII state (fetch_gii.parse_law of GII XML)",
   "state_sha256": "21882281aae41e507f4cde7d28d26e0be0cbd76f6d4472bf127e51b164312c43",
   "state_first_observed_at": "2026-07-14",
   "norms": [
@@ -75,7 +75,7 @@
  },
  "neuris-aufenthg-2026-07-29-2026-08-10-excerpt.zip": {
   "act_id": "fed_aufenthg_2004",
-  "reference": "Lexgraph daily GII state (fetch_gii.parse_law of GII XML)",
+  "reference": "Kerf daily GII state (fetch_gii.parse_law of GII XML)",
   "state_sha256": "6d2ff12d306fc517bbc37b7aae719464801636e55744ba790d84f6a01c64cfc8",
   "state_first_observed_at": "2026-07-06",
   "norms": [

@@ -1,4 +1,4 @@
-"""Norm log/at/diff/blame over real captured Lexgraph states.
+"""Norm log/at/diff/blame over real captured Kerf states.
 
 Fixture (tests/fixtures/law_history): the three complete official GII states
 of the Asylgesetz (AsylVfG 1992) observed 2026-07-06, 2026-07-13 and
@@ -207,7 +207,7 @@ def test_bavarian_history_from_archived_official_pages(data):
 
 
 def test_missing_materials_store_is_unavailable_not_empty(data, monkeypatch):
-    monkeypatch.delenv("LEX_MATERIALS_DIR", raising=False)
+    monkeypatch.delenv("KERF_MATERIALS_DIR", raising=False)
     response = _client(data).get(
         "/norms/de/bund/sgb_14/para/37/materials")
     assert response.status_code == 503

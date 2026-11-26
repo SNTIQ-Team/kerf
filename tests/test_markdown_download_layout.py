@@ -218,8 +218,8 @@ def test_api_historical_download_uses_selected_body_hash_not_head(monkeypatch, s
     expected = raw if stale_historical_hash else first + '\n\n' + second
     assert expected in attachment.text and current not in attachment.text
     assert '## § 1 — Alter Titel' in ordinary.text and raw in ordinary.text
-    assert ordinary.headers['x-lexgraph-state-sha256'] == attachment.headers['x-lexgraph-state-sha256'] == 'a' * 64
-    assert ordinary.headers['x-lexgraph-source-exact'] == attachment.headers['x-lexgraph-source-exact'] == 'true'
+    assert ordinary.headers['x-kerf-state-sha256'] == attachment.headers['x-kerf-state-sha256'] == 'a' * 64
+    assert ordinary.headers['x-kerf-source-exact'] == attachment.headers['x-kerf-source-exact'] == 'true'
     assert selected['norms'][0]['text'] == raw
 
 

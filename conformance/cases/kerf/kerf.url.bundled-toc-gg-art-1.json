@@ -1,9 +1,9 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.url.bundled-toc-gg-art-1",
-  "module": "lexgraph",
+  "id": "kerf.url.bundled-toc-gg-art-1",
+  "module": "kerf",
   "kind": "norm_url",
-  "description": "The TOC bundled with Lexgraph (api/data/gii_toc.json, used when the data plane has none) also maps GG Art. 1 to art_1.html and has no para/1 for the GG.",
+  "description": "The TOC bundled with Kerf (api/data/gii_toc.json, used when the data plane has none) also maps GG Art. 1 to art_1.html and has no para/1 for the GG.",
   "origin": "PRIMA audit finding g; spec: Operating principles 2 (GG Art. 1 URL); tests/test_evidence_contract.py::test_bundled_toc_covers_the_deep_corpus",
   "status": "active",
   "input": {

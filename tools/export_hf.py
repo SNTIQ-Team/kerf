@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the public Lexgraph Hugging Face dataset from the latest snapshots.
+"""Build the public Kerf Hugging Face dataset from the latest snapshots.
 
 The exporter deliberately copies immutable source snapshots instead of the
 API's compact presentation JSON wherever possible.  It also exports the two
@@ -353,7 +353,7 @@ def _official_history_rows(
         ]
         row["provenance"] = {
             "source": "GII",
-            "algorithm": "lexgraph-complete-state-diff",
+            "algorithm": "kerf-complete-state-diff",
             "date_basis": OFFICIAL_OBSERVATION_DATE_BASIS,
             "effective_date_asserted": False,
             "official_only": True,
@@ -494,7 +494,7 @@ def _export_verified_reconstructions(
         raise RuntimeError("verified reconstructions are invalid JSON") from exc
     if not isinstance(artifact, dict) or artifact.get("schema_version") != 1 \
             or artifact.get("kind") != \
-            "lexgraph-reviewed-verified-reconstructions" or \
+            "kerf-reviewed-verified-reconstructions" or \
             artifact.get("state_identity") != \
             "sha256-canonical-uncompressed-json":
         raise RuntimeError("unsupported verified reconstruction artifact")
@@ -717,14 +717,14 @@ tags:
   - eu-law
   - court-decisions
   - temporal-data
-pretty_name: Lexgraph — Laws as Git for German and EU law
+pretty_name: Kerf — Laws as Git for German and EU law
 configs:
 {configs}
 ---
 
-# Lexgraph dataset
+# Kerf dataset
 
-The data plane of **[Lexgraph](https://github.com/SNTIQ-Team/lexgraph)** —
+The data plane of **[Kerf](https://github.com/SNTIQ-Team/kerf)** —
 German legislation modelled as **Laws as Git**: a temporal, multi-authority
 event log with HEAD, commits, open/closed branches and evidence-bound merges
 (Bund / Bayern / EU; Länder records only after verification at the originating
@@ -734,7 +734,7 @@ Git is a navigation metaphor, not a substitute for legal status. Every row's
 official source and status controls whether it is current law, a pending branch
 or a documented implementation/applicability link.
 
-Lexgraph is deliberately two-layered. The German migration, asylum, social-law
+Kerf is deliberately two-layered. The German migration, asylum, social-law
 and related practice corpus has current full text and change history where the
 official/retrieval sources support it. `federal_catalog.jsonl` provides every
 act listed in the official GII table of contents as discovery metadata only;
@@ -745,9 +745,9 @@ coverage of every EU instrument.
 
 The independent federal archive is split by claim strength. An
 `official_federal_state_observations.jsonl` row says only what complete GII
-state Lexgraph retrieved on `observed_at`; that date is **not** silently
+state Kerf retrieved on `observed_at`; that date is **not** silently
 treated as commencement. `official_federal_state_transitions.jsonl` contains
-Lexgraph's own old/new diff between two such states and likewise leaves
+Kerf's own old/new diff between two such states and likewise leaves
 `effective_at` empty. A row enters `official_transition_reviews.jsonl` only
 after the complete state pair is matched to the final, integrity-checked BGBl
 amending command and the exact DIP commencement clause. Full portable states,
@@ -756,7 +756,7 @@ including every captured norm, are in
 canonical uncompressed JSON.
 
 `retrospective_legal_intervals.jsonl` adds a true bitemporal projection:
-legal validity (`effective_from`/`effective_to`) is independent from Lexgraph
+legal validity (`effective_from`/`effective_to`) is independent from Kerf
 knowledge time (`knowledge_from`/`knowledge_to`). The 2023+ final-BGBl
 inventory is exported separately as `retrospective_amendment_events.jsonl`.
 An event with a publication/effective date is not thereby a reconstructed
@@ -768,7 +768,7 @@ a portable indexed SQLite representation are included as artifacts.
 `derived_verified` bodies were computed by reversing cardinality-checked final
 BGBl commands from a complete official GII anchor and then replaying the
 commands forward to reproduce that anchor byte-for-byte. They are complete
-Lexgraph reconstructions. The artifact deliberately keeps `source_exact: false`
+Kerf reconstructions. The artifact deliberately keeps `source_exact: false`
 because NeuRIS/GII did not supply those bytes as a historical snapshot.
 The referenced deterministic-gzip objects are retained under
 `federal_states/objects/` and remain separate from the official GII manifest.
@@ -821,7 +821,7 @@ parliamentary document chain from the mechanical checks performed against the
 current consolidated corpus.
 
 DIP-derived rows use the attribution **Deutscher Bundestag/Bundesrat – DIP**.
-Lexgraph extraction, ranking, annotations and forecasts are transformations,
+Kerf extraction, ranking, annotations and forecasts are transformations,
 not source statements. DIP makes its source data available free of charge at
 [dip.bundestag.de](https://dip.bundestag.de).
 
@@ -829,8 +829,9 @@ Every source and file-level rights regime is documented in the repository's
 `docs/SOURCES.md` and `docs/RIGHTS.md`; reproduce
 the current outputs with `refresh.sh` and `tools/export_hf.py`. Statutory texts
 are official works under § 5 UrhG. The dataset is intentionally marked
-`license: other`: SNTIQ's licence covers its original annotations and software,
-not third-party or official source material. See `RIGHTS.md` before reuse.
+`license: other` because the files combine several sources. SNTIQ publishes its
+original annotations and database arrangement under CC BY 4.0 and its software
+under Apache-2.0. Source terms are listed in `RIGHTS.md`.
 
 Built by **[SNTIQ](https://sntiq.com/)**.
 """

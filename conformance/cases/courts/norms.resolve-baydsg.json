@@ -3,7 +3,7 @@
   "id": "courts.norms.resolve-baydsg",
   "module": "courts",
   "kind": "act_resolution",
-  "description": "canonical act resolution: BayDSG (by) is de/by/baydsg, the Lexgraph slug",
+  "description": "canonical act resolution: BayDSG (by) is de/by/baydsg, the Kerf slug",
   "origin": "api.norm_identity.eu_act_from_citation / ActResolver",
   "status": "active",
   "input": {

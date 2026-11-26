@@ -1,13 +1,13 @@
-"""Corpus court slugs -> Amtsgraph court ids (``court:de:<XJustiz-ID>``, ``court:eu:<ECLI code>``).
+"""Corpus court slugs -> Taper court ids (``court:de:<XJustiz-ID>``, ``court:eu:<ECLI code>``).
 
-Source: Amtsgraph ``/v1/courts/mapping`` (XRepository GDS.Gerichte: name,
-XJustiz-ID, ECLI court code, aliases, status).  Each Amtsgraph record's name
+Source: Taper ``/v1/courts/mapping`` (XRepository GDS.Gerichte: name,
+XJustiz-ID, ECLI court code, aliases, status).  Each Taper record's name
 and aliases are run through the canonical ``courts.courtids.resolve`` to get
 the corpus slug, so both sides use one court-identity implementation.
 Priority: ECLI court code > active record > dissolved record.  Several
 candidates at the same priority give ``ambiguous`` (no id is guessed).
 
-decisions.court_id holds the Amtsgraph id when mapped (else the slug);
+decisions.court_id holds the Taper id when mapped (else the slug);
 decisions.court_slug keeps the corpus slug (alias; used in synthetic decision
 ids ``court:<slug>/<date>/<Az>`` and for citation linking).
 """
@@ -19,7 +19,7 @@ import sqlite3
 
 from .courtids import resolve
 
-MAPPING_URLS = ("https://api.sntiq.com/v1/courts/mapping", "https://api.sntiq.com/amtsgraph/courts/mapping")
+MAPPING_URLS = ("https://api.sntiq.com/taper/courts/mapping",)
 AGS_LAND = {"01": "sh", "02": "hh", "03": "ni", "04": "hb", "05": "nw", "06": "he", "07": "rp", "08": "bw",
             "09": "by", "10": "sl", "11": "be", "12": "bb", "13": "mv", "14": "sn", "15": "st", "16": "th"}
 ECLI_SLUGS = {"bgh": "bgh", "bverwg": "bverwg", "bsg": "bsg", "bag": "bag", "bfh": "bfh", "bpatg": "bpatg",
@@ -29,7 +29,7 @@ NOT_A_BENCH = re.compile(r"Zweigstelle|Au(?:ß|ss)enstelle|Außenkammer|auswärt
                          r"Zentral|Service", re.I)
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS amtsgraph_courts(
+CREATE TABLE IF NOT EXISTS taper_courts(
   court_id TEXT PRIMARY KEY, official_name TEXT NOT NULL, xjustiz_id TEXT, ecli_court_code TEXT, kind TEXT,
   land_code TEXT, status TEXT, unit_type TEXT, parent_court_id TEXT, aliases TEXT NOT NULL DEFAULT '[]',
   snapshot_id TEXT, fetched_at TEXT NOT NULL
@@ -133,7 +133,7 @@ def seat_in_land(slug: str, court_type: str | None, land: str | None, records: l
 def store_mapping(conn: sqlite3.Connection, payload: dict) -> dict:
     records, snapshot = records_from_payload(payload)
     if not records:
-        raise ValueError("Amtsgraph court mapping without records")
+        raise ValueError("Taper court mapping without records")
     mapping = build_map(records)
     for slug, court_type, land in conn.execute(
             "SELECT court_slug, court_type, land FROM decisions GROUP BY court_slug").fetchall():
@@ -144,8 +144,8 @@ def store_mapping(conn: sqlite3.Connection, payload: dict) -> dict:
     conn.execute("DROP TABLE IF EXISTS court_map")   # derived table: rebuilt with the current CHECK list
     conn.executescript(SCHEMA)
     conn.execute("BEGIN IMMEDIATE")
-    conn.execute("DELETE FROM amtsgraph_courts")
-    conn.executemany("""INSERT INTO amtsgraph_courts VALUES(?,?,?,?,?,?,?,?,?,?,?,
+    conn.execute("DELETE FROM taper_courts")
+    conn.executemany("""INSERT INTO taper_courts VALUES(?,?,?,?,?,?,?,?,?,?,?,
                           strftime('%Y-%m-%dT%H:%M:%S+00:00','now'))""",
                      [(r["court_id"], r.get("official_name") or "", r.get("xjustiz_id"), r.get("ecli_court_code"),
                        r.get("kind"), r.get("land_code"), r.get("status"), r.get("unit_type"), r.get("parent_court_id"),
@@ -154,7 +154,7 @@ def store_mapping(conn: sqlite3.Connection, payload: dict) -> dict:
     conn.executemany("INSERT INTO court_map(court_slug, court_id, basis, candidates, snapshot_id) VALUES(?,?,?,?,?)",
                      [(slug, m["court_id"], m["basis"], json.dumps(m["candidates"]), snapshot)
                       for slug, m in sorted(mapping.items())])
-    # Corpus slugs without any Amtsgraph record stay explicit.
+    # Corpus slugs without any Taper record stay explicit.
     conn.execute("""INSERT OR IGNORE INTO court_map(court_slug, court_id, basis, candidates, snapshot_id)
                     SELECT DISTINCT court_slug, NULL, 'unmapped', '[]', ? FROM decisions""", (snapshot,))
     conn.execute("COMMIT")
@@ -168,7 +168,7 @@ LAND_AGS = {v: k for k, v in AGS_LAND.items()}
 
 
 def canonical_court_id(conn: sqlite3.Connection, slug: str, land: str | None = None) -> str:
-    """Amtsgraph id for a corpus slug; an ambiguous name is settled by the decision's Land, else the slug."""
+    """Taper id for a corpus slug; an ambiguous name is settled by the decision's Land, else the slug."""
     try:
         row = conn.execute("SELECT court_id, basis, candidates FROM court_map WHERE court_slug = ?", (slug,)).fetchone()
     except sqlite3.OperationalError:
@@ -180,7 +180,7 @@ def canonical_court_id(conn: sqlite3.Connection, slug: str, land: str | None = N
     if row[1] == "ambiguous" and land in LAND_AGS:
         ids = json.loads(row[2])
         hits = [r[0] for r in conn.execute(
-            f"SELECT court_id FROM amtsgraph_courts WHERE land_code = ? AND court_id IN ({','.join('?' * len(ids))})",
+            f"SELECT court_id FROM taper_courts WHERE land_code = ? AND court_id IN ({','.join('?' * len(ids))})",
             (LAND_AGS[land], *ids))]
         if len(hits) == 1:
             return hits[0]
@@ -210,12 +210,12 @@ def fetch_payload(http) -> dict:
             return json.loads(response.body)
         except Exception as exc:  # noqa: BLE001 - try the alternate URL, then report
             last = exc
-    raise RuntimeError(f"Amtsgraph court mapping unavailable: {last}")
+    raise RuntimeError(f"Taper court mapping unavailable: {last}")
 
 
 # --- ECLI court codes observed in the corpus ------------------------------------------------------------
 #
-# Amtsgraph knows the ECLI court codes of the federal courts only.  Land courts' codes (BAYVGH, VGMUENC, OVGNRW
+# Taper knows the ECLI court codes of the federal courts only.  Land courts' codes (BAYVGH, VGMUENC, OVGNRW
 # …) are taken from ECLIs *observed* in the corpus, never guessed from a name:
 #
 # * ``decision_ecli`` - the published ECLI of a corpus decision of that court (NRW, the juris Länder portals);
@@ -223,7 +223,7 @@ def fetch_payload(http) -> dict:
 #   Aktenzeichen are the ones the ECLI encodes ("VGH München, Urteil vom 11. Mai 1984 - 25 B 82 A.2323
 #   [ECLI:DE:BAYVGH:1984:0511.25B82A.2323.0A]"): date = year + MMDD of the ordinal, Az = its docket part.
 #
-# Evidence is grouped by court identity (the Amtsgraph id from court_map where mapped, else the slug), so a
+# Evidence is grouped by court identity (the Taper id from court_map where mapped, else the slug), so a
 # court's chamber slugs count for the court.  A code is assigned when one identity holds at least
 # ECLI_DOMINANCE of its evidence; the rest is kept as ``conflicts``.  Otherwise it stays unassigned
 # (``ambiguous`` in the report).  Every slug of the assigned identity carries the code.
@@ -367,14 +367,14 @@ def derive_ecli_codes(conn: sqlite3.Connection, *, store: bool = True) -> dict:
                           slug))
         conn.execute("COMMIT")
     try:
-        amtsgraph = {(r[0] or "").upper() for r in conn.execute(
-            "SELECT ecli_court_code FROM amtsgraph_courts WHERE ecli_court_code IS NOT NULL")}
+        taper = {(r[0] or "").upper() for r in conn.execute(
+            "SELECT ecli_court_code FROM taper_courts WHERE ecli_court_code IS NOT NULL")}
     except sqlite3.OperationalError:
-        amtsgraph = set()
+        taper = set()
     return {"observations": len(observations),
             "observations_by_kind": {k: sum(1 for o in observations if o[2] == k) for k in ("decision_ecli", "citation")},
             "codes_observed": len(by_code), "codes_assigned": len(assigned), "codes_ambiguous": len(ambiguous),
-            "codes_new_to_amtsgraph": sorted(c for c in assigned if c.upper() not in amtsgraph),
+            "codes_new_to_taper": sorted(c for c in assigned if c.upper() not in taper),
             "slugs_with_code": len(per_slug),
             "assigned": {c: {k: v for k, v in a.items() if k != "evidence_slugs"} for c, a in sorted(assigned.items())},
             "ambiguous": dict(sorted(ambiguous.items()))}

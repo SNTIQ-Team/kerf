@@ -1,7 +1,7 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.url.no-toc-no-url",
-  "module": "lexgraph",
+  "id": "kerf.url.no-toc-no-url",
+  "module": "kerf",
   "kind": "norm_url",
   "description": "Without a captured TOC the per-norm URL is unavailable (status toc_unavailable, url null), not guessed from the number; only the act URL is given.",
   "origin": "PRIMA audit finding g; paper §7.3 (unavailable is not an empty or guessed result); tests/test_evidence_contract.py",

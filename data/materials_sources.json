@@ -1,5 +1,5 @@
 {
- "schema": "lexgraph-materials-sources/1",
+ "schema": "kerf-materials-sources/1",
  "act_slugs_basis": "Every slug below exists in the gesetze-im-internet catalog snapshot data/snapshots/gii/2026-09-28/catalog.jsonl (field 'abbrev'). Acts without a current GII entry (BVG, OEG, SVG, DBAG and other acts repealed or not published there) are deliberately absent: references to them keep canonical_id null instead of pointing at an unrelated or missing slug.",
  "act_slugs": {
   "SGB I": "sgb_1",

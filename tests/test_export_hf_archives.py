@@ -61,7 +61,7 @@ def _reconstruction_fixture(tmp_path: Path) -> tuple[Path, Path, str, dict]:
     }
     artifact = {
         "schema_version": 1,
-        "kind": "lexgraph-reviewed-verified-reconstructions",
+        "kind": "kerf-reviewed-verified-reconstructions",
         "built_at": "2026-07-16T12:00:00+00:00",
         "state_identity": "sha256-canonical-uncompressed-json",
         "reconstructions": [{

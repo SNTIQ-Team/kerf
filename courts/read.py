@@ -145,7 +145,7 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
         where.append("paragraphs_fts MATCH ?")
         params.append(match)
     if court:
-        where.append("(d.court_id = ? OR d.court_slug = ?)")   # Amtsgraph id or corpus slug
+        where.append("(d.court_id = ? OR d.court_slug = ?)")   # Taper id or corpus slug
         params += [court, court]
     if date_from:
         where.append("d.decision_date >= ?")

@@ -1,7 +1,7 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.structure.emrk-art6-points",
-  "module": "lexgraph",
+  "id": "kerf.structure.emrk-art6-points",
+  "module": "kerf",
   "kind": "norm_structure",
   "description": "Art. 6 EMRK (Council of Europe German text): three Absätze; Abs. 3 lists the rights of the accused as points a)-e) ('Art. 6 Abs. 3 Buchst. c EMRK').",
   "origin": "pipeline/fetch_emrk.py; api/law_structure.py eu mode",

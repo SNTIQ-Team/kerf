@@ -1,7 +1,7 @@
 """Workstation archive receipts and legacy attestations.
 
 The production VPS keeps only recent data.  Older source bytes live in the
-workstation archive (``~/.local/share/sntiq-legal/lexgraph-archive``), and
+workstation archive (``~/.local/share/sntiq-legal/kerf-archive``), and
 two signed documents connect the two sides:
 
 receipt
@@ -16,8 +16,8 @@ attestation
     PDFs it no longer stores.
 
 Both are signed with ``ssh-keygen -Y sign`` by a dedicated workstation key
-and verified against ``/etc/sntiq/lexgraph-archive.allowed_signers``
-(override: ``LEXGRAPH_ARCHIVE_SIGNERS``).  Namespaces keep a receipt from
+and verified against ``/etc/sntiq/kerf-archive.allowed_signers``
+(override: ``KERF_ARCHIVE_SIGNERS``).  Namespaces keep a receipt from
 being replayed as an attestation and vice versa.
 """
 from __future__ import annotations
@@ -32,14 +32,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
-PRINCIPAL = "lexgraph-archive@workstation"
-RECEIPT_NAMESPACE = "lexgraph-archive-receipt"
-ATTESTATION_NAMESPACE = "lexgraph-legacy-attestation"
-DEFAULT_SIGNERS = Path("/etc/sntiq/lexgraph-archive.allowed_signers")
+PRINCIPAL = "kerf-archive@workstation"
+RECEIPT_NAMESPACE = "kerf-archive-receipt"
+ATTESTATION_NAMESPACE = "kerf-legacy-attestation"
+DEFAULT_SIGNERS = Path("/etc/sntiq/kerf-archive.allowed_signers")
 ATTESTATION_NAME = "attestation.json"
-RECEIPT_SCHEMA = "lexgraph-archive-receipt/1"
-MANIFEST_SCHEMA = "lexgraph-archive-manifest/1"
-ATTESTATION_SCHEMA = "lexgraph-legacy-attestation/1"
+RECEIPT_SCHEMA = "kerf-archive-receipt/1"
+MANIFEST_SCHEMA = "kerf-archive-manifest/1"
+ATTESTATION_SCHEMA = "kerf-legacy-attestation/1"
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 _SAFE_NAME = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,120}")
 
@@ -82,7 +82,7 @@ def row_digest(row: dict) -> str:
 
 
 def signers_path() -> Path:
-    return Path(os.environ.get("LEXGRAPH_ARCHIVE_SIGNERS") or DEFAULT_SIGNERS)
+    return Path(os.environ.get("KERF_ARCHIVE_SIGNERS") or DEFAULT_SIGNERS)
 
 
 def sign_file(path: Path, key: Path, namespace: str) -> Path:
@@ -98,6 +98,18 @@ def sign_file(path: Path, key: Path, namespace: str) -> Path:
     return signature
 
 
+# An archived signature commits to its original SSH namespace. Select only
+# the historic counterpart of the expected schema, never a caller-provided namespace.
+def archive_schema(value: object, expected: str) -> bool:
+    return value in (expected, expected.replace("kerf-", "lexgraph-", 1))
+
+
+def archive_namespace(value: object, expected: str, namespace: str) -> str:
+    if not archive_schema(value, expected):
+        raise ArchiveReceiptError(f"unsupported archive schema: {value!r}")
+    return namespace if value == expected else namespace.replace("kerf-", "lexgraph-", 1)
+
+
 def verify_signature(payload: bytes, signature: Path, namespace: str,
                      signers: Path | None = None) -> None:
     signers = Path(signers or signers_path())
@@ -106,7 +118,8 @@ def verify_signature(payload: bytes, signature: Path, namespace: str,
     if not Path(signature).is_file():
         raise ArchiveReceiptError(f"signature missing: {signature}")
     result = subprocess.run(
-        ["ssh-keygen", "-Y", "verify", "-f", str(signers), "-I", PRINCIPAL,
+        ["ssh-keygen", "-Y", "verify", "-f", str(signers), "-I",
+         "lexgraph-archive@workstation" if namespace.startswith("lexgraph-") else PRINCIPAL,
          "-n", namespace, "-s", str(signature)],
         input=payload, capture_output=True, check=False)
     if result.returncode != 0:
@@ -132,7 +145,7 @@ def validate_relative(path: str) -> str:
 
 def load_manifest(path: Path) -> dict:
     value = _load_json(path)
-    if not isinstance(value, dict) or value.get("schema") != MANIFEST_SCHEMA or \
+    if not isinstance(value, dict) or not archive_schema(value.get("schema"), MANIFEST_SCHEMA) or \
             not isinstance(value.get("files"), dict):
         raise ArchiveReceiptError(f"not an archive manifest: {path}")
     for relative, entry in value["files"].items():
@@ -175,11 +188,10 @@ def _receipted(offload_root: str, signers: str, _stamp: tuple
     for receipt_path in sorted(folder.glob("*.json")):
         try:
             payload = receipt_path.read_bytes()
-            verify_signature(payload, Path(str(receipt_path) + ".sig"),
-                             RECEIPT_NAMESPACE, Path(signers))
             receipt = json.loads(payload)
-            if receipt.get("schema") != RECEIPT_SCHEMA:
-                raise ArchiveReceiptError("wrong receipt schema")
+            namespace = archive_namespace(receipt.get("schema"), RECEIPT_SCHEMA,
+                                          RECEIPT_NAMESPACE)
+            verify_signature(payload, Path(str(receipt_path) + ".sig"), namespace, Path(signers))
             name = str(receipt.get("manifest") or "")
             if not _SAFE_NAME.fullmatch(name):
                 raise ArchiveReceiptError("unsafe manifest name")
@@ -222,7 +234,7 @@ def build_attestation(snapshot_dir: Path, *, repo_root: Path,
                 rows.append(row_digest(json.loads(line)))
     return {
         "schema": ATTESTATION_SCHEMA,
-        "kind": "lexgraph-legacy-bgbl-attestation",
+        "kind": "kerf-legacy-bgbl-attestation",
         "snapshot": snapshot_dir.name,
         "files": files,
         "candidate_rows": sorted(set(rows)),
@@ -246,11 +258,10 @@ def verify_attestation(snapshot_dir: Path, signers: Path | None = None
     payload = path.read_bytes() if path.is_file() else None
     if payload is None:
         raise ArchiveReceiptError(f"no attestation in {snapshot_dir}")
-    verify_signature(payload, Path(str(path) + ".sig"),
-                     ATTESTATION_NAMESPACE, signers)
     value = json.loads(payload)
-    if value.get("schema") != ATTESTATION_SCHEMA or \
-            value.get("snapshot") != snapshot_dir.name:
+    namespace = archive_namespace(value.get("schema"), ATTESTATION_SCHEMA, ATTESTATION_NAMESPACE)
+    verify_signature(payload, Path(str(path) + ".sig"), namespace, signers)
+    if value.get("snapshot") != snapshot_dir.name:
         raise ArchiveReceiptError("attestation does not describe this snapshot")
     for name, digest in (value.get("files") or {}).items():
         if not _SAFE_NAME.fullmatch(name) or \

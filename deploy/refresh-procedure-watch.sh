@@ -10,16 +10,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-LOCK_FILE="${LEXGRAPH_REFRESH_LOCK:-/run/lock/lexgraph-refresh.lock}"
+LOCK_FILE="${KERF_REFRESH_LOCK:-/run/lock/kerf-refresh.lock}"
 mkdir -p "$(dirname "$LOCK_FILE")"
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
-    echo "procedure-watch: another Lexgraph refresh holds $LOCK_FILE; skipping"
+    echo "procedure-watch: another Kerf refresh holds $LOCK_FILE; skipping"
     exit 0
 fi
 
-if [ -n "${LEXGRAPH_PYTHON:-}" ]; then
-    PYTHON="$LEXGRAPH_PYTHON"
+if [ -n "${KERF_PYTHON:-}" ]; then
+    PYTHON="$KERF_PYTHON"
 elif [ -x ./venv/bin/python ]; then
     PYTHON=./venv/bin/python
 else
@@ -31,8 +31,8 @@ fi
 finish_freshness() {
     local status=$?
     trap - EXIT
-    if [ -n "${LEXGRAPH_FRESHNESS:-}" ]; then
-        if ! "$PYTHON" tools/source_freshness.py export --output "$LEXGRAPH_FRESHNESS"; then
+    if [ -n "${KERF_FRESHNESS:-}" ]; then
+        if ! "$PYTHON" tools/source_freshness.py export --output "$KERF_FRESHNESS"; then
             echo "[warn] operational freshness export failed" >&2
             [ "$status" -ne 0 ] || status=1
         fi
@@ -88,13 +88,13 @@ test -s web/data/summary.json
 history_args=(--data-dir web/data)
 if [ -f data/history_bundle/current/manifest.json ]; then
     history_args+=(--bundle data/history_bundle/current)
-    signers="${LEXGRAPH_ARCHIVE_SIGNERS:-/etc/sntiq/lexgraph-archive.allowed_signers}"
+    signers="${KERF_ARCHIVE_SIGNERS:-/etc/sntiq/kerf-archive.allowed_signers}"
     [ -f "$signers" ] && history_args+=(--bundle-signers "$signers")
 fi
 "$PYTHON" tools/build_law_history.py "${history_args[@]}" \
     || echo "[warn] law history rebuild failed — previous file kept"
 
-echo "==> [5/5] publish -> /srv/sntiq-lexapi/data/web-data"
+echo "==> [5/5] publish -> /srv/sntiq-kerf-api/data/web-data"
 deploy/publish-web-data.sh web/data
 "$PYTHON" -m tools.watch_publish_state published
 
