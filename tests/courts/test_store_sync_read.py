@@ -929,3 +929,56 @@ def test_reader_withholds_the_wrong_attachment_until_its_capture_is_replaced(con
     conn.execute("UPDATE decisions SET content_hash='replacement' WHERE id=?", (did,))
     assert get_paragraph(conn,did+"#rn-1")["status"] == "ok"
     assert search(conn,"Stichprobe")["evidence"]
+
+
+def test_former_paragraph_reads_only_the_source_verified_range(conn, fixture):
+    from courts.ledger import CorrectionError, record
+    from courts.paragraph_ranges import text_hash
+    seed(conn, fixture)
+    raw = conn.execute("SELECT content_hash FROM decisions WHERE id=?", (ECLI,)).fetchone()[0]
+    previous, canonical = f"{ECLI}#previous-2", f"{ECLI}#rn-10"
+    body = "🗃 Veröffentlichte Fassung. Zweiter Absatz."
+    middle = body.index("Zweiter")
+    conn.execute("UPDATE paragraphs SET text=?, text_hash=?, blocks=? WHERE decision_id=? AND anchor='rn-10'",
+                 (body, bytes.fromhex(text_hash(body)), json.dumps([[len(body), "/source/row"]]), ECLI))
+    target = {"anchor": "rn-10", "start": middle, "end": len(body), "source_sha256": raw,
+              "paragraph_sha256": text_hash(body), "fragment_sha256": text_hash(body[middle:])}
+    correction = dict(target=previous, kind="paragraph_boundary", quote=body[middle:], author="court check",
+                      evidence="Earlier and canonical addresses contain the same source block.", write_fixture=False)
+    logged = record(conn, new=target, **correction)
+    assert record(conn, new=target, **correction)["id"] == logged["id"]
+    shown = get_paragraph(conn, previous)["evidence"][0]
+    assert shown["text"] == body[middle:] and shown["text_offset"] == middle
+    assert shown["former_paragraph"]["canonical_id"] == canonical and shown["id"] == canonical
+    assert shown["blocks"][0]["start"] == middle and shown["blocks"][0]["text"] == shown["text"]
+    assert get_paragraph(conn, canonical)["evidence"][0]["text"] == body
+    with pytest.raises(CorrectionError):
+        record(conn, new=target, **{**correction, "target": ECLI + "#rn-991"})
+    with pytest.raises(CorrectionError):
+        record(conn, new={**target, "canonical_id": "other"}, **correction)
+    with pytest.raises(CorrectionError):
+        record(conn, new={**target, "start": middle - 1}, **correction)
+    with pytest.raises(CorrectionError):
+        record(conn, new={**target, "source_sha256": "0" * 64}, **correction)
+    conn.execute("UPDATE decisions SET content_hash=? WHERE id=?", ("f" * 64, ECLI))
+    assert get_paragraph(conn, previous)["status"] == "integrity_check_failed"
+    assert get_paragraph(conn, ECLI + "#unknown")["status"] == "not_in_corpus"
+
+
+def test_exact_stored_paragraph_takes_precedence_over_previous_range(conn, fixture):
+    from courts.ledger import record
+    from courts.paragraph_ranges import text_hash
+    seed(conn, fixture)
+    row = conn.execute("SELECT p.text,d.content_hash FROM paragraphs p JOIN decisions d ON d.id=p.decision_id "
+                       "WHERE p.decision_id=? AND p.anchor='rn-10'", (ECLI,)).fetchone()
+    txt = row["text"][:18]
+    previous = ECLI + "#previous"
+    new = {"anchor": "rn-10", "start": 0, "end": len(txt), "source_sha256": row["content_hash"],
+           "paragraph_sha256": text_hash(row["text"]), "fragment_sha256": text_hash(txt)}
+    record(conn, target=previous, kind="paragraph_boundary", new=new, quote=txt, evidence="source row",
+           author="reviewer", write_fixture=False)
+    conn.execute("INSERT INTO paragraphs(decision_id,ordinal,anchor,section,authorship,rn,numbering,block_count,"
+                 "blocks,text,text_hash) VALUES(?,765,'previous','gruende','court',NULL,'none',1,?,?,?)",
+                 (ECLI, json.dumps([[len(txt),"/old"]]), txt, bytes.fromhex(text_hash(txt))))
+    evidence = get_paragraph(conn, previous)["evidence"][0]
+    assert evidence["id"] == previous and "former_paragraph" not in evidence

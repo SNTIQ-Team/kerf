@@ -15,7 +15,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from . import PARSER_VERSION, SCHEMA_VERSION
+from . import PARSER_VERSION, SCHEMA_VERSION, paragraph_ranges
 from .casenumbers import case_key
 from .config import db_path
 from .detail import expand_detail
@@ -369,21 +369,32 @@ def get_paragraph(conn: sqlite3.Connection, paragraph_id: str) -> dict:
     key = split_paragraph_id(paragraph_id)
     if key is None:
         return {"status": "not_in_corpus", "request": paragraph_id}
-    lookup = (f"SELECT {PARAGRAPH_COLUMNS}, p.blocks FROM paragraphs p JOIN decisions d "
+    lookup = (f"SELECT {PARAGRAPH_COLUMNS}, p.blocks, p.anchor FROM paragraphs p JOIN decisions d "
               "ON d.id = p.decision_id WHERE p.decision_id = ? AND p.anchor = ?")
     row = conn.execute(lookup, key).fetchone()
     if row is None and key[0].upper().startswith("ECLI:"):
-        # An exact paragraph id addresses a stored document. A variant ECLI
-        # can address several documents and needs the usual identity check.
         candidates = _stored_decision_ids(conn, key[0])
-        if key[0] in candidates:
-            return {"status": "not_in_corpus", "request": paragraph_id}
-        if len(candidates) > 1:
-            return {"status": "ambiguous_identity", "request": paragraph_id, "candidates": candidates}
-        if candidates:
-            row = conn.execute(lookup, (candidates[0], key[1])).fetchone()
+        if key[0] not in candidates:
+            if len(candidates) > 1:
+                return {"status": "ambiguous_identity", "request": paragraph_id, "candidates": candidates}
+            if candidates:
+                key = (candidates[0], key[1])
+                row = conn.execute(lookup, key).fetchone()
+    previous = None
     if row is None:
-        return {"status": "not_in_corpus", "request": paragraph_id}
+        correction = conn.execute("SELECT new FROM corrections WHERE target=? AND kind='paragraph_boundary' "
+                                  "AND field=? ORDER BY id DESC LIMIT 1", ("#".join(key), paragraph_ranges.FIELD)).fetchone()
+        if correction is None:
+            return {"status": "not_in_corpus", "request": paragraph_id}
+        try:
+            previous = json.loads(correction["new"])
+            anchor = previous.get("anchor") if isinstance(previous, dict) else None
+            if isinstance(anchor, str):
+                row = conn.execute(lookup, (key[0], anchor)).fetchone()
+        except (ValueError, TypeError):
+            pass
+        if not paragraph_ranges.valid_range(previous, row, key[1]):
+            return {"status": "integrity_check_failed", "request": paragraph_id, "reason": "former_paragraph_range"}
     if failure := _source_identity_failure(conn, row["decision_id"], paragraph_id):
         return failure
     if hashlib.sha256(row["text"].encode()).hexdigest() != row["text_hash"]:
@@ -393,6 +404,18 @@ def get_paragraph(conn: sqlite3.Connection, paragraph_id: str) -> dict:
     item["relations"] = [relation_row(r, conn) for r in conn.execute(
         f"SELECT {RELATION_COLUMNS} FROM relations r WHERE r.decision_id = ? AND r.paragraph_ordinal = ? "
         "ORDER BY r.span_start", (row["decision_id"], row["ordinal"])).fetchall()]
+    if previous:
+        start, end = previous["start"], previous["end"]
+        item["former_paragraph"] = {**previous, "id": "#".join(key), "canonical_id": row["id"]}
+        item["text"] = row["text"][start:end]
+        item["text_offset"] = start
+        item["text_truncated"] = start > 0 or end < len(row["text"])
+        item["quality"]["complete"] = not item["text_truncated"]
+        item["blocks"] = [{**b, "start": max(start, b["start"]), "end": min(end, b["end"]),
+                           "text": row["text"][max(start, b["start"]):min(end, b["end"])]}
+                          for b in item["blocks"] if b["start"] < end and b["end"] > start]
+        item["relations"] = [r for r in item["relations"] if (span := r["evidence"]["span"])
+                             and start <= span[0] < span[1] <= end]
     return {"status": "ok", "evidence": [item]}
 
 
