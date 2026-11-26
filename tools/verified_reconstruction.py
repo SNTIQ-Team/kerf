@@ -102,7 +102,7 @@ def _exact_keys(value: Any, required: set[str], label: str) -> dict[str, Any]:
     return value
 
 
-def _validate_reviews(raw: Any) -> list[dict[str, Any]]:
+def _validate_reviews(raw: Any, *, observed_through: str | None = None) -> list[dict[str, Any]]:
     document = _exact_keys(
         raw, {"schema_version", "kind", "reviews"}, "review document")
     if document["schema_version"] != SCHEMA_VERSION or \
@@ -181,7 +181,8 @@ def _validate_reviews(raw: Any) -> list[dict[str, Any]]:
         if review["anchor"]["observed_at"] < end:
             raise ReconstructionError(
                 f"{review_id} anchor predates the outgoing boundary")
-        reviews.append(copy.deepcopy(review))
+        if observed_through is None or anchor["observed_at"] <= observed_through:
+            reviews.append(copy.deepcopy(review))
     return reviews
 
 
@@ -221,8 +222,8 @@ def _strict_command(raw_command: Any) -> dict[str, str]:
 
     address = r"§\s*(?P<norm>\d+[a-z]?)"
     replace = re.fullmatch(
-        rf"In {address} Absatz (?P<absatz>\d+[a-z]?) Satz (?P<satz>\d+) "
-        r"wird (?:die Angabe|das Wort|die Wörter|die Wortfolge|"
+        rf"In {address}(?: Absatz (?P<absatz>\d+[a-z]?) Satz (?P<satz>\d+))? "
+        r"(?:wird|werden) (?:die Angabe|das Wort|die Wörter|die Wortfolge|"
         r"die Bezeichnung) „(?P<old>[^„“]+)“ durch "
         r"(?:die Angabe|das Wort|die Wörter|die Wortfolge|"
         r"die Bezeichnung) „(?P<new>[^„“]+)“ ersetzt\.", command)
@@ -232,21 +233,29 @@ def _strict_command(raw_command: Any) -> dict[str, str]:
         result = {
             "kind": "replace_literal",
             "norm": f"§ {replace.group('norm')}",
-            "absatz": replace.group("absatz"),
-            "satz": replace.group("satz"),
             "old": _compact(replace.group("old")),
             "new": _compact(replace.group("new")),
         }
         if _compact(raw_command.get("old_text_constraint")) != result["old"] or \
                 _compact(raw_command.get("new_text")) != result["new"]:
             raise ReconstructionError("replacement old/new metadata disagrees")
-        require_ref(result, ("absatz", "satz"))
+        if replace.group("absatz"):
+            result.update(absatz=replace.group("absatz"), satz=replace.group("satz"))
+            require_ref(result, ("absatz", "satz"))
+        else:
+            require_ref(result, ())
+            if set(raw_command["ref"]) != {"para"}:
+                raise ReconstructionError("whole-section replacement has narrower target metadata")
         return result
 
     sentence = re.fullmatch(
         rf"In {address} Absatz (?P<absatz>\d+[a-z]?) wird nach Satz "
         r"(?P<after_sentence>\d+) der folgende Satz eingefügt: "
         r"„(?P<text>[^„“]+)“", command)
+    if sentence is None:
+        sentence = re.fullmatch(
+            rf"Nach {address} Absatz (?P<absatz>\d+[a-z]?) Satz (?P<after_sentence>\d+) "
+            r"wird folgender Satz eingefügt: „(?P<text>[^„“]+)“", command)
     if sentence:
         if quote_count != 1 or raw_command.get("operation") != "insert":
             raise ReconstructionError("sentence insertion metadata disagrees")
@@ -269,6 +278,10 @@ def _strict_command(raw_command: Any) -> dict[str, str]:
         rf"In {address} wird nach Absatz (?P<after_absatz>\d+[a-z]?) "
         r"der folgende Absatz (?P<new_absatz>\d+[a-z]?) eingefügt: "
         r"„(?P<text>[^„“]+)“", command)
+    if paragraph is None:
+        paragraph = re.fullmatch(
+            rf"Nach {address} Absatz (?P<after_absatz>\d+[a-z]?) wird "
+            r"der folgende Absatz (?P<new_absatz>\d+[a-z]?) eingefügt: „(?P<text>[^„“]+)“", command)
     if paragraph:
         if quote_count != 1 or raw_command.get("operation") != "insert":
             raise ReconstructionError("paragraph insertion metadata disagrees")
@@ -285,6 +298,18 @@ def _strict_command(raw_command: Any) -> dict[str, str]:
         if str((raw_command.get("ref") or {}).get("absatz") or "") != \
                 result["after_absatz"]:
             raise ReconstructionError("paragraph insertion ref disagrees with raw")
+        return result
+    recast = re.fullmatch(
+        rf"{address} Absatz (?P<absatz>\d+[a-z]?) wird wie folgt gefasst: „(?P<text>[^„“]+)“", command)
+    if recast:
+        text = _compact(recast.group("text"))
+        if (quote_count != 1 or raw_command.get("operation") != "replace"
+                or not text.startswith(f"({recast.group('absatz')}) ")
+                or _compact(raw_command.get("new_text")) != text):
+            raise ReconstructionError("paragraph recast disagrees with printed text")
+        result = {"kind": "recast_paragraph", "norm": f"§ {recast.group('norm')}",
+                  "absatz": recast.group("absatz"), "text": text}
+        require_ref(result, ("absatz",))
         return result
     raise ReconstructionError(
         f"unsupported or non-leaf amendment command: {command[:120]}")
@@ -370,26 +395,47 @@ def _paragraph(text: str, number: str) -> tuple[int, int, int]:
     return matches[0]
 
 
+_GERMAN_DATE = re.compile(
+    r"(?<!\d)(?:0?[1-9]|[12]\d|3[01])\.\s+"
+    r"(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)"
+    r"\s+\d{4}\b")
+
+
+def _sentence_ends(body: str):
+    dates = {match.start() + match.group().index(".") for match in _GERMAN_DATE.finditer(body)}
+    return (end for end in _SENTENCE_END.finditer(body) if end.start() not in dates)
+
+
 def _sentence_number(body: str, offset: int) -> int:
     if offset < 0 or offset > len(body):
         raise ReconstructionError("sentence offset is outside paragraph")
-    return sum(match.end() <= offset for match in _SENTENCE_END.finditer(body)) + 1
+    return sum(match.end() <= offset for match in _sentence_ends(body)) + 1
+
+
+def _replace_literal(text: str, command: Mapping[str, str], old: str, new: str) -> str:
+    body = text
+    if "absatz" in command:
+        _start, body_start, end = _paragraph(text, command["absatz"])
+        body = text[body_start:end]
+    if text.count(old) != 1 or text.count(new) or body.count(old) != 1:
+        raise ReconstructionError(f"replacement cardinality failed in {command['norm']}")
+    if "satz" in command and _sentence_number(body, body.index(old)) != int(command["satz"]):
+        raise ReconstructionError(f"replacement is outside reviewed sentence in {command['norm']}")
+    return text.replace(old, new, 1)
 
 
 def _inverse_command(state: dict[str, Any], command: Mapping[str, str]) -> None:
     norm = _find_norm(state, command["norm"])
     text = norm["text"]
     if command["kind"] == "replace_literal":
-        _start, body_start, end = _paragraph(text, command["absatz"])
-        body = text[body_start:end]
-        old, new = command["old"], command["new"]
-        if text.count(new) != 1 or text.count(old) != 0 or body.count(new) != 1:
-            raise ReconstructionError(
-                f"replacement cardinality failed in {command['norm']}")
-        if _sentence_number(body, body.index(new)) != int(command["satz"]):
-            raise ReconstructionError(
-                f"replacement is outside reviewed sentence in {command['norm']}")
-        norm["text"] = text.replace(new, old, 1)
+        norm["text"] = _replace_literal(text, command, command["new"], command["old"])
+        return
+    if command["kind"] == "insert_paragraph_after":
+        _assert_incoming(state, command)
+        start, _body, end = _paragraph(text, command["new_absatz"])
+        if end != len(text) or text[start:] != command["text"]:
+            raise ReconstructionError("reverse replay requires an exact final inserted paragraph")
+        norm["text"] = text[:start]
         return
     if command["kind"] == "insert_sentence_after":
         _start, body_start, end = _paragraph(text, command["absatz"])
@@ -400,7 +446,7 @@ def _inverse_command(state: dict[str, Any], command: Mapping[str, str]) -> None:
                 f"inserted sentence cardinality failed in {command['norm']}")
         position = body.index(inserted)
         preceding_sentences = sum(
-            match.end() <= position for match in _SENTENCE_END.finditer(body))
+            match.end() <= position for match in _sentence_ends(body))
         if preceding_sentences != int(command["after_sentence"]):
             raise ReconstructionError(
                 f"inserted sentence is outside reviewed position in {command['norm']}")
@@ -414,16 +460,13 @@ def _forward_command(state: dict[str, Any], command: Mapping[str, str]) -> None:
     norm = _find_norm(state, command["norm"])
     text = norm["text"]
     if command["kind"] == "replace_literal":
-        _start, body_start, end = _paragraph(text, command["absatz"])
-        body = text[body_start:end]
-        old, new = command["old"], command["new"]
-        if text.count(old) != 1 or text.count(new) != 0 or body.count(old) != 1:
-            raise ReconstructionError(
-                f"forward replacement cardinality failed in {command['norm']}")
-        if _sentence_number(body, body.index(old)) != int(command["satz"]):
-            raise ReconstructionError(
-                f"forward replacement has a different sentence target")
-        norm["text"] = text.replace(old, new, 1)
+        norm["text"] = _replace_literal(text, command, command["old"], command["new"])
+        return
+    if command["kind"] == "insert_paragraph_after":
+        _start, _body, end = _paragraph(text, command["after_absatz"])
+        if end != len(text) or any(label == command["new_absatz"] for label, *_ in _paragraphs(text)):
+            raise ReconstructionError("forward replay requires the reviewed final paragraph")
+        norm["text"] = text + command["text"]
         return
     if command["kind"] == "insert_sentence_after":
         start, body_start, end = _paragraph(text, command["absatz"])
@@ -431,7 +474,7 @@ def _forward_command(state: dict[str, Any], command: Mapping[str, str]) -> None:
         inserted = command["text"]
         if text.count(inserted) != 0:
             raise ReconstructionError("forward insertion already exists")
-        sentence_ends = list(_SENTENCE_END.finditer(body))
+        sentence_ends = list(_sentence_ends(body))
         after = int(command["after_sentence"])
         if len(sentence_ends) != after:
             # Initial support deliberately allows insertion at the end of the
@@ -450,10 +493,20 @@ def _forward_command(state: dict[str, Any], command: Mapping[str, str]) -> None:
 
 
 def _assert_incoming(state: dict[str, Any], command: Mapping[str, str]) -> None:
-    if command["kind"] != "insert_paragraph_after":
-        raise ReconstructionError(
-            f"unsupported incoming assertion {command['kind']}")
+    if command["kind"] in {"replace_literal", "insert_sentence_after"}:
+        # Inversion checks the full literal and its printed location. Keep the
+        # actual state intact: this check attests to the incoming command only.
+        target = copy.deepcopy(_find_norm(state, command["norm"]))
+        _inverse_command({"norms": [target]}, command)
+        return
     norm = _find_norm(state, command["norm"])
+    if command["kind"] == "recast_paragraph":
+        start, _body, end = _paragraph(norm["text"], command["absatz"])
+        if _compact(norm["text"][start:end]) != command["text"]:
+            raise ReconstructionError("recast paragraph body differs from BGBl")
+        return
+    if command["kind"] != "insert_paragraph_after":
+        raise ReconstructionError(f"unsupported incoming assertion {command['kind']}")
     paragraphs = _paragraphs(norm["text"])
     labels = [row[0] for row in paragraphs]
     try:
@@ -525,9 +578,9 @@ def _event_summary(candidate: Mapping[str, Any]) -> dict[str, Any]:
 def build_reconstructions(
         review_document: Any, candidates: Iterable[dict[str, Any]],
         state_manifest: Mapping[str, Any], states: Mapping[str, Any], *,
-        built_at: str) -> dict[str, Any]:
+        built_at: str, observed_through: str | None = None) -> dict[str, Any]:
     """Build reviewed derived states entirely in memory."""
-    reviews = _validate_reviews(review_document)
+    reviews = _validate_reviews(review_document, observed_through=observed_through)
     built_at = _require_instant(built_at, "built_at")
     indexed: dict[str, dict[str, Any]] = {}
     for candidate in candidates:
@@ -601,17 +654,20 @@ def build_reconstructions(
             "url": observation["source_url"],
             "observed_at": observation["observed_at"],
             "state_sha256": anchor_digest,
-        }, {
-            "source": "BGBl",
-            "url": incoming["official_pdf_url"],
-            "document": incoming["document_id"],
-            "pdf_sha256": incoming["pdf_sha256"],
-            "text_sha256": incoming["text_sha256"],
-        }, {
-            "source": "DIP",
-            "url": f"https://dip.bundestag.de/vorgang/{incoming['procedure_id']}",
-            "procedure": incoming["procedure_id"],
         }]
+        for event in (incoming, outgoing):
+            gazette = {
+                "source": "BGBl", "url": event["official_pdf_url"],
+                "document": event["document_id"], "pdf_sha256": event["pdf_sha256"],
+                "text_sha256": event["text_sha256"],
+            }
+            procedure = {
+                "source": "DIP", "url": f"https://dip.bundestag.de/vorgang/{event['procedure_id']}",
+                "procedure": event["procedure_id"],
+            }
+            for source in (gazette, procedure):
+                if source not in evidence:
+                    evidence.append(source)
         reconstructions.append({
             "id": review["id"],
             "schema_version": SCHEMA_VERSION,
@@ -724,28 +780,30 @@ def build_from_paths(
         candidates_path: Path | None = None,
         state_store: Path = DEFAULT_STORE, *, built_at: str) -> dict[str, Any]:
     review_document = _read_json(Path(reviews_path))
-    candidates = _read_jsonl(Path(candidates_path or _latest_candidates()))
-    reviewed_ids = {
-        str(row.get("candidate_id"))
-        for review in review_document.get("reviews") or []
-        if isinstance(review, dict)
-        for row in (review.get("incoming"), review.get("outgoing"))
-        if isinstance(row, dict)
-    }
+    candidates_file = Path(candidates_path or _latest_candidates())
+    candidates = _read_jsonl(candidates_file)
+    manifest = load_manifest(Path(state_store))
+    # Review anchors are dated observations. A rebuild of an earlier release
+    # can only use evidence available in its official state and candidate stores.
+    dates = [row["observed_at"] for row in manifest.get("observations") or []]
+    observed_through = max(dates) if dates else None
+    snapshot_date = candidates_file.parent.name
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", snapshot_date):
+        snapshot_date = _require_day(snapshot_date, "candidate snapshot date")
+        observed_through = min(observed_through, snapshot_date) if observed_through else snapshot_date
+    reviews = _validate_reviews(review_document, observed_through=observed_through)
+    reviewed_ids = {event["candidate_id"] for review in reviews
+                    for event in (review["incoming"], review["outgoing"])}
     reviewed_candidates = [row for row in candidates if row.get("id") in reviewed_ids]
     if len(reviewed_candidates) != len(reviewed_ids):
         raise ReconstructionError("one or more reviewed candidates are absent")
     _verified_source_objects(reviewed_candidates)
-    manifest = load_manifest(Path(state_store))
-    anchors = {
-        str(review.get("anchor", {}).get("state_sha256"))
-        for review in review_document.get("reviews") or []
-        if isinstance(review, dict)
-    }
+    anchors = {review["anchor"]["state_sha256"] for review in reviews}
     states = {digest: load_state_verified(Path(state_store), digest)
               for digest in anchors}
     return build_reconstructions(
-        review_document, candidates, manifest, states, built_at=built_at)
+        review_document, candidates, manifest, states, built_at=built_at,
+        observed_through=observed_through)
 
 
 def main(argv: list[str] | None = None) -> int:
