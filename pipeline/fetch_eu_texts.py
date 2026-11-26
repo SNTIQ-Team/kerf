@@ -9,8 +9,8 @@ Per act (``CORPUS`` plus discovered extension decisions of Implementing Decision
 2022/382):
 
 * SPARQL metadata of the work: adoption (``work_date_document``), signature, every
-  ``resource_legal_date_entry-into-force`` (the earliest is the entry into force, a later
-  one the date of application), end of validity, the Official Journal issue and date, the
+  ``resource_legal_date_entry-into-force`` with the asserted role and scope of each date, end of validity,
+  the Official Journal issue and date, the
   German title, corrigenda (``resource_legal_corrects_resource_legal``), repealing and
   amending acts, and the consolidated versions (``act_consolidated_*``, CELEX sector 0).
 * Text editions: the Official Journal text (sector 3) and every consolidated version,
@@ -48,6 +48,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import quote
+
+if __package__:
+    from .eu_dates import general_date
+else:
+    from eu_dates import general_date
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "cache" / "eu_texts"
@@ -187,12 +192,17 @@ def celex_uri(celex: str) -> str:
 # ----------------------------------------------------------------- metadata
 
 def work_metadata(cellar: Cellar, celex: str) -> dict[str, Any]:
-    rows = cellar.sparql(f"""SELECT ?p ?o WHERE {{ ?w owl:sameAs {celex_uri(celex)} . ?w ?p ?o .
+    rows = cellar.sparql(f"""PREFIX ann: <http://publications.europa.eu/ontology/annotation#>
+      SELECT ?p ?o ?dateRole ?dateComment WHERE {{ ?w owl:sameAs {celex_uri(celex)} . ?w ?p ?o .
       FILTER(?p IN (cdm:work_date_document, cdm:resource_legal_date_signature,
         cdm:resource_legal_date_entry-into-force, cdm:resource_legal_date_end-of-validity,
-        cdm:date_creation_legacy, cdm:resource_legal_eli, cdm:resource_legal_in-force,
+        cdm:resource_legal_eli, cdm:resource_legal_in-force,
         cdm:official-journal-act_date_publication, cdm:official-journal-act_number,
-        cdm:official-journal-act_year, cdm:official-journal-act_part_of_collection_document)) }}""")
+        cdm:official-journal-act_year, cdm:official-journal-act_part_of_collection_document))
+      OPTIONAL {{ ?assertion owl:annotatedSource ?w ; owl:annotatedProperty ?p ; owl:annotatedTarget ?o .
+        OPTIONAL {{ ?assertion ann:type_of_date ?dateRole }}
+        OPTIONAL {{ ?assertion ann:comment_on_date ?dateComment }}
+      }} }}""")
     values: dict[str, list[str]] = {}
     for row in rows:
         values.setdefault(row["p"].rsplit("#", 1)[-1], []).append(row["o"])
@@ -205,11 +215,16 @@ def work_metadata(cellar: Cellar, celex: str) -> dict[str, Any]:
       ?e cdm:expression_belongs_to_work ?w ; cdm:expression_uses_language <{DEU}> ;
          cdm:expression_title ?t }} LIMIT 1""")
     eif = sorted(set(values.get("resource_legal_date_entry-into-force", [])))
-    end = min(values.get("resource_legal_date_end-of-validity", []) or ["9999-12-31"])
+
+    def date_rows(predicate: str) -> list[dict]:
+        return [{"date": r["o"], "dateRole": r.get("dateRole", ""), "dateComment": r.get("dateComment", "")}
+                for r in rows if r["p"].endswith("#" + predicate)]
+
+    entry = date_rows("resource_legal_date_entry-into-force")
+    end = date_rows("resource_legal_date_end-of-validity")
     oj_row = oj[0] if oj else {}
     act_by_act = (values.get("official-journal-act_date_publication") or [None])[0]
-    published = oj_row.get("d") or act_by_act or \
-        min(values.get("date_creation_legacy", []) or [""]) or None
+    published = act_by_act or oj_row.get("d")
     series = ((oj_row.get("c") or (values.get(
         "official-journal-act_part_of_collection_document") or [""])[0]).rsplit("/", 1)[-1]
         .replace("OJ-", "") or None)
@@ -230,10 +245,10 @@ def work_metadata(cellar: Cellar, celex: str) -> dict[str, Any]:
         "adopted": min(values.get("work_date_document", []) or [""]) or None,
         "signed": min(values.get("resource_legal_date_signature", []) or [""]) or None,
         "published": published, "oj_ref": oj_ref,
-        "in_force": eif[0] if eif else None,
-        "applies_from": eif[-1] if len(eif) > 1 else None,
+        "in_force": general_date(entry, "EV"),
+        "applies_from": general_date(entry, "MA"),
         "entry_into_force_dates": eif,
-        "end_of_validity": None if end.startswith("9999") else end,
+        "end_of_validity": general_date(end, None),
         "eli": (values.get("resource_legal_eli") or [None])[0],
     }
 
