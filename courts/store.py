@@ -11,6 +11,7 @@ import json
 import re
 import sqlite3
 import time
+from collections.abc import Iterable
 from datetime import date, datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -252,6 +253,12 @@ def utcnow() -> str:
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+
+def _decision_text_hash(parts: Iterable[tuple[str, str]]) -> str:
+    """Hash the public paragraph IDs and their text in document order."""
+    return sha256("\n␞\n".join(f"{pid}\t{text}" for pid, text in parts).encode())
 
 
 def _wal(conn: sqlite3.Connection) -> None:
@@ -898,12 +905,26 @@ def rekey_decision(conn: sqlite3.Connection, old_id: str, new_id: str) -> None:
     The recorded citation and parser links retain their original ECLI or docket.
     Callers protect document IDs referenced by the append-only corrections ledger.
     """
+    document = conn.execute("SELECT text_hash FROM decisions WHERE id=?", (old_id,)).fetchone()
+    if document is None:
+        raise ValueError(f"unknown decision {old_id}")
+    rows = conn.execute("SELECT anchor, text, text_hash FROM paragraphs WHERE decision_id=? ORDER BY ordinal",
+                        (old_id,)).fetchall()
+    if any(hashlib.sha256(row["text"].encode()).digest() != row["text_hash"] for row in rows):
+        raise ValueError(f"paragraph integrity check failed before rekeying {old_id}")
+
+    def digest_for(prefix: str) -> str:
+        return _decision_text_hash((f"{prefix}#{row['anchor']}", row["text"]) for row in rows)
+
+    if digest_for(old_id) != document["text_hash"]:
+        raise ValueError(f"decision integrity check failed before rekeying {old_id}")
+    new_hash = digest_for(new_id)
     conn.execute("""UPDATE relations SET target_decision_id=?
                     WHERE target_decision_id=? AND target_kind='decision' AND derived_by IN ('user', 'model')""",
                  (new_id, old_id))
     for table, column in DECISION_ID_COLUMNS:
         conn.execute(f"UPDATE {table} SET {column}=? WHERE {column}=?", (new_id, old_id))
-    conn.execute("UPDATE decisions SET id=? WHERE id=?", (new_id, old_id))
+    conn.execute("UPDATE decisions SET id=?, text_hash=? WHERE id=?", (new_id, new_hash, old_id))
 
 
 def named_by_corrections(conn: sqlite3.Connection, decision_id: str) -> bool:
@@ -957,7 +978,7 @@ def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content
     paragraphs, numbering = assemble(decision_id, parsed.sections)
     if not paragraphs:
         raise UpstreamFailure("empty_document", "no paragraphs", url=parsed.source_url)
-    text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
+    text_hash = _decision_text_hash((p.id, p.text) for p in paragraphs)
     observed_at = observed_at or utcnow()
     republication = republication_of(conn, parsed, [p.text for p in paragraphs])
     if republication is not None and not (republication[0]["numbering"] == "none" and numbering == "rn"):
@@ -1005,7 +1026,7 @@ def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content
             parsed.metadata["id_variant"] = parsed.source_doc_id
             decision_id = decision_identity(parsed)
         paragraphs, numbering = assemble(decision_id, parsed.sections)
-        text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
+        text_hash = _decision_text_hash((p.id, p.text) for p in paragraphs)
     twin = same_decision_elsewhere(conn, parsed)
     if twin is not None and twin["numbering"] == "none" and numbering == "rn" and not parsed.ecli and twin["ecli"]:
         # The explicit-Rn copy replaces an unnumbered twin and keeps its validated ECLI as the identity
@@ -1014,7 +1035,7 @@ def _store_decision(conn: sqlite3.Connection, parsed: ParsedDecision, *, content
         parsed.metadata["ecli_from_source"] = f"{twin['source_id']}:{twin['source_doc_id']}"
         decision_id = decision_identity(parsed)
         paragraphs, numbering = assemble(decision_id, parsed.sections)
-        text_hash = sha256("\n␞\n".join(f"{p.id}\t{p.text}" for p in paragraphs).encode())
+        text_hash = _decision_text_hash((p.id, p.text) for p in paragraphs)
     existing = conn.execute("SELECT id, content_hash, text_hash, parser_version, first_seen, source_id, "
                             "source_doc_id, numbering FROM decisions WHERE (source_id=? AND source_doc_id=?) OR id=?",
                             (parsed.source_id, parsed.source_doc_id, decision_id)).fetchall()
