@@ -742,7 +742,7 @@ def ecli_encoded_date(ecli: str) -> str | None:
         return None
     # The BPatG ordinal for JURE269032429 starts with DDMMYYYY. Also accept
     # YYYYMMDD when the calendar and the ECLI's year distinguish that reading.
-    if parts[2].upper() == "BPATG" and (match := re.match(r"^(\d{8})(?=\.?[A-Z])", parts[4])):
+    if parts[2].upper() == "BPATG" and (match := re.match(r"^([0-9]{8})(?=\.?[A-Za-z])", parts[4])):
         digits = match.group(1)
         candidates = set()
         for year, month, day in ((digits[:4], digits[4:6], digits[6:]),
