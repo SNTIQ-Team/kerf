@@ -108,6 +108,23 @@ PARAGRAPH_COLUMNS = f"""p.rowid AS rowid, {PARAGRAPH_ID} AS id, p.decision_id, p
   d.observed_at, d.content_hash, d.parser_version"""
 
 
+# A court can attach the PDF of a different decision under the same docket.
+# Hold only the exact capture examined by the verifier. A replacement file is
+# independently eligible even while the finding on the old bytes remains open.
+IDENTITY_HOLDS = """FROM verification_findings v JOIN decisions held ON held.id = v.decision_id
+    WHERE v.status = 'open' AND v.severity = 'major' AND v.kind = 'representation_error'
+    AND v.locator = 'pdf:document-identity' AND json_extract(v.detail, '$.capture_sha256') = held.content_hash"""
+HELD_DECISION_IDS = f"SELECT v.decision_id {IDENTITY_HOLDS}"
+
+
+def _source_identity_failure(conn: sqlite3.Connection, did: str, request: str) -> dict | None:
+    row = conn.execute(f"SELECT v.detail {IDENTITY_HOLDS} AND v.decision_id=? LIMIT 1", (did,)).fetchone()
+    if row:
+        return {"status": "integrity_check_failed", "reason": "source_identity_mismatch", "request": request,
+                "decision_id": did, "source_check": json.loads(row[0]), "evidence": []}
+    return None
+
+
 def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None = None,
            date_from: str | None = None, date_to: str | None = None, case_number: str | None = None,
            ecli: str | None = None, norm: str | None = None, relation: str | None = None,
@@ -138,7 +155,7 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
     if unknown:
         return _envelope("not_in_corpus", request_scope=scope, evidence=[], total=None,
                          searched=[{"source": s, "status": "unknown", "count": None} for s in unknown])
-    where, params = ["1=1"], []
+    where, params = [f"d.id NOT IN ({HELD_DECISION_IDS})"], []
     join = ""
     if match:
         join += " JOIN paragraphs_fts f ON f.rowid = p.rowid"
@@ -272,6 +289,8 @@ def get_decision(conn: sqlite3.Connection, ref: str, *, with_paragraphs: bool = 
     status, ids = resolve_decision(conn, ref)
     if status != "ok":
         return {"status": status, "request": ref, "candidates": ids}
+    if failure := _source_identity_failure(conn, ids[0], ref):
+        return failure
     d = conn.execute("SELECT * FROM decisions WHERE id = ?", (ids[0],)).fetchone()
     result = {k: d[k] for k in d.keys() if k not in ("metadata", "case_numbers")}
     result["case_numbers"] = json.loads(d["case_numbers"])
@@ -365,6 +384,8 @@ def get_paragraph(conn: sqlite3.Connection, paragraph_id: str) -> dict:
             row = conn.execute(lookup, (candidates[0], key[1])).fetchone()
     if row is None:
         return {"status": "not_in_corpus", "request": paragraph_id}
+    if failure := _source_identity_failure(conn, row["decision_id"], paragraph_id):
+        return failure
     if hashlib.sha256(row["text"].encode()).hexdigest() != row["text_hash"]:
         return {"status": "integrity_check_failed", "request": paragraph_id}
     item = evidence_item(row, excerpt=False)
@@ -407,6 +428,7 @@ def citing_decisions(conn: sqlite3.Connection, target: str, *, relation: str | N
         cond += (" AND EXISTS (SELECT 1 FROM relation_assessments a WHERE a.assessment = ? AND a.status <> 'rejected'"
                  f" AND {ASSESSMENT_OF_RELATION})")
         params.append(assessment)
+    cond += f" AND r.decision_id NOT IN ({HELD_DECISION_IDS})"
     total = conn.execute(f"SELECT count(*) FROM relations r WHERE {cond}", params).fetchone()[0]
     rows = conn.execute(f"SELECT {RELATION_COLUMNS} FROM relations r JOIN decisions d ON d.id = r.decision_id WHERE {cond} "
                         "ORDER BY d.decision_date DESC, r.id LIMIT ? OFFSET ?", (*params, limit, offset)).fetchall()
