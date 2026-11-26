@@ -793,7 +793,7 @@ def backfill_archive(http: Http, *, archive_path: Path = ARCHIVE,
         candidates.append((index, row))
 
     # Preserve the general archive, but make the first useful retrospective
-    # slice the corpus users can actually browse in Lexgraph.  ``by_work`` is
+    # slice the corpus users can actually browse in Kerf.  ``by_work`` is
     # itself an exact, persisted NeuRIS mapping; no fuzzy title guess enters
     # this ordering.  Within both partitions the old resumable order remains
     # stable, so interrupted runs still repeat at most one request.

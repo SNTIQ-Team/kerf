@@ -1,7 +1,7 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.commands.bgbl-2023-408-art10-items-0",
-  "module": "lexgraph",
+  "id": "kerf.commands.bgbl-2023-408-art10-items-0",
+  "module": "kerf",
   "kind": "amendment_commands",
   "description": "BGBl. 2023 I Nr. 408 Art. 10 (SGB XIV) numbers its first commands 0, 0a and 0b before 1. Each is its own command keyed by its printed number 0, 0a, 0b (not its position; no parent scope); item 0b amends § 8 Abs. 2 Satz 1 and item 1 § 12 Abs. 1 Satz 2.",
   "origin": "PRIMA audit finding 10 (amendment-command boundaries); tests/test_command_items.py",

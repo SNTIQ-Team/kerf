@@ -1,4 +1,4 @@
-"""EU/treaty acts: text editions -> Lexgraph act detail + norm versions + change records.
+"""EU/treaty acts: text editions -> Kerf act detail + norm versions + change records.
 
 Input: one row of ``data/snapshots/eu_texts/<date>/acts.jsonl`` (pipeline/fetch_eu_texts.py)
 or of the EMRK snapshot.  Output: the act detail written to ``web/data/acts/<id>.json``

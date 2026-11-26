@@ -24,12 +24,12 @@ from snapshot_storage import (  # noqa: E402
 
 
 def _default_refresh_lock() -> Path:
-    override = os.environ.get("LEXGRAPH_REFRESH_LOCK")
+    override = os.environ.get("KERF_REFRESH_LOCK")
     if override:
         return Path(override)
     if ROOT.is_relative_to("/srv"):
-        return Path("/run/lock/lexgraph-refresh.lock")
-    return Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "lexgraph-refresh.lock"
+        return Path("/run/lock/kerf-refresh.lock")
+    return Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "kerf-refresh.lock"
 
 
 @contextmanager

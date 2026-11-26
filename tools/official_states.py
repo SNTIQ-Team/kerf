@@ -118,7 +118,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
 def _empty_manifest() -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
-        "kind": "lexgraph-official-federal-state-store",
+        "kind": "kerf-official-federal-state-store",
         "state_identity": "sha256-canonical-uncompressed-json",
         "compression": "gzip-mtime-0-empty-filename",
         "objects": {},
@@ -169,7 +169,7 @@ def _validate_manifest(manifest: Any) -> dict[str, Any]:
         raise StateStoreError("state manifest must be an object")
     if manifest.get("schema_version") != SCHEMA_VERSION or \
             manifest.get("kind") != \
-            "lexgraph-official-federal-state-store":
+            "kerf-official-federal-state-store":
         raise StateStoreError("unsupported state manifest schema")
     if manifest.get("state_identity") != \
             "sha256-canonical-uncompressed-json" or \

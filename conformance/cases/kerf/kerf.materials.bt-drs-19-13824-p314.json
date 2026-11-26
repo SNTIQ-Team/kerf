@@ -1,7 +1,7 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.materials.bt-drs-19-13824-p314",
-  "module": "lexgraph",
+  "id": "kerf.materials.bt-drs-19-13824-p314",
+  "module": "kerf",
   "kind": "material_fragments",
   "description": "BT-Drs. 19/13824 p. 314 (exact pdftotext -layout pages; unlisted pages are unextracted): the Gegenäußerung answer to Ziffer 9 ends before the Ziffer 10 heading (a competitor excerpt swallowed it). Heading and body are separate fields, the heading slices back to the raw page text, no body contains the next heading, role is gegenaeusserung_bundesregierung and the heading targets are 'explains' relations. Ziffer 11 runs into unextracted page 315 and is therefore marked incomplete.",
   "origin": "PRIMA audit (fragment boundaries, fragment roles, relation strength); spec: Operating principles 2 (BT-Drs. 19/13824 p. 314 boundaries); tests/test_legislative_materials.py",

@@ -1,4 +1,4 @@
-"""Fail-closed bitemporal history over official Lexgraph state evidence.
+"""Fail-closed bitemporal history over official Kerf state evidence.
 
 The module deliberately keeps the two clocks separate:
 
@@ -7,7 +7,7 @@ The module deliberately keeps the two clocks separate:
     populated only by an accepted BGBl/DIP transition review.
 
 ``knowledge_*`` / ``observed_at``
-    Transaction time: when Lexgraph first saw a complete GII state and when a
+    Transaction time: when Kerf first saw a complete GII state and when a
     materialized assertion was superseded by stronger official evidence.
 
 An observation is never promoted to an effective date.  Full act/norm bodies
@@ -32,8 +32,8 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-KIND = "lexgraph-retrospective-bitemporal-history"
-PUBLIC_KIND = "lexgraph-retrospective-history"
+KIND = "kerf-retrospective-bitemporal-history"
+PUBLIC_KIND = "kerf-retrospective-history"
 OBSERVATION_DATE_BASIS = "retrieval_observation_not_effective_date"
 OBSERVATION_VERIFICATION = "exact"
 REVIEW_DATE_BASIS = "official_bgbl_command_and_commencement_clause"
@@ -1256,7 +1256,7 @@ def build_public_manifest(
         if not isinstance(verified_reconstructions, Mapping) or \
                 verified_reconstructions.get("schema_version") != 1 or \
                 verified_reconstructions.get("kind") != \
-                "lexgraph-reviewed-verified-reconstructions":
+                "kerf-reviewed-verified-reconstructions":
             raise RetrospectiveHistoryError(
                 "verified reconstruction artifact has an unsupported schema")
         recon_objects = verified_reconstructions.get("object_metadata") or {}

@@ -2,7 +2,7 @@
 
 This is intentionally narrow: the broad EU index covers instruments, while
 ``data/procedure_watchlist.json`` names the few pending procedures for which
-Lexgraph promises frequent status checks.  A political agreement is not a
+Kerf promises frequent status checks.  A political agreement is not a
 terminal state.  An Official Journal publication moves the record to final
 review; polling becomes terminal only after a persisted comparison of the
 final Article 2 against the tracked Commission proposal has passed.
@@ -480,7 +480,7 @@ def apply_final_review_gate(row: dict, config: dict,
     """Require a persisted final-text comparison before stopping polling.
 
     OJ publication proves that a final act exists, but does not prove that its
-    operative Article 2 still matches the proposal Lexgraph described.  The
+    operative Article 2 still matches the proposal Kerf described.  The
     reviewed CELEX/status lives in the versioned watch configuration.  Until a
     reviewer records a passed Article-2 comparison for one of the published
     CELEX identifiers, the procedure stays active as ``pending_final_review``.

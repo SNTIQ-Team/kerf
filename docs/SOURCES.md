@@ -21,7 +21,7 @@ resumable NeuRIS export were re-verified on 2026-07-16. Baseline audit snippets:
 | **OLDP** (openlegaldata.io) | live | research — bulk case graph (not in the current export) | 423,944 dated decisions, 18.6M case→§ citation edges | ~1 week ingest lag |
 | **NeuRIS** (testphase.rechtsinformationen.bund.de) | live | **official archive channel; secondary today, primary-designate** | cumulative changelog ledger plus bounded/resumable content-addressed capture of advertised ZIP/XML/HTML artifacts before temporary URLs disappear | continuous + resumable archive backfill (Testphase) |
 | **buzer.de** | private candidates + public deep links | discovery/manual QA and one-click cross-check only | private version/synopsis database since 2006 is not republished | no scheduled crawl |
-| **GII** (gesetze-im-internet.de) | live | **primary — current HEAD and observed complete states** | source itself exposes current Fassung only; Lexgraph retains each complete retrieval in its own immutable SHA-256 state store | continuous consolidation, days–weeks lag; daily capture |
+| **GII** (gesetze-im-internet.de) | live | **primary — current HEAD and observed complete states** | source itself exposes current Fassung only; Kerf retains each complete retrieval in its own immutable SHA-256 state store | continuous consolidation, days–weeks lag; daily capture |
 | **gesetze-bayern.de** (BAYERN.RECHT) | live | **primary — Bavaria HEAD + back-history** (upgraded 2026-07-06) | ffn register carries per-act Fortführungsnachweis amendment chains; `/Content/Zip/<key>` = structured XML (satz.nr, typed verweis incl. EU) | few working days after GVBl |
 | **Internet Archive Wayback** (archived BAYERN.RECHT pages) | live/cache-first | secondary retrieval channel — sparse Bavarian old/new text | archived official per-norm pages from 2016+; only one-to-one state/event matches are exported | one-time backfill + cached reruns |
 | **verkuendung-bayern.de** (GVBl/BayMBl) | live | **primary — Bavaria promulgation** | GVBl issues 1945+, permalinks `/gvbl/{Y}-{page}/` + sha256; BayMBl electronic = amtlich, GVBl electronic = nachrichtlich | RSS 50-item feeds, CSV Jahreslisten |
@@ -118,7 +118,7 @@ resumable NeuRIS export were re-verified on 2026-07-16. Baseline audit snippets:
   be protected as a database under §§ 87a ff. UrhG. Both fetchers are
   default-off and existing snapshots are quarantined. Public web/HF builds do
   not load them. A small curated mapping supplies only direct per-act history
-  links. Lexgraph does not request permission to reproduce Buzer's database;
+  links. Kerf does not request permission to reproduce Buzer's database;
   it independently recreates the useful workflow from official sources.
   Published history rows come from the official-only verification pipeline in
   `tools/federal_history.py`.
@@ -154,7 +154,7 @@ resumable NeuRIS export were re-verified on 2026-07-16. Baseline audit snippets:
 
 ```text
 HEAD (current law)     GII (federal) + gesetze-bayern XML (Land) + CELLAR (EU)
-Forward observations   complete daily GII states in Lexgraph's SHA-256 CAS
+Forward observations   complete daily GII states in Kerf's SHA-256 CAS
                        + captured NeuRIS artifacts + gesetze-bayern builddate
 Verified federal rows  own diffs between adjacent complete GII states;
                        a legal effective date only after final BGBl command

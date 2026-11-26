@@ -2,7 +2,7 @@
 
 ``run_case(case) -> actual`` dispatches on ``case["kind"]``; ``matches(expected,
 actual, mode)`` implements the comparison.  Module-specific kinds live in
-``courts_kinds.py`` and ``lexgraph_kinds.py`` (each exports ``KINDS``).
+``courts_kinds.py`` and ``kerf_kinds.py`` (each exports ``KINDS``).
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ def matches(expected: Any, actual: Any, mode: str = "subset") -> bool:
 
 def kinds() -> dict[str, Callable[[dict], Any]]:
     registry: dict[str, Callable[[dict], Any]] = {}
-    for name in ("courts_kinds", "lexgraph_kinds"):
+    for name in ("courts_kinds", "kerf_kinds"):
         try:
             module = __import__(f"conformance.{name}", fromlist=["KINDS"])
         except ModuleNotFoundError as exc:

@@ -228,7 +228,7 @@ def ask(key: str, model: str, facts: dict) -> dict | None:
             API_URL,
             headers={"Authorization": f"Bearer {key}",
                      "HTTP-Referer": "https://sntiq.com",
-                     "X-Title": "SNTIQ Lexgraph"},
+                     "X-Title": "SNTIQ Kerf"},
             json={"model": model,
                   "messages": [
                       {"role": "system", "content": SYSTEM_PROMPT},

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Validate and atomically publish one complete Lexgraph API data generation.
+# Validate and atomically publish one complete Kerf API data generation.
 #
-# The API reads LEXGRAPH_DATA=/srv/sntiq-lexapi/data/web-data.  That path is a
+# The API reads KERF_DATA=/srv/sntiq-kerf-api/data/web-data.  That path is a
 # symlink to an immutable release directory, so readers can see either the old
 # generation or the new one, never a half-written rsync.  The first invocation
 # migrates the legacy real directory while the API is stopped for a few
@@ -9,9 +9,9 @@
 set -euo pipefail
 
 SRC="${1:-web/data}"
-ROOT="${LEXGRAPH_API_DATA_ROOT:-/srv/sntiq-lexapi/data}"
+ROOT="${KERF_API_DATA_ROOT:-/srv/sntiq-kerf-api/data}"
 TARGET="$ROOT/web-data"
-SERVICE="${LEXGRAPH_API_SERVICE:-sntiq-lexapi}"
+SERVICE="${KERF_API_SERVICE:-sntiq-kerf-api}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RELEASE="$ROOT/web-data.release-${STAMP}-$$"
 NEXT="$ROOT/.web-data.next-$$"
@@ -28,10 +28,10 @@ trap cleanup EXIT
 test -d "$SRC"
 mkdir -p "$RELEASE"
 
-PYTHON="${LEXGRAPH_PYTHON:-}"
+PYTHON="${KERF_PYTHON:-}"
 if [ -z "$PYTHON" ]; then
-    if [ -x /srv/sntiq-lexgraph/venv/bin/python ]; then
-        PYTHON=/srv/sntiq-lexgraph/venv/bin/python
+    if [ -x /srv/sntiq-kerf/venv/bin/python ]; then
+        PYTHON=/srv/sntiq-kerf/venv/bin/python
     else
         PYTHON=python3
     fi
@@ -43,7 +43,7 @@ if [ -L "$TARGET" ]; then
     case "$previous" in "$ROOT"/web-data.release-*) stage_args+=(--previous "$previous");; esac
 fi
 "$PYTHON" "$(dirname "$0")/../tools/stage_release.py" "$SRC" "$RELEASE" \
-    "${stage_args[@]}" --reserve-mib "${LEXGRAPH_PUBLISH_RESERVE_MIB:-2048}"
+    "${stage_args[@]}" --reserve-mib "${KERF_PUBLISH_RESERVE_MIB:-2048}"
 
 "$PYTHON" - "$RELEASE" <<'PY'
 import gzip
@@ -188,7 +188,7 @@ if states != state_manifest:
     raise SystemExit(
         "publish validation: official federal state manifests differ")
 if states.get("schema_version") != 1 or states.get("kind") != \
-        "lexgraph-official-federal-state-store":
+        "kerf-official-federal-state-store":
     raise SystemExit("publish validation: unsupported federal state manifest")
 if states.get("state_identity") != \
         "sha256-canonical-uncompressed-json" or states.get("compression") != \
@@ -383,7 +383,7 @@ with (root / "verified_reconstructions.json").open(
     verified_reconstructions = json.load(handle)
 if verified_reconstructions.get("schema_version") != 1 or \
         verified_reconstructions.get("kind") != \
-        "lexgraph-reviewed-verified-reconstructions" or \
+        "kerf-reviewed-verified-reconstructions" or \
         verified_reconstructions.get("state_identity") != \
         "sha256-canonical-uncompressed-json":
     raise SystemExit(
@@ -574,14 +574,14 @@ if actual_cas_paths != expected_cas_paths:
     raise SystemExit("publish validation: unreviewed federal CAS extras")
 all_loaded_states = {**loaded_states, **derived_loaded_states}
 
-# The public retrospective manifest adds legal-valid time and Lexgraph
+# The public retrospective manifest adds legal-valid time and Kerf
 # knowledge time without copying state bodies.  Every body reference must be
 # one of the canonical GII objects verified above.  Event-only BGBl rows are
 # allowed, but may never claim that a historical consolidated body exists.
 with (root / "retrospective_history.json").open(encoding="utf-8") as handle:
     retrospective = json.load(handle)
 if retrospective.get("schema_version") != 1 or retrospective.get("kind") != \
-        "lexgraph-retrospective-history":
+        "kerf-retrospective-history":
     raise SystemExit("publish validation: unsupported retrospective history")
 retro_policy = retrospective.get("source_policy") or {}
 if retro_policy.get("official_only") is not True or \

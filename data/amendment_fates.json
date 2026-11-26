@@ -9,7 +9,7 @@
       "claim": "Der in der Stellungnahme des Bundesrates vorgeschlagene § 43 StAG mit einer vorübergehenden Zwölfmonatsfrist wurde nicht Gesetz.",
       "result": "not_taken_up",
       "conclusion": "Der Bundestag nahm den Regierungsentwurf in der Fassung der Beschlussempfehlung des Innenausschusses an. Diese Ausschussfassung enthielt den vom Bundesrat vorgeschlagenen § 43 StAG nicht. Das verkündete Gesetz enthält ihn ebenfalls nicht; § 75 VwGO nennt weiterhin grundsätzlich drei Monate als frühesten Zeitpunkt für die Untätigkeitsklage. Das ist eine Zulässigkeitsschwelle, keine Garantie einer Sachentscheidung binnen drei Monaten.",
-      "review_method": "Die Rollen und Übergänge der Dokumente sind anhand der verlinkten amtlichen Dokumente redaktionell geprüft. Beim Daten-Build werden zusätzlich die zwei Aussagen zum aktuell konsolidierten StAG und zur VwGO mechanisch gegen den Lexgraph-Korpus geprüft.",
+      "review_method": "Die Rollen und Übergänge der Dokumente sind anhand der verlinkten amtlichen Dokumente redaktionell geprüft. Beim Daten-Build werden zusätzlich die zwei Aussagen zum aktuell konsolidierten StAG und zur VwGO mechanisch gegen den Kerf-Korpus geprüft.",
       "document_chain": [
         {
           "role": "government_draft",

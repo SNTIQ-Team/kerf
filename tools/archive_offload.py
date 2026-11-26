@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Move old Lexgraph source archives to the archive worker; keep the VPS small.
+"""Move old Kerf source archives to the archive worker; keep the VPS small.
 
-VPS side (``/srv/sntiq-lexgraph``)::
+VPS side (``/srv/sntiq-kerf``)::
 
     archive_offload.py manifest            # list unreceipted files + SHA-256
     archive_offload.py prune [--apply]     # delete receipted, out-of-window bytes
     archive_offload.py install-legacy DIR  # admit an attested legacy rebuild
     archive_offload.py status
 
-Archive worker side (``~/.local/share/sntiq-legal/lexgraph-archive``)::
+Archive worker side (``~/.local/share/sntiq-legal/kerf-archive``)::
 
     archive_offload.py receipt  --manifest M --archive A --key K --out DIR
     archive_offload.py attest   --snapshot-dir S --key K [--receipt R]
@@ -46,7 +46,7 @@ from snapshot_storage import (  # noqa: E402
 )
 
 DATA = ROOT / "data"
-OFFLOAD = Path(os.environ.get("LEXGRAPH_OFFLOAD_ROOT", DATA / "archive-offload"))
+OFFLOAD = Path(os.environ.get("KERF_OFFLOAD_ROOT", DATA / "archive-offload"))
 # What the archive worker archives: the pre-2023 BGBl capture store and every
 # dated source snapshot (including the compaction archive).
 ARCHIVED_PREFIXES = ("legacy_bgbl_history", "snapshots")
@@ -119,12 +119,12 @@ def _refresh_lock(path: Path, wait: float, inherited_fd: int | None):
 
 
 def _default_lock() -> Path:
-    override = os.environ.get("LEXGRAPH_REFRESH_LOCK")
+    override = os.environ.get("KERF_REFRESH_LOCK")
     if override:
         return Path(override)
     if ROOT.is_relative_to("/srv"):
-        return Path("/run/lock/lexgraph-refresh.lock")
-    return Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "lexgraph-refresh.lock"
+        return Path("/run/lock/kerf-refresh.lock")
+    return Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "kerf-refresh.lock"
 
 
 # --------------------------------------------------------------- VPS: manifest

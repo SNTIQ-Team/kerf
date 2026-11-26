@@ -1,4 +1,4 @@
-"""Fail-closed command replay on real Lexgraph transitions.
+"""Fail-closed command replay on real Kerf transitions.
 
 tests/fixtures/command_replay_real.json holds four real transitions: the
 official text before and after (Wayback/GII captures and GII daily states)

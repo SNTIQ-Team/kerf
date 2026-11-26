@@ -2,7 +2,7 @@
 
 The catalogue is intentionally metadata-only.  A result without ``act_id``
 links to gesetze-im-internet.de and must not be presented as a deeply indexed
-Lexgraph act.
+Kerf act.
 """
 from __future__ import annotations
 

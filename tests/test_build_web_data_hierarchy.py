@@ -15,7 +15,7 @@ import build_web_data as web_data  # noqa: E402
 
 def test_public_build_does_not_read_quarantined_snapshots(
         monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LEXGRAPH_INCLUDE_QUARANTINED", raising=False)
+    monkeypatch.delenv("KERF_INCLUDE_QUARANTINED", raising=False)
 
     def forbidden(_source: str) -> Path:
         raise AssertionError("quarantined snapshot lookup must not happen")
@@ -30,7 +30,7 @@ def test_quarantined_snapshot_requires_explicit_private_opt_in(
     snapshot = tmp_path / "snapshot"
     snapshot.mkdir()
     (snapshot / "rows.jsonl").write_text('{"id":1}\n', encoding="utf-8")
-    monkeypatch.setenv("LEXGRAPH_INCLUDE_QUARANTINED", "1")
+    monkeypatch.setenv("KERF_INCLUDE_QUARANTINED", "1")
     monkeypatch.setattr(web_data, "latest_snapshot", lambda _source: snapshot)
 
     assert web_data.load("buzer", "rows.jsonl") == [{"id": 1}]

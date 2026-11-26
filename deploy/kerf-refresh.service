@@ -1,0 +1,20 @@
+[Unit]
+Description=Kerf daily refresh (realtime retrieval + publish + API restart)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/sntiq-kerf
+EnvironmentFile=-/etc/sntiq/kerf.env
+Environment=PATH=/srv/sntiq-kerf/venv/bin:/usr/local/bin:/usr/bin
+ExecStart=/srv/sntiq-kerf/deploy/refresh-server.sh
+TimeoutStartSec=3h
+
+# Be a polite neighbour on the 1 GB mail + web host.
+Nice=15
+IOSchedulingClass=idle
+CPUWeight=30
+MemoryHigh=250M
+MemoryMax=450M
+TasksMax=64

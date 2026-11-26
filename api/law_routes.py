@@ -217,7 +217,7 @@ def create_router(data_dir: Callable[[], Path],
             if version is None and status == "not_in_corpus":
                 raise EnvelopeError(
                     "not_in_corpus",
-                    f"Lexgraph holds no text of {resolved['norm_id']} for "
+                    f"Kerf holds no text of {resolved['norm_id']} for "
                     f"{on}; its text history starts "
                     f"{resolution.get('text_history_start')}",
                     searched=_searched(chain))
@@ -340,7 +340,7 @@ def create_router(data_dir: Callable[[], Path],
             if lines and attributed < len(lines):
                 warnings.append(
                     f"{len(lines) - attributed} of {len(lines)} sentences "
-                    "predate Lexgraph's text history for this norm; their "
+                    "predate Kerf's text history for this norm; their "
                     "introducing amendment is not attributed (only "
                     "parser-matched candidates are listed)")
             return envelope(
@@ -875,5 +875,5 @@ def _history(chain: ActChain, versions: list[NormVersion]) -> dict[str, Any]:
                  "history are listed without reconstructed text."
                  if not chain.bavarian else
                  "Versions come from archived official BAYERN.RECHT pages "
-                 "and Lexgraph's daily snapshots; gaps are not filled."),
+                 "and Kerf's daily snapshots; gaps are not filled."),
     }

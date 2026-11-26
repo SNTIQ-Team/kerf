@@ -2,7 +2,7 @@
 """Export the archive worker history archive into a compact, signed bundle.
 
 The raw Wayback/NeuRIS/BAYERN.RECHT bytes stay on the archive worker
-(``~/.local/share/sntiq-legal/lexgraph-archive/history``).  The VPS receives
+(``~/.local/share/sntiq-legal/kerf-archive/history``).  The VPS receives
 only this bundle:
 
 ``corpus.sqlite``
@@ -44,12 +44,12 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 
 from api.history_identity import norm_identity  # noqa: E402
 
-BUNDLE_SCHEMA = "lexgraph-history-bundle/1"
-CORPUS_SCHEMA = "lexgraph-history-corpus/1"
-SIGN_NAMESPACE = "lexgraph-history-bundle"
+BUNDLE_SCHEMA = "kerf-history-bundle/1"
+CORPUS_SCHEMA = "kerf-history-corpus/1"
+SIGN_NAMESPACE = "kerf-history-bundle"
 DEFAULT_ARCHIVE = Path(os.environ.get(
-    "LEXGRAPH_HISTORY_ARCHIVE",
-    Path.home() / ".local/share/sntiq-legal/lexgraph-archive/history"))
+    "KERF_HISTORY_ARCHIVE",
+    Path.home() / ".local/share/sntiq-legal/kerf-archive/history"))
 ROLE_BY_SOURCE = {
     "wayback_gii": "archived_capture",
     "wayback_gii_xml": "archived_capture",
@@ -389,7 +389,8 @@ def export(archive: Path, out: Path, *, change_dates: Path | None = None,
 
 def verify(bundle: Path, *, signers: Path | None = None) -> dict[str, Any]:
     manifest = json.loads((bundle / "manifest.json").read_text())
-    if manifest.get("schema") != BUNDLE_SCHEMA:
+    from archive_receipts import archive_schema, archive_namespace
+    if not archive_schema(manifest.get("schema"), BUNDLE_SCHEMA):
         raise SystemExit("unsupported bundle schema")
     for name, meta in manifest["files"].items():
         if _sha_file(bundle / name) != meta["sha256"]:
@@ -400,7 +401,7 @@ def verify(bundle: Path, *, signers: Path | None = None) -> dict[str, Any]:
         if not signature.is_file():
             raise SystemExit("bundle manifest is not signed")
         verify_signature((bundle / "manifest.json").read_bytes(), signature,
-                         SIGN_NAMESPACE, signers)
+                         archive_namespace(manifest["schema"], BUNDLE_SCHEMA, SIGN_NAMESPACE), signers)
     return manifest
 
 
@@ -448,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
     ins.add_argument("--root", type=Path,
                      default=ROOT / "data" / "history_bundle")
     ins.add_argument("--signers", type=Path, default=Path(os.environ.get(
-        "LEXGRAPH_ARCHIVE_SIGNERS", "/etc/sntiq/lexgraph-archive.allowed_signers")))
+        "KERF_ARCHIVE_SIGNERS", "/etc/sntiq/kerf-archive.allowed_signers")))
     args = parser.parse_args(argv)
     if args.command == "export":
         manifest = export(args.archive, args.out,

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "kind": "lexgraph-verified-reconstruction-reviews",
+  "kind": "kerf-verified-reconstruction-reviews",
   "reviews": [
     {
       "id": "fed-derived-review:sgb8-2026-04-29",

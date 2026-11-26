@@ -55,7 +55,7 @@ OJ_L_COLLECTION = ("http://publications.europa.eu/resource/authority/"
 # Rolling window for OJ L publications. Generous enough that a few missed
 # runs still backfill, small enough to keep the query inside CELLAR limits.
 OJ_WINDOW_DAYS = 45
-UA = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
+UA = "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)"
 
 PREFIXES = """\
 PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>

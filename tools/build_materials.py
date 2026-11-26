@@ -17,7 +17,7 @@ the sources file whose PDF lies in ``--pdf-dir`` is built with::
 Each page is extracted with ``pdftotext -layout -enc UTF-8 -f N -l N`` and
 kept byte-exact for offsets; the PDF must match the sha256 recorded in the
 metadata.  Output, always in ``<out>/materials`` (the API reads the same
-directory, or ``$LEX_MATERIALS_DIR`` when that is set):
+directory, or ``$KERF_MATERIALS_DIR`` when that is set):
 
 * ``materials.sqlite`` -- one row per fragment plus a ``links`` table
   (fragment, relation, canonical id) indexed for norm lookups.  The file is

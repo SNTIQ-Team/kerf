@@ -9,7 +9,7 @@ amendments instead of linking out, and so per-§ change granularity (incl.
 future-dated versions = gestaffeltes Inkrafttreten) becomes queryable.
 
 This private database is not licensed for systematic public redistribution.
-The fetcher is quarantined and requires ``LEXGRAPH_ENABLE_BUZER=1``.
+The fetcher is quarantined and requires ``KERF_ENABLE_BUZER=1``.
 
 Output (data/snapshots/buzer_synopse/<date>/synopse.jsonl):
     {jurabk, act_id, date, url, changes:[{para, old, new}]}
@@ -98,9 +98,9 @@ def main() -> int:
                     help="ignore rows already fetched by this parser version")
     args = ap.parse_args()
 
-    if os.environ.get("LEXGRAPH_ENABLE_BUZER") != "1":
+    if os.environ.get("KERF_ENABLE_BUZER") != "1":
         print("buzer synopse fetch quarantined: explicit authorised "
-              "LEXGRAPH_ENABLE_BUZER=1 required", file=sys.stderr)
+              "KERF_ENABLE_BUZER=1 required", file=sys.stderr)
         return 2
 
     bz = latest_snapshot("buzer")
@@ -129,7 +129,7 @@ def main() -> int:
     http = Http(delay=args.delay)
     http.s.cookies.set_policy(DefaultCookiePolicy(allowed_domains=[]))
     http.s.headers["User-Agent"] = \
-        "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
+        "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)"
 
     rows, n_pages, failures = list(done.values()), 0, 0
     aborted = False

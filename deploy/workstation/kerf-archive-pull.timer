@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily Lexgraph archive pull from the VPS (catches up after missed days)
+Description=Daily Kerf archive pull from the VPS (catches up after missed days)
 
 [Timer]
 # After the VPS refresh (04:43 UTC) and the archive worker refresh (06:20).

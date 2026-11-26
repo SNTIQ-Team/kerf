@@ -1,6 +1,6 @@
 """Page furniture never becomes command wording (audit finding a, BGBl side).
 
-Fixtures are real amendment commands from Lexgraph's retrospective store
+Fixtures are real amendment commands from Kerf's retrospective store
 whose text layer contains running headers: the 2023+ electronic BGBl
 ("Seite 3 von 4 Bundesgesetzblatt …" in the middle of a line) and the
 printed BGBl (page number + header, plus the "im Internet" footer).

@@ -1,4 +1,4 @@
-"""Conservative dated Markdown views of one built Lexgraph act.
+"""Conservative dated Markdown views of one built Kerf act.
 
 The web data plane contains one exact, current consolidated snapshot plus a
 best-effort amendment history.  This module deliberately does not pretend
@@ -744,7 +744,7 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
             lines.append(
                 "> The body is an integrity-checked complete GII state selected "
                 "by a verified legal-validity interval. Legal validity and the "
-                "time at which Lexgraph knew the assertion are separate axes.")
+                "time at which Kerf knew the assertion are separate axes.")
         if retrospective_meta.get("retroactive"):
             lines.append(
                 "> This official commencement date precedes publication; the "
@@ -997,4 +997,4 @@ def markdown_filename(result: dict[str, Any]) -> str:
     raw = f"{result.get('act_id')}-{scope}-{result.get('resolved_at')}.md"
     safe = _SAFE_FILENAME.sub("-", raw).strip("-")
     safe = re.sub(r"-{2,}", "-", safe)
-    return safe or "lexgraph-act.md"
+    return safe or "kerf-act.md"

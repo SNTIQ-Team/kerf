@@ -1,4 +1,4 @@
-"""Typed evidence envelope shared by Lexgraph's norm-level read operations.
+"""Typed evidence envelope shared by Kerf's norm-level read operations.
 
 Every read result says what was searched, what was applied and what could
 not be established.  A failure never looks like an empty success:
@@ -17,7 +17,7 @@ from typing import Any, Iterable
 
 from fastapi.responses import JSONResponse
 
-ENVELOPE_SCHEMA = "lexgraph-evidence-envelope/1"
+ENVELOPE_SCHEMA = "kerf-evidence-envelope/1"
 
 STATUSES = (
     "ok",
@@ -51,7 +51,7 @@ HTTP_STATUS = {
 }
 
 # Transport-only cache keys deployed clients append (``?t=<ms>``); they
-# never select content and are disclosed in X-Lexgraph-Ignored-Arguments.
+# never select content and are disclosed in X-Kerf-Ignored-Arguments.
 CACHE_KEY_ARGUMENTS = frozenset({"t", "_", "cb"})
 
 TEMPORAL_ARGUMENTS = frozenset({

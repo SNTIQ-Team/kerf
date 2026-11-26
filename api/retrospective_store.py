@@ -1,13 +1,13 @@
-"""Validated bitemporal queries over Lexgraph retrospective history.
+"""Validated bitemporal queries over Kerf retrospective history.
 
 The manifest deliberately separates two clocks:
 
 ``effective_from`` / ``effective_to``
     Half-open legal-validity interval, expressed as German calendar dates.
 ``knowledge_from`` / ``knowledge_to``
-    Half-open interval during which Lexgraph asserted that legal interval,
+    Half-open interval during which Kerf asserted that legal interval,
     expressed as RFC3339 instants.  A backfill performed today therefore does
-    not pretend that Lexgraph already knew the reconstructed state years ago.
+    not pretend that Kerf already knew the reconstructed state years ago.
 
 Complete state bodies stay in the existing content-addressed official GII
 store.  The retrospective manifest contains only immutable SHA-256 identities
@@ -26,7 +26,7 @@ from api.official_state_store import OfficialStateError, load_state_digest
 
 
 SCHEMA_VERSION = 1
-KIND = "lexgraph-retrospective-history"
+KIND = "kerf-retrospective-history"
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 _LEGAL_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _TEXT_STATUSES = {"official_exact", "derived_verified", "partial"}
@@ -581,7 +581,7 @@ def list_changes(manifest: dict[str, Any], *, as_of: Any = None,
     ), reverse=True)
     return {
         "schema_version": manifest.get("schema_version"),
-        "kind": "lexgraph-amendment-events",
+        "kind": "kerf-amendment-events",
         "built_at": manifest.get("built_at"),
         "as_of": knowledge,
         "reference_date": today,
@@ -652,7 +652,7 @@ def amending_act(manifest: dict[str, Any], document_id: str, *,
     pdf_hashes = unique("pdf_sha256")
     return {
         "schema_version": manifest.get("schema_version"),
-        "kind": "lexgraph-amending-act",
+        "kind": "kerf-amending-act",
         "built_at": manifest.get("built_at"),
         "as_of": changes["as_of"],
         "document_id": document,

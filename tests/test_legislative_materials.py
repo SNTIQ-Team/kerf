@@ -518,7 +518,7 @@ def test_parse_citation_for_api_targets():
 
 @pytest.fixture()
 def store(tmp_path, result, monkeypatch):
-    monkeypatch.delenv("LEX_MATERIALS_DIR", raising=False)
+    monkeypatch.delenv("KERF_MATERIALS_DIR", raising=False)
     write_store(tmp_path, result, SOURCES["act_slugs"])
     return tmp_path
 
@@ -536,7 +536,7 @@ def test_api_search_ok_envelope(store):
                                                    "limit": 5})
     assert res.status_code == 200
     body = res.json()
-    assert body["schema"] == "lexgraph-evidence-envelope/1"
+    assert body["schema"] == "kerf-evidence-envelope/1"
     assert body["status"] == "ok" and body["total"] == 12
     assert len(body["evidence"]) == 5
     assert body["searched"] == [{"source": "materials:19/13824",
@@ -616,7 +616,7 @@ def test_store_is_one_sqlite_database_without_json_documents(store):
     files = sorted(p.name for p in (store / "materials").iterdir())
     assert files == ["index.json", "materials.sqlite"]
     index = json.loads((store / "materials" / "index.json").read_text())
-    assert index["schema"] == "lexgraph-materials-index/2"
+    assert index["schema"] == "kerf-materials-index/2"
     database = store / "materials" / "materials.sqlite"
     assert index["database"]["sha256"] == \
         hashlib.sha256(database.read_bytes()).hexdigest()
@@ -694,12 +694,12 @@ def test_api_unavailable_when_database_missing(store):
 
 def test_materials_dir_override(store, tmp_path_factory, monkeypatch):
     elsewhere = tmp_path_factory.mktemp("no-store-here")
-    monkeypatch.setenv("LEX_MATERIALS_DIR", str(store / "materials"))
+    monkeypatch.setenv("KERF_MATERIALS_DIR", str(store / "materials"))
     res = _client(elsewhere).get("/materials", params={"limit": 1})
     assert res.json()["status"] == "ok" and res.json()["total"] == 31
     assert materials_for_norm(elsewhere, "de/bund/sgb_14/para/37")["status"] \
         == "ok"
-    monkeypatch.setenv("LEX_MATERIALS_DIR", str(elsewhere))
+    monkeypatch.setenv("KERF_MATERIALS_DIR", str(elsewhere))
     assert _client(store).get("/materials").status_code == 503
 
 

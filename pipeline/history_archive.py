@@ -1,7 +1,7 @@
 """Archive worker-side archive of historical law captures (phase 4).
 
-Layout (root ``R`` = ``$LEXGRAPH_HISTORY_ARCHIVE`` or
-``~/.local/share/sntiq-legal/lexgraph-archive/history``)::
+Layout (root ``R`` = ``$KERF_HISTORY_ARCHIVE`` or
+``~/.local/share/sntiq-legal/kerf-archive/history``)::
 
     R/raw/<source>/sha256/<xx>/<sha256>.<ext>.gz   gzip of the raw bytes;
                                                    sha256 of the UNCOMPRESSED bytes
@@ -24,9 +24,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-CAPTURE_SCHEMA = "lexgraph-history-capture/1"
-PARSED_SCHEMA = "lexgraph-history-parsed/1"
-USER_AGENT = "SNTIQ-lexgraph/0.2 (research; +https://sntiq.com/)"
+CAPTURE_SCHEMA = "kerf-history-capture/1"
+PARSED_SCHEMA = "kerf-history-parsed/1"
+USER_AGENT = "SNTIQ-kerf/0.2 (research; +https://sntiq.com/)"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -34,22 +34,22 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def archive_root(explicit: str | os.PathLike | None = None) -> Path:
     if explicit:
         return Path(explicit).expanduser()
-    env = os.environ.get("LEXGRAPH_HISTORY_ARCHIVE")
+    env = os.environ.get("KERF_HISTORY_ARCHIVE")
     if env:
         return Path(env).expanduser()
-    return Path("~/.local/share/sntiq-legal/lexgraph-archive/history").expanduser()
+    return Path("~/.local/share/sntiq-legal/kerf-archive/history").expanduser()
 
 
 def web_data_root(explicit: str | os.PathLike | None = None) -> Path:
     """Directory holding ``acts/<id>.json`` and ``federal_states/``.
 
     Worktrees do not contain the gitignored web data; point
-    ``LEXGRAPH_WEB_DATA`` (or ``--web-data``) at the main checkout's
+    ``KERF_WEB_DATA`` (or ``--web-data``) at the main checkout's
     ``web/data`` instead of copying it.
     """
     if explicit:
         return Path(explicit).expanduser()
-    env = os.environ.get("LEXGRAPH_WEB_DATA")
+    env = os.environ.get("KERF_WEB_DATA")
     if env:
         return Path(env).expanduser()
     return REPO_ROOT / "web" / "data"

@@ -19,10 +19,10 @@
 # (--if-changed, --no-pull and --receipt R are used by deploy/archive-pull.sh)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-ARCHIVE="${LEXGRAPH_ARCHIVE:-$HOME/.local/share/sntiq-legal/lexgraph-archive}"
-PY="${LEXGRAPH_PYTHON:-$REPO/.venv/bin/python}"
-REMOTE="${LEXGRAPH_REMOTE:-sntiq}"
-REMOTE_ROOT="${LEXGRAPH_REMOTE_ROOT:-/srv/sntiq-lexgraph}"
+ARCHIVE="${KERF_ARCHIVE:-$HOME/.local/share/sntiq-legal/kerf-archive}"
+PY="${KERF_PYTHON:-$REPO/.venv/bin/python}"
+REMOTE="${KERF_REMOTE:-sntiq}"
+REMOTE_ROOT="${KERF_REMOTE_ROOT:-/srv/sntiq-kerf}"
 REMOTE_PY="$REMOTE_ROOT/venv/bin/python"
 DRY=0; IF_CHANGED=0; PULL=1; RECEIPT=""
 while [ $# -gt 0 ]; do
@@ -36,9 +36,9 @@ while [ $# -gt 0 ]; do
     shift
 done
 source "$REPO/deploy/workstation/archive-signing-key.sh"
-export LEXGRAPH_ARCHIVE_SIGNERS="$ARCHIVE/offload/allowed_signers"
+export KERF_ARCHIVE_SIGNERS="$ARCHIVE/offload/allowed_signers"
 mkdir -p "$ARCHIVE/offload"
-exec 7>"${XDG_RUNTIME_DIR:-/tmp}/lexgraph-legacy-rebuild.lock"
+exec 7>"${XDG_RUNTIME_DIR:-/tmp}/kerf-legacy-rebuild.lock"
 flock -w 3600 7 || { echo "legacy rebuild: lock busy" >&2; exit 75; }
 
 if [ "$PULL" = 1 ]; then
@@ -70,7 +70,7 @@ fi
 stage=$(mktemp -d "$ARCHIVE/rebuild.XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 echo "==> rebuild against $ARCHIVE/data/legacy_bgbl_history (parser of $(git -C "$REPO" rev-parse --short HEAD))"
-TZ=UTC LEXGRAPH_SNAPSHOTS="$ARCHIVE/data/snapshots" \
+TZ=UTC KERF_SNAPSHOTS="$ARCHIVE/data/snapshots" \
     "$PY" "$REPO/pipeline/backfill_legacy_bgbl_history.py" --rebuild \
     --archive-root "$ARCHIVE/data/legacy_bgbl_history" \
     --snapshot-root "$stage/out" --max-archive-mib 0 --min-free-mib 1024 \

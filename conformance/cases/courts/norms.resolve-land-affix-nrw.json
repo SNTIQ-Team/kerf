@@ -4,7 +4,7 @@
   "module": "courts",
   "kind": "act_resolution",
   "description": "canonical act resolution: VwVfG NRW (no land)",
-  "origin": "operating principle 1 (Lexgraph resolver)",
+  "origin": "operating principle 1 (Kerf resolver)",
   "status": "active",
   "input": {
     "abbreviation": "VwVfG NRW",

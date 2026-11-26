@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh Kerf watched procedures every four hours
+Documentation=https://github.com/SNTIQ-Team/kerf
+
+[Timer]
+OnCalendar=*-*-* 00,04,08,12,16,20:17:00 UTC
+Persistent=true
+RandomizedDelaySec=5min
+AccuracySec=1min
+Unit=kerf-procedure-watch.service
+
+[Install]
+WantedBy=timers.target

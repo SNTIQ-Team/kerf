@@ -1,6 +1,6 @@
 """Capture official BGBl amendment documents referenced by the GII corpus.
 
-This is the primary-source document layer behind Lexgraph's independently
+This is the primary-source document layer behind Kerf's independently
 computed history. It joins the latest curated Gesetze-im-Internet snapshot
 with the latest Bundestag DIP snapshot by BGBl year and issue.
 
@@ -443,7 +443,7 @@ def cumulative_documents(cached: dict[str, dict],
 
     GII describes only the current consolidation.  If tomorrow's ``stand``
     cites a newer amending issue, dropping yesterday's BGBl metadata would
-    make an already accepted legal transition disappear from Lexgraph.  The
+    make an already accepted legal transition disappear from Kerf.  The
     CAS and this snapshot are therefore cumulative; a refreshed document wins
     by stable ``document_id`` while older integrity-checked rows remain.
     """

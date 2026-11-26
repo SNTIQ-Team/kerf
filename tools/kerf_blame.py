@@ -1,8 +1,8 @@
-"""`git blame` / `git checkout` over the Lexgraph snapshots.
+"""`git blame` / `git checkout` over the Kerf snapshots.
 
-    python3 tools/lex_blame.py blame AsylbLG 3a
-    python3 tools/lex_blame.py blame AufnG 4
-    python3 tools/lex_blame.py checkout AsylG --at 2026-07-13 --norm 29a
+    python3 tools/kerf_blame.py blame AsylbLG 3a
+    python3 tools/kerf_blame.py blame AufnG 4
+    python3 tools/kerf_blame.py checkout AsylG --at 2026-07-13 --norm 29a
 
 Read-only over data/snapshots — NO network, NO snapshot writes.
 
@@ -13,10 +13,10 @@ blame ACT REF     every known amendment/patch touching one §/Art.,
                               "für § 1 , § 1a , § 11 Artikel 4 <act>";
                               GG rows use "Artikel 104b" tokens);
                               non-authoritative; visible only with
-                              LEXGRAPH_INCLUDE_QUARANTINED=1
+                              KERF_INCLUDE_QUARANTINED=1
                     amtlich   Bavarian BayRS: ffn Fortführungsnachweis
                               merged with the XML aenderungsverlauf on
-                              the GVBl page (same key as lex_log.py) —
+                              the GVBl page (same key as kerf_log.py) —
                               only the ffn description names affected
                               Art./§§ ("Art. 4 und 5 Abs. 3 geänd.")
                     pipeline  extracted Bundestag patch commands
@@ -86,7 +86,7 @@ def load(source: str, name: str) -> list[dict]:
 
 
 def include_private_candidates() -> bool:
-    return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
+    return os.environ.get("KERF_INCLUDE_QUARANTINED") == "1"
 
 
 def official_history(jurabk: str) -> dict[str, list[dict]]:
@@ -178,7 +178,7 @@ def parse_bay_refs(desc: str) -> list[str]:
 
 def bavarian_events(jurabk: str) -> list[dict]:
     """ffn + xml version rows merged per amendment event (keyed on
-    date + GVBl page, exactly like lex_log.py's dedupe). refs come
+    date + GVBl page, exactly like kerf_log.py's dedupe). refs come
     from the ffn description only — the xml description names the
     amending act, whose § numbers are NOT affected articles."""
     groups: dict[tuple, dict] = {}
@@ -516,7 +516,7 @@ def cmd_checkout(args: argparse.Namespace) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="git blame / checkout over Lexgraph snapshots "
+        description="git blame / checkout over Kerf snapshots "
                     "(read-only, no network)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("blame",

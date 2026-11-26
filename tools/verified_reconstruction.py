@@ -14,7 +14,7 @@ anchor.  A reconstruction is accepted only when all of the following hold:
 * replaying the outgoing commands recreates the canonical anchor SHA-256.
 
 The resulting body is therefore ``derived_verified`` rather than an official
-historical GII snapshot.  Retrieval time, legal-validity time and Lexgraph's
+historical GII snapshot.  Retrieval time, legal-validity time and Kerf's
 knowledge time remain separate in the emitted artifact.
 """
 from __future__ import annotations
@@ -42,8 +42,8 @@ from snapshot_storage import SnapshotArchiveError, open_snapshot_text
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REVIEWS = ROOT / "data" / "verified_reconstruction_reviews.json"
-REVIEW_KIND = "lexgraph-verified-reconstruction-reviews"
-ARTIFACT_KIND = "lexgraph-reviewed-verified-reconstructions"
+REVIEW_KIND = "kerf-verified-reconstruction-reviews"
+ARTIFACT_KIND = "kerf-reviewed-verified-reconstructions"
 SCHEMA_VERSION = 1
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 _PARAGRAPH_MARKER = re.compile(r"(?<!\w)\((\d+[a-z]?)\)")
@@ -756,7 +756,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state-store", type=Path, default=DEFAULT_STORE)
     parser.add_argument(
         "--built-at", default=datetime.now(timezone.utc).isoformat(
-            timespec="seconds"), help="RFC3339 Lexgraph knowledge timestamp")
+            timespec="seconds"), help="RFC3339 Kerf knowledge timestamp")
     parser.add_argument("--output", type=Path,
                         help="write JSON here; default is stdout")
     parser.add_argument("--compact", action="store_true")

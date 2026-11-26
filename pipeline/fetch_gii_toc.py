@@ -31,7 +31,7 @@ sys.path.insert(0, str(ROOT))
 
 from api.norm_identity import act_slug, designator_unit  # noqa: E402
 
-USER_AGENT = ("SNTIQ-Lexgraph/1.5 (+https://sntiq.com/dt/lexgraph; "
+USER_AGENT = ("SNTIQ-Kerf/1.5 (+https://sntiq.com/dt/kerf; "
               "table-of-contents capture, 1 request/s)")
 _LINK = re.compile(r'<a\s+href="([A-Za-z0-9_.-]+\.html)"[^>]*>(.*?)</a>',
                    re.I | re.S)
@@ -120,7 +120,7 @@ def main() -> int:
         print(f"{slug}: {len(norms)} links", file=sys.stderr)
     payload = {
         "schema_version": 1,
-        "kind": "lexgraph-gii-table-of-contents",
+        "kind": "kerf-gii-table-of-contents",
         "source_policy": {
             "source": "GII index.html per act",
             "url_construction": "never from a bare number; only links "

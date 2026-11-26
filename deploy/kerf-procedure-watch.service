@@ -1,6 +1,6 @@
 [Unit]
-Description=Lexgraph watched-procedure refresh and API publish
-Documentation=https://github.com/SNTIQ-Team/lexgraph
+Description=Kerf watched-procedure refresh and API publish
+Documentation=https://github.com/SNTIQ-Team/kerf
 Wants=network-online.target
 After=network-online.target
 StartLimitIntervalSec=1h
@@ -8,10 +8,10 @@ StartLimitBurst=2
 
 [Service]
 Type=oneshot
-WorkingDirectory=/srv/sntiq-lexgraph
-EnvironmentFile=-/etc/sntiq/lexgraph.env
-Environment=LEXGRAPH_FRESHNESS=/srv/sntiq-lexapi/data/source-freshness.json
-ExecStart=/srv/sntiq-lexgraph/deploy/refresh-procedure-watch.sh
+WorkingDirectory=/srv/sntiq-kerf
+EnvironmentFile=-/etc/sntiq/kerf.env
+Environment=KERF_FRESHNESS=/srv/sntiq-kerf-api/data/source-freshness.json
+ExecStart=/srv/sntiq-kerf/deploy/refresh-procedure-watch.sh
 # Step [4/5] is the SAME full build_web_data.py the daily refresh runs, and on
 # this host that build needs ~250M resident plus a swap-backed working set of
 # ~2.3G, taking well over 35 minutes while it thrashes.  The old 35min ceiling
@@ -25,7 +25,7 @@ CPUWeight=20
 CPUQuota=60%
 IOWeight=20
 IOSchedulingClass=idle
-# Matches lexgraph-refresh.service, the one envelope this build is known to
+# Matches kerf-refresh.service, the one envelope this build is known to
 # complete in.  MemorySwapMax is deliberately ABSENT: capping swap at 128M is
 # what turned memory pressure into an OOM kill, since the build's peak is an
 # order of magnitude above that.  MemoryHigh still throttles it under pressure.

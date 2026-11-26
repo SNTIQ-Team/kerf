@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Daily archive worker pull of the Lexgraph source archives (user timer
-# lexgraph-archive-pull.timer, Persistent=true: a missed day catches up).
+# Daily archive worker pull of the Kerf source archives (user timer
+# kerf-archive-pull.timer, Persistent=true: a missed day catches up).
 #
 #   1. the VPS lists every archived file not yet receipted, with SHA-256
 #   2. rsync pulls the pre-2023 BGBl store and all dated snapshots
@@ -12,10 +12,10 @@
 # Options: --no-rebuild  skip step 4    --no-prune  skip step 5
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-ARCHIVE="${LEXGRAPH_ARCHIVE:-$HOME/.local/share/sntiq-legal/lexgraph-archive}"
-PY="${LEXGRAPH_PYTHON:-$REPO/.venv/bin/python}"
-REMOTE="${LEXGRAPH_REMOTE:-sntiq}"
-REMOTE_ROOT="${LEXGRAPH_REMOTE_ROOT:-/srv/sntiq-lexgraph}"
+ARCHIVE="${KERF_ARCHIVE:-$HOME/.local/share/sntiq-legal/kerf-archive}"
+PY="${KERF_PYTHON:-$REPO/.venv/bin/python}"
+REMOTE="${KERF_REMOTE:-sntiq}"
+REMOTE_ROOT="${KERF_REMOTE_ROOT:-/srv/sntiq-kerf}"
 REMOTE_PY="$REMOTE_ROOT/venv/bin/python"
 REBUILD=1; PRUNE=1
 for arg in "$@"; do
@@ -27,7 +27,7 @@ for arg in "$@"; do
 done
 
 mkdir -p "$ARCHIVE/data" "$ARCHIVE/offload/manifests" "$ARCHIVE/offload/receipts"
-exec 8>"${XDG_RUNTIME_DIR:-/tmp}/lexgraph-archive-pull.lock"
+exec 8>"${XDG_RUNTIME_DIR:-/tmp}/kerf-archive-pull.lock"
 if ! flock -n 8; then
     echo "archive-pull: another run holds the lock; skipping"
     exit 75   # EX_TEMPFAIL; the unit treats it as success

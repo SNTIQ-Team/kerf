@@ -1,12 +1,12 @@
-"""Lexgraph API — the ASGI entry point.
+"""Kerf API — the ASGI entry point.
 
-Composition root for the Lexgraph backend. It mirrors the sibling Amtsgraph
+Composition root for the Kerf backend. It mirrors the sibling Taper
 project's `api/server.py`: a thin platform shell that adds CORS + gzip, exposes
 a service index at `/` (JSON for API clients, an HTML landing for browsers)
-and includes the Lexgraph routes (so they appear in /docs).
+and includes the Kerf routes (so they appear in /docs).
 
 Run:
-    LEXGRAPH_DATA=/path/to/web/data \
+    KERF_DATA=/path/to/web/data \
     uvicorn api.server:server --host 127.0.0.1 --port 8010 --workers 1
 """
 from __future__ import annotations
@@ -18,12 +18,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 
-from api.main import app as lexgraph, search_contract
+from api.main import app as kerf, search_contract
 
 SERVICE_INDEX = {
-    "service": "lexgraph-api",
+    "service": "kerf-api",
     "operator": "SNTIQ n.e.V. — https://sntiq.com",
-    "dataset": "https://github.com/SNTIQ-Team/lexgraph",
+    "dataset": "https://github.com/SNTIQ-Team/kerf",
     "docs": "/docs",
     "endpoints": [
         "/health", "/version", "/stats", "/data-policy", "/feed",
@@ -48,7 +48,7 @@ SERVICE_INDEX = {
 }
 
 server = FastAPI(
-    title="Lexgraph API",
+    title="Kerf API",
     version="1.5",
     docs_url="/docs",
     redoc_url=None,
@@ -58,7 +58,7 @@ server.middleware("http")(search_contract)
 server.add_middleware(GZipMiddleware, minimum_size=2048)
 
 # CORS: allow all origins so any browser frontend can call the API
-# (mirrors Amtsgraph's public, read-only data API).
+# (mirrors Taper's public, read-only data API).
 server.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -66,37 +66,37 @@ server.add_middleware(
     allow_headers=["*"],
     expose_headers=[
         "Content-Disposition",
-        "X-Lexgraph-Snapshot",
-        "X-Lexgraph-Ignored-Arguments",
-        "X-Lexgraph-Source-Sha256",
-        "X-Lexgraph-Requested-Date",
-        "X-Lexgraph-Resolved-Date",
-        "X-Lexgraph-Head-Date",
-        "X-Lexgraph-Exact",
-        "X-Lexgraph-Archive-Status",
-        "X-Lexgraph-Complete",
-        "X-Lexgraph-Source-Exact",
-        "X-Lexgraph-Verified-Reconstruction",
-        "X-Lexgraph-Archive-Gaps",
-        "X-Lexgraph-Missing-Transitions",
-        "X-Lexgraph-Date-Basis",
-        "X-Lexgraph-State-SHA256",
-        "X-Lexgraph-Source-URL",
-        "X-Lexgraph-Legal-Effect-Verified",
-        "X-Lexgraph-Published-Date",
-        "X-Lexgraph-Effective-Date",
-        "X-Lexgraph-Review-ID",
-        "X-Lexgraph-Procedure-ID",
-        "X-Lexgraph-As-Of",
-        "X-Lexgraph-Effective-From",
-        "X-Lexgraph-Effective-To",
-        "X-Lexgraph-Knowledge-From",
-        "X-Lexgraph-Knowledge-To",
-        "X-Lexgraph-Observed-Date",
-        "X-Lexgraph-Text-Status",
-        "X-Lexgraph-Date-Status",
-        "X-Lexgraph-Verification",
-        "X-Lexgraph-Verified-Through-Observed-Date",
+        "X-Kerf-Snapshot",
+        "X-Kerf-Ignored-Arguments",
+        "X-Kerf-Source-Sha256",
+        "X-Kerf-Requested-Date",
+        "X-Kerf-Resolved-Date",
+        "X-Kerf-Head-Date",
+        "X-Kerf-Exact",
+        "X-Kerf-Archive-Status",
+        "X-Kerf-Complete",
+        "X-Kerf-Source-Exact",
+        "X-Kerf-Verified-Reconstruction",
+        "X-Kerf-Archive-Gaps",
+        "X-Kerf-Missing-Transitions",
+        "X-Kerf-Date-Basis",
+        "X-Kerf-State-SHA256",
+        "X-Kerf-Source-URL",
+        "X-Kerf-Legal-Effect-Verified",
+        "X-Kerf-Published-Date",
+        "X-Kerf-Effective-Date",
+        "X-Kerf-Review-ID",
+        "X-Kerf-Procedure-ID",
+        "X-Kerf-As-Of",
+        "X-Kerf-Effective-From",
+        "X-Kerf-Effective-To",
+        "X-Kerf-Knowledge-From",
+        "X-Kerf-Knowledge-To",
+        "X-Kerf-Observed-Date",
+        "X-Kerf-Text-Status",
+        "X-Kerf-Date-Status",
+        "X-Kerf-Verification",
+        "X-Kerf-Verified-Through-Observed-Date",
     ],
     max_age=86400,
 )
@@ -104,14 +104,14 @@ server.add_middleware(
 
 # Browser landing for GET / — one self-contained string, inline CSS only.
 # All hrefs are RELATIVE (no leading slash): in production the app is proxied
-# under /lex/ with root_path stripping, so an absolute /acts would escape the
+# under /kerf/ with root_path stripping, so an absolute /acts would escape the
 # prefix.
 INDEX_HTML = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lexgraph API</title>
+<title>Kerf API</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -141,7 +141,7 @@ INDEX_HTML = """<!doctype html>
   <div class="accent"></div>
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="favicon.svg" width="40" height="40" alt="SNTIQ mark">
-    <h1>Lexgraph API</h1>
+    <h1>Kerf API</h1>
   </div>
   <p class="tagline">German &amp; EU law as a temporal, searchable legal graph —
      current texts, amendment history and official procedure stages.</p>
@@ -184,7 +184,7 @@ INDEX_HTML = """<!doctype html>
   </table>
   <footer>
     <a href="docs">Interactive docs</a> &nbsp;·&nbsp;
-    <a href="https://github.com/SNTIQ-Team/lexgraph">Dataset</a> &nbsp;·&nbsp;
+    <a href="https://github.com/SNTIQ-Team/kerf">Dataset</a> &nbsp;·&nbsp;
     operated by <a href="https://sntiq.com">SNTIQ&nbsp;n.e.V.</a>
   </footer>
 </main>
@@ -214,10 +214,10 @@ def favicon():
 
 
 # ---- included service -----------------------------------------------------
-# Lexgraph currently ships a single service. Its routes are INCLUDED (not
+# Kerf currently ships a single service. Its routes are INCLUDED (not
 # mounted) so they land in this app's OpenAPI schema — a mounted sub-app's
 # routes are invisible to /docs, which used to show only "/" and "/health".
 # The endpoint paths stay flat (/acts, /git, …) as documented; /health comes
 # from api.main.
 
-server.include_router(lexgraph.router)
+server.include_router(kerf.router)

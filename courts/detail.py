@@ -12,7 +12,7 @@ Norm citations (``target_kind = 'norm'``):
 ``unit_type``       ``art`` if ``target_id`` contains ``/art/`` (unresolved: ``target_raw`` starts
                     with "Art"), else ``para``
 ``act_resolution``  ``act_index`` when ``target_id`` is set, ``unresolved`` when it is NULL
-``lexgraph_act_id`` ``fed_<slug>`` for ``act_prefix`` ``de/bund/<slug>``, else NULL
+``kerf_act_id`` ``fed_<slug>`` for ``act_prefix`` ``de/bund/<slug>``, else NULL
 ``chain``           ``target_raw``
 ``chain_no``        1
 ==================  ===============================================================================
@@ -46,7 +46,7 @@ def derive(key: str, row) -> object:
             return "art" if (row["target_raw"] or "").lstrip().startswith("Art") else "para"
         if key == "act_resolution":
             return "act_index" if target_id else "unresolved"
-        if key == "lexgraph_act_id":
+        if key == "kerf_act_id":
             prefix = _act_prefix(target_id)
             return f"fed_{prefix.split('/')[2]}" if prefix and prefix.startswith("de/bund/") else None
         if key == "chain":
@@ -63,7 +63,7 @@ def derive(key: str, row) -> object:
     return _MISSING
 
 
-RULE_KEYS = {"norm": ("act_prefix", "unit_type", "act_resolution", "lexgraph_act_id", "chain", "chain_no"),
+RULE_KEYS = {"norm": ("act_prefix", "unit_type", "act_resolution", "kerf_act_id", "chain", "chain_no"),
              "decision": ("court_id", "date", "case_key")}
 
 

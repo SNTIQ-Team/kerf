@@ -1,7 +1,7 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.structure.eu-aeuv-art267-counted-subparagraphs",
-  "module": "lexgraph",
+  "id": "kerf.structure.eu-aeuv-art267-counted-subparagraphs",
+  "module": "kerf",
   "kind": "norm_structure",
   "description": "Art. 267 AEUV has no numbered paragraphs; its four Unterabsätze are counted as Absätze (German practice: 'Art. 267 Abs. 3 AEUV' is the duty to refer), each flagged counted_subparagraph.",
   "origin": "EU text corpus; api/law_structure.py counted subparagraphs",

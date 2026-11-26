@@ -21,7 +21,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 @pytest.fixture
 def client():
-    return TestClient(server, root_path="/lex")
+    return TestClient(server, root_path="/kerf")
 
 
 # ------------------------------------------------------------------ (d)
@@ -110,7 +110,7 @@ def test_transport_cache_keys_are_disclosed_not_silently_dropped(
     monkeypatch.setattr(main, "_load", lambda name: [])
     response = client.get("/feed?limit=1&t=1727500000000")
     assert response.status_code == 200
-    assert response.headers["X-Lexgraph-Ignored-Arguments"] == "t"
+    assert response.headers["X-Kerf-Ignored-Arguments"] == "t"
     # A cache key never excuses a material argument on the same request.
     assert client.get("/feed?limit=1&t=1&at=2020-01-01").status_code == 422
     # Only /digest treats d= as a cache key.
@@ -152,7 +152,7 @@ def test_markdown_json_keeps_markdown_and_structured_provenance(
 
     def fake(**kwargs):
         return Response(raw, media_type="text/markdown", headers={
-            "X-Lexgraph-Source-Exact": "false"})
+            "X-Kerf-Source-Exact": "false"})
 
     monkeypatch.setattr(main, "act_markdown", fake)
     body = TestClient(main.app).get("/acts/fed_x/markdown.json").json()
@@ -162,7 +162,7 @@ def test_markdown_json_keeps_markdown_and_structured_provenance(
         "verified_reconstruction"
     assert any("not an exact official source" in w for w in body["warnings"])
     assert any("coverage gap" in w for w in body["warnings"])
-    assert body["response_headers"]["x-lexgraph-source-exact"] == "false"
+    assert body["response_headers"]["x-kerf-source-exact"] == "false"
 
 
 # ------------------------------------------------------------------ (g)

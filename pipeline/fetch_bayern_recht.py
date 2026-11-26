@@ -610,7 +610,7 @@ def main() -> int:
     observed_on = (args.observed_on or date.today()).isoformat()
     destination = args.output_dir or SNAPSHOTS / "bayern_recht" / observed_on
     http = Http(delay=0.85)
-    http.s.headers["User-Agent"] = "SNTIQ-lexgraph/0.1 (research; +https://sntiq.com/)"
+    http.s.headers["User-Agent"] = "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)"
 
     def get_bytes(filename, url):
         if args.raw_input:

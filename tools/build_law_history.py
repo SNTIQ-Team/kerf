@@ -870,7 +870,7 @@ def _attestations(run: Run) -> list[dict[str, Any]]:
                        "wayback_gii_xml": "Wayback/GII",
                        "bayern_recht": "BAYERN.RECHT",
                        "wayback_bayern": "Wayback/BAYERN.RECHT",
-                       "reconstruction": "Lexgraph reconstruction"}.get(
+                       "reconstruction": "Kerf reconstruction"}.get(
                            state.source, state.source),
             "role": state.source_role, "known_from": None,
             "known_until": None, "count": 0, "samples": []})
@@ -1408,7 +1408,7 @@ def build_act(writer: Writer, act: dict[str, Any], data_dir: Path,
                 record = {
                     "state_intervals": [],
                     "attestations": [{
-                        "source": "Lexgraph reconstruction",
+                        "source": "Kerf reconstruction",
                         "role": "reconstruction", "known_from": None,
                         "known_until": None, "count": 1,
                         "samples": [], "method": "command-replay/1"}],

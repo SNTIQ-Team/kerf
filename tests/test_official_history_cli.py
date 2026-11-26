@@ -8,8 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-import lex_blame  # noqa: E402
-import lex_log  # noqa: E402
+import kerf_blame  # noqa: E402
+import kerf_log  # noqa: E402
 from official_states import archive_gii_states  # noqa: E402
 
 
@@ -55,11 +55,11 @@ def _act() -> dict:
 def test_federal_checkout_emits_only_exact_observed_norm_as_markdown(
         tmp_path: Path, monkeypatch, capsys) -> None:
     store, manifest = _store(tmp_path)
-    monkeypatch.setattr(lex_blame, "OFFICIAL_STORE", store)
-    monkeypatch.setattr(lex_blame, "resolve_act",
+    monkeypatch.setattr(kerf_blame, "OFFICIAL_STORE", store)
+    monkeypatch.setattr(kerf_blame, "resolve_act",
                         lambda _query: (_act(), "federal"))
 
-    result = lex_blame.cmd_checkout(argparse.Namespace(
+    result = kerf_blame.cmd_checkout(argparse.Namespace(
         act="DemoG", at="2026-07-13", norm="1"))
     output = capsys.readouterr().out
 
@@ -79,11 +79,11 @@ def test_federal_checkout_emits_only_exact_observed_norm_as_markdown(
 def test_federal_checkout_refuses_nearest_observation(
         tmp_path: Path, monkeypatch, capsys) -> None:
     store, _manifest = _store(tmp_path)
-    monkeypatch.setattr(lex_blame, "OFFICIAL_STORE", store)
-    monkeypatch.setattr(lex_blame, "resolve_act",
+    monkeypatch.setattr(kerf_blame, "OFFICIAL_STORE", store)
+    monkeypatch.setattr(kerf_blame, "resolve_act",
                         lambda _query: (_act(), "federal"))
 
-    result = lex_blame.cmd_checkout(argparse.Namespace(
+    result = kerf_blame.cmd_checkout(argparse.Namespace(
         act="DemoG", at="2026-07-14", norm=None))
     output = capsys.readouterr().out
 
@@ -117,12 +117,12 @@ def test_log_keeps_retrieval_and_verified_legal_dates_in_separate_lanes(
         "date_basis": "retrieval_observation_not_effective_date",
         "source_url": "https://www.gesetze-im-internet.de/demog/",
     }
-    monkeypatch.setattr(lex_log, "official_history", lambda _jurabk: {
+    monkeypatch.setattr(kerf_log, "official_history", lambda _jurabk: {
         "observations": [observation], "transitions": [transition],
         "reviews": [review],
     })
 
-    lex_log.show_official_federal_history("DemoG", False)
+    kerf_log.show_official_federal_history("DemoG", False)
     output = capsys.readouterr().out
 
     assert "verified legal transitions" in output
@@ -151,12 +151,12 @@ def test_blame_emits_observation_and_legal_review_as_distinct_events(
             "pdf_url": "https://www.recht.bund.de/final.pdf",
         },
     }
-    monkeypatch.setattr(lex_blame, "official_history", lambda _jurabk: {
+    monkeypatch.setattr(kerf_blame, "official_history", lambda _jurabk: {
         "observations": [], "transitions": [transition],
         "reviews": [review],
     })
 
-    events = lex_blame.official_norm_events("DemoG", "1")
+    events = kerf_blame.official_norm_events("DemoG", "1")
 
     assert [event["kind"] for event in events] == ["observed", "amended"]
     assert "NOT effective date" in events[0]["badge"]

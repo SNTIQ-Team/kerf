@@ -36,7 +36,7 @@ def test_renamed_act_resolves_to_same_work(rii_paragraphs):
     rel = extract_norms(rii_paragraphs["rn-1"].text, "rn-1")[0]
     assert rel.target_id == "de/bund/asylvfg_1992/para/24/abs/4"
     assert rel.detail["act"] == "AsylVfG" and rel.detail["act_resolution"] == "act_index"
-    assert rel.detail["lexgraph_act_id"] == "fed_asylvfg_1992"
+    assert rel.detail["kerf_act_id"] == "fed_asylvfg_1992"
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -159,19 +159,19 @@ def test_court_ids_of_new_laender(name, court_id):
     ("§ 35 BauGB", "de/bund/bbaug/para/35", "alias"),
     ("§ 1 AÜG", "de/bund/a_g/para/1", "act_index"),
 ])
-def test_norms_resolve_through_lexgraphs_canonical_resolver(text, target, basis):
+def test_norms_resolve_through_kerfs_canonical_resolver(text, target, basis):
     rel = extract_norms(text, "p")[0]
     assert (rel.target_id, rel.detail["act_resolution"]) == (target, basis)
 
 
-def test_missing_lexgraph_data_fails_loudly(monkeypatch, tmp_path):
-    from courts.acts import LexgraphDataUnavailable, lexgraph_data_dir
+def test_missing_kerf_data_fails_loudly(monkeypatch, tmp_path):
+    from courts.acts import KerfDataUnavailable, kerf_data_dir
     import courts.acts as acts
-    monkeypatch.setenv("LEXGRAPH_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("KERF_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(acts, "ROOT", tmp_path)
     monkeypatch.setattr(acts.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
-    with pytest.raises(LexgraphDataUnavailable):
-        lexgraph_data_dir()
+    with pytest.raises(KerfDataUnavailable):
+        kerf_data_dir()
 
 
 def test_check_norm_ids_flags_stale_ids(fixture):

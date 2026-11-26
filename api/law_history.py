@@ -31,8 +31,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 DB_FILE = "law_history.sqlite"
-DB_SCHEMA = "lexgraph-law-history-sqlite/1"
-SUMMARY_SCHEMA = "lexgraph-change-summary/1"
+DB_SCHEMA = "kerf-law-history-sqlite/1"
+SUMMARY_SCHEMA = "kerf-change-summary/1"
 SOURCE_ROLES = ("official_consolidation", "archived_capture",
                 "official_promulgation", "reconstruction")
 CHANGE_TYPES = ("geändert", "eingefügt", "neugefasst", "aufgehoben",
@@ -321,7 +321,7 @@ def summarize(changes: list[dict[str, Any]], *, scope: str, subject: str,
               completeness: dict[str, Any] | None = None,
               notes_observed_at: str | None = None,
               unknown_limit: int = 50) -> dict[str, Any]:
-    """``change_summary`` (schema lexgraph-change-summary/1).
+    """``change_summary`` (schema kerf-change-summary/1).
 
     ``last_change`` is the latest change in force on ``as_of`` whose in-force
     date is evidenced; a change whose text is observed but whose date is not

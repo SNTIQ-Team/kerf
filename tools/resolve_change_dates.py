@@ -60,9 +60,9 @@ PRIORITY_SLUGS = {
     "asylblg", "sgb_2", "sgb_12", "sgb_10", "sgg", "vwgo", "vwvfg",
     "aufenthg_2004", "asylvfg_1992", "azrg", "bgb", "zpo", "gg",
 }
-RESOLUTION_SCHEMA = "lexgraph-change-date-resolution/1"
+RESOLUTION_SCHEMA = "kerf-change-date-resolution/1"
 DEFAULT_LEGACY_ARCHIVE = (Path.home() / ".local/share/sntiq-legal/"
-                          "lexgraph-archive/data/legacy_bgbl_history")
+                          "kerf-archive/data/legacy_bgbl_history")
 
 
 def latest_nonempty(base: Path, name: str) -> Path | None:
@@ -413,7 +413,7 @@ def build_summary(counts, by_year, reasons, dip, before, after_article,
                                finding.get("source"),
                                finding.get("status"))] += 1
     return {
-        "schema": "lexgraph-change-date-summary/1",
+        "schema": "kerf-change-date-summary/1",
         "generated_at": datetime.now(timezone.utc).isoformat(
             timespec="seconds"),
         "scope": "all_acts" if args.all_acts else sorted(
@@ -449,7 +449,7 @@ def build_summary(counts, by_year, reasons, dip, before, after_article,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--data-root", default=os.environ.get(
-        "LEXGRAPH_DATA_ROOT") or str(ROOT),
+        "KERF_DATA_ROOT") or str(ROOT),
         help="checkout holding data/snapshots (read-only)")
     parser.add_argument("--legacy-archive", action="append",
                         default=None,

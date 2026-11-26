@@ -89,7 +89,7 @@ def test_hf_history_materializes_verified_full_states_and_provenance(
     assert exported_transition["effective_at"] is None
     assert exported_transition["provenance"] == {
         "source": "GII",
-        "algorithm": "lexgraph-complete-state-diff",
+        "algorithm": "kerf-complete-state-diff",
         "date_basis": "retrieval_observation_not_effective_date",
         "effective_date_asserted": False,
         "official_only": True,

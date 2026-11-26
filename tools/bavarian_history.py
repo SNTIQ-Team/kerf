@@ -7,7 +7,7 @@ Network capture lives in ``pipeline/fetch_bavarian_history.py``.
 
 Archive layout (archive worker only; see the phase-4 spec)::
 
-    R = $LEXGRAPH_HISTORY_ARCHIVE or ~/.local/share/sntiq-legal/lexgraph-archive/history
+    R = $KERF_HISTORY_ARCHIVE or ~/.local/share/sntiq-legal/kerf-archive/history
     R/raw/<source>/sha256/<xx>/<sha256>.<ext>.gz   gzip of the raw bytes
     R/ledger/<source>.jsonl                        one row per capture attempt
     R/parsed/<source>/<act_id>/<sha256>.json.gz    one parse per raw object
@@ -66,10 +66,10 @@ except ImportError:  # pragma: no cover - exercised until that merge
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 ROOT = Path(__file__).resolve().parent.parent
-MAIN_CHECKOUT = Path(os.environ.get("LEXGRAPH_MAIN_CHECKOUT", ROOT))
-UA = "SNTIQ-lexgraph/0.2 (research; +https://sntiq.com/)"
-LEDGER_SCHEMA = "lexgraph-history-capture/1"
-PARSED_SCHEMA = "lexgraph-history-parsed/1"
+MAIN_CHECKOUT = Path(os.environ.get("KERF_MAIN_CHECKOUT", ROOT))
+UA = "SNTIQ-kerf/0.2 (research; +https://sntiq.com/)"
+LEDGER_SCHEMA = "kerf-history-capture/1"
+PARSED_SCHEMA = "kerf-history-parsed/1"
 SOURCES = ("wayback_bayern", "bayern_recht", "gvbl")
 SHA_RE = re.compile(r"[0-9a-f]{64}")
 
@@ -90,10 +90,10 @@ class HistoryArchiveError(ValueError):
 def archive_root(root: str | os.PathLike | None = None) -> Path:
     if root is not None:
         return Path(root)
-    env = os.environ.get("LEXGRAPH_HISTORY_ARCHIVE")
+    env = os.environ.get("KERF_HISTORY_ARCHIVE")
     if env:
         return Path(env)
-    return Path.home() / ".local/share/sntiq-legal/lexgraph-archive/history"
+    return Path.home() / ".local/share/sntiq-legal/kerf-archive/history"
 
 
 def sha256_hex(data: bytes) -> str:
@@ -527,7 +527,7 @@ def parse_standangabe(raw: str) -> list[dict]:
 
 
 def build_parsed(row: dict, data: bytes) -> dict:
-    """SPEC ``lexgraph-history-parsed/1`` record for one ledger row + bytes."""
+    """SPEC ``kerf-history-parsed/1`` record for one ledger row + bytes."""
     act = ACTS[row["act_id"]]
     kind = row["kind"]
     if kind == "zip":
@@ -1023,7 +1023,7 @@ def _open_snapshot_rows(path: Path) -> Iterator[dict]:
 
 
 def snapshot_root() -> Path:
-    env = os.environ.get("LEXGRAPH_SNAPSHOTS")
+    env = os.environ.get("KERF_SNAPSHOTS")
     return Path(env) if env else MAIN_CHECKOUT / "data" / "snapshots"
 
 
@@ -1636,7 +1636,7 @@ def commencement_section(doc: dict) -> dict | None:
 
 # ------------------------------------------------------------- building
 
-AS_OF = os.environ.get("LEXGRAPH_AS_OF") or date.today().isoformat()
+AS_OF = os.environ.get("KERF_AS_OF") or date.today().isoformat()
 ROLE_RANK = {"official_consolidation": 0, "official_promulgation": 1,
              "archived_capture": 2, "reconstruction": 3}
 CONSOLIDATION_BASIS = (
@@ -1751,7 +1751,7 @@ def wayback_observations(act_id: str, root=None) -> tuple[list[dict], list[dict]
 
 
 def official_observations(act_id: str) -> tuple[list[dict], list[dict]]:
-    """Lexgraph's own daily BAYERN.RECHT snapshots (official consolidation;
+    """Kerf's own daily BAYERN.RECHT snapshots (official consolidation;
     derived text, raw bytes not retained) plus the published act JSON."""
     act = ACTS[act_id]
     observations, stands = [], []
@@ -2747,14 +2747,14 @@ OUTPUT_FILES = ("versions", "changes", "amending_acts", "findings")
 
 
 def default_output_dir() -> Path:
-    env = os.environ.get("LEXGRAPH_BY_HISTORY_OUT")
+    env = os.environ.get("KERF_BY_HISTORY_OUT")
     return Path(env) if env else archive_root() / "derived" / "bavaria"
 
 
 def write_outputs(results: list[dict], out_dir: Path) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    summary = {"schema": "lexgraph-bavarian-history/1", "built_at": utc_now(),
+    summary = {"schema": "kerf-bavarian-history/1", "built_at": utc_now(),
                "as_of": AS_OF, "acts": {}}
     for name in OUTPUT_FILES:
         rows = [row for result in results for row in result[name]]

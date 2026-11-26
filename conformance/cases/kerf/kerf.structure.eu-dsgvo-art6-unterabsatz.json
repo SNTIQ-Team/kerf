@@ -1,7 +1,7 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.structure.eu-dsgvo-art6-unterabsatz",
-  "module": "lexgraph",
+  "id": "kerf.structure.eu-dsgvo-art6-unterabsatz",
+  "module": "kerf",
   "kind": "norm_structure",
   "description": "Art. 6 DSGVO (CELLAR consolidated Formex): Abs. 1 has two Unterabsätze, the points a)-f) hang off Satz 1 and 'Unterabsatz 1 Buchstabe f gilt nicht ...' is UAbs. 2 = Satz 2 (sentences counted across the Absatz, as courts cite 'Art. 6 Abs. 1 Satz 2 DSGVO'). ', sofern nicht ...' inside point f) is not a Schlussteil of the list.",
   "origin": "EU text corpus (pipeline/fetch_eu_texts.py); api/law_structure.py eu mode",

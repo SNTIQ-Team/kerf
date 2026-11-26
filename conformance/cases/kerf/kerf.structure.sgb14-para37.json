@@ -1,9 +1,9 @@
 {
   "format": "sntiq-conformance/1",
-  "id": "lexgraph.structure.sgb14-para37",
-  "module": "lexgraph",
+  "id": "kerf.structure.sgb14-para37",
+  "module": "kerf",
   "kind": "norm_structure",
-  "description": "§ 37 SGB XIV (canonical GII body from Lexgraph's state store) has 2 Absätze; Abs. 2 Satz 3 carries a lead-in and a list of 6 Nummern. Absatz, Satz and Nummer are distinct node types. The official reader renders 3 visual blocks (p, p, dl) with 12 dt/dd elements and PRIMA counted 7 units; neither <p>/line nor list-element counts define locators, so there is no abs/3. '1. Januar 2021' is not a Nummer and not a sentence end.",
+  "description": "§ 37 SGB XIV (canonical GII body from Kerf's state store) has 2 Absätze; Abs. 2 Satz 3 carries a lead-in and a list of 6 Nummern. Absatz, Satz and Nummer are distinct node types. The official reader renders 3 visual blocks (p, p, dl) with 12 dt/dd elements and PRIMA counted 7 units; neither <p>/line nor list-element counts define locators, so there is no abs/3. '1. Januar 2021' is not a Nummer and not a sentence end.",
   "origin": "PRIMA audit finding b (Absatz counting); spec: Operating principles 2 (§ 37 SGB XIV structure); tests/test_law_structure.py",
   "status": "active",
   "input": {

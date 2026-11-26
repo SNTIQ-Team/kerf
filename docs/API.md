@@ -1,13 +1,13 @@
-# Lexgraph API & Data Interface
+# Kerf API & Data Interface
 
-Lexgraph models German and EU law as a temporal legal graph: consolidated text,
+Kerf models German and EU law as a temporal legal graph: consolidated text,
 dated amendments, official legislative stages, court decisions and explicit
 links between them. `git.json` is the stable **Laws as Git** projection: a
 navigation model for HEAD, commits, open/closed branches and evidence-bound
 merges.
 The metaphor never overrides the legal status stated by the official source.
 
-Lexgraph's "API" is four things:
+Kerf's "API" is four things:
 
 - **A) Pre-built static data artifacts** (`web/data/*.json` plus immutable
   SQLite indexes) consumed by the API and local visualizer.
@@ -16,8 +16,8 @@ Lexgraph's "API" is four things:
 - **C) A REST API** (`api/`, FastAPI) that serves those static JSON files as
   live HTTP endpoints — verbatim or in small filter/pagination envelopes, with
   CORS — so a browser frontend can call it directly. Mirrors the sibling
-  Amtsgraph project's `api/`.
-- **D) CLI tools** (`tools/lex_log.py`, `tools/lex_blame.py`) that read the
+  Taper project's `api/`.
+- **D) CLI tools** (`tools/kerf_log.py`, `tools/kerf_blame.py`) that read the
   snapshot archive directly.
 
 ---
@@ -56,7 +56,7 @@ Files written:
 | `federal_states/manifest.json` + `federal_states/objects/sha256/…` | The same manifest beside its verified deterministic-gzip full-state CAS. |
 | `verified_reconstructions.json` | Reviewed, body-complete historical states derived by inverse amendment replay and proven by canonical forward replay; always `source_exact:false`. |
 | `official_transition_reviews.json` | Federal state changes whose legal date passed final BGBl command + DIP commencement review. |
-| `retrospective_history.json` | Bitemporal federal history: separate legal-validity and Lexgraph-knowledge intervals, 2023+ BGBl events, GII observations and explicit gaps. |
+| `retrospective_history.json` | Bitemporal federal history: separate legal-validity and Kerf-knowledge intervals, 2023+ BGBl events, GII observations and explicit gaps. |
 | `retrospective_history.sqlite` | Portable relational form of the same history (`acts`, `state_objects`, `state_observations`, `legal_intervals`, `amendment_events`). |
 | `search.sqlite` | Read-only FTS5 index over act metadata and complete current norm text. |
 | `citations.json` | Small citation manifest: counts, source snapshots and extraction policy; **no citation rows**. |
@@ -125,7 +125,7 @@ formats calendar dates to `dd.mm.yyyy`.
 | `amendment_fates` / `amendment_fates_validated` | Reviewed document-chain records / records whose declared current-law checks passed. |
 | `official_federal_observations` | Complete GII act retrievals retained in the cumulative state manifest. |
 | `official_federal_states` | Unique canonical full-act objects in the federal SHA-256 CAS. |
-| `official_federal_transitions` | Normative changes found by Lexgraph between adjacent complete states; their retrieval dates are not legal dates. |
+| `official_federal_transitions` | Normative changes found by Kerf between adjacent complete states; their retrieval dates are not legal dates. |
 | `official_federal_legal_reviews` | State transitions that additionally passed the final BGBl command and exact DIP commencement gate. |
 | `retrospective_history` | Bitemporal store counts: act/state assertions, 2023+ official amendment events and resolved effective dates. |
 | `bay_bills` / `bay_verkuendet` | Bavarian Landtag bills / of those, promulgated. |
@@ -680,9 +680,9 @@ The 24 steps are:
 | 6 | Verify and append every complete GII act state to the cumulative canonical SHA-256 store | `tools/archive_gii_states.py` |
 | 7 | Capture final BGBl landing/PDF documents, verify integrity, split articles and join DIP commencement rows | `fetch_bgbl_documents.py` |
 | 8 | Rebuild the official 2023+ retrospective BGBl amendment/date inventory | `backfill_bgbl_history.py` |
-| 9 | Federal case law from seven official RII feeds (**default-off** pending NeuRIS migration; `LEXGRAPH_ENABLE_RII=1`) | `fetch_rii.py` |
+| 9 | Federal case law from seven official RII feeds (**default-off** pending NeuRIS migration; `KERF_ENABLE_RII=1`) | `fetch_rii.py` |
 | 10 | NeuRIS changelog plus immediate content-addressed capture of selected expiring ZIP artifacts | `fetch_neuris_changelog.py` |
-| 11 | Private version-history QA (**default-off**, explicit opt-in `LEXGRAPH_ENABLE_BUZER=1`; not used by public builds) | `fetch_buzer.py` |
+| 11 | Private version-history QA (**default-off**, explicit opt-in `KERF_ENABLE_BUZER=1`; not used by public builds) | `fetch_buzer.py` |
 | 12 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
 | 13 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
 | 14 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
@@ -705,7 +705,7 @@ Permission-gated snapshots are retained only as private research artifacts;
 the public web/HF builders exclude them unless an explicit private build mode
 is selected, and the HF exporter refuses that mode.
 
-Set `LEXGRAPH_VISUALIZER_PUBLIC` to the local `qfs_visualizer/public` directory to deploy the arena there in step 22.
+Set `KERF_VISUALIZER_PUBLIC` to the local `qfs_visualizer/public` directory to deploy the arena there in step 22.
 
 ---
 
@@ -716,7 +716,7 @@ recompute anything: `tools/build_web_data.py` is the build step, `web/data/*.jso
 *are* the data, and each endpoint just projects one of those files. Some return
 the file verbatim; filtered endpoints add the small envelopes documented below.
 This mirrors the sibling
-[Amtsgraph](https://github.com/SNTIQ-Team/amtsgraph) project's `api/`
+[Taper](https://github.com/SNTIQ-Team/taper) project's `api/`
 (`api/main.py` = the app, `api/server.py` = the ASGI composition root).
 
 ## Run
@@ -729,11 +729,11 @@ uvicorn api.server:server --host 127.0.0.1 --port 8010 --workers 1
 ```
 
 The data directory defaults to `<repo>/web/data`; override it with the
-`LEXGRAPH_DATA` environment variable (e.g. a deployment path). The dataset is
+`KERF_DATA` environment variable (e.g. a deployment path). The dataset is
 static per deploy, so responses are cached in-process and sent with
 `Cache-Control: public, max-age=3600`. **CORS is open (`*`)** so any browser
 frontend can call the API. Archive/download metadata (`Content-Disposition`
-and the `X-Lexgraph-*` headers documented below) is exposed to browser
+and the `X-Kerf-*` headers documented below) is exposed to browser
 JavaScript as well. The data plane is loaded lazily and cached; there is no
 database.
 
@@ -804,7 +804,7 @@ refresh and publication. No previous success or failure is fabricated during
 the migration.
 
 For operational visibility before the next corpus build, configure
-`LEXGRAPH_FRESHNESS` for the API and refresh job to point to a public JSON
+`KERF_FRESHNESS` for the API and refresh job to point to a public JSON
 sidecar outside the immutable generation. The metadata-only command
 `python3 tools/source_freshness.py export --output PATH` inventories existing
 snapshot directory dates and real tracked outcomes; it neither fetches nor
@@ -818,9 +818,9 @@ actual RFC3339 timestamp for migration; unknown successes must remain absent.
 ## `GET /version`
 
 ```json
-{ "dataset": "Lexgraph", "version": "1.5",
+{ "dataset": "Kerf", "version": "1.5",
   "built_at": "2026-07-06T17:43:26+00:00",
-  "source": "https://github.com/SNTIQ-Team/lexgraph" }
+  "source": "https://github.com/SNTIQ-Team/kerf" }
 ```
 
 ## `GET /feed?limit=`
@@ -881,7 +881,7 @@ curl 'http://127.0.0.1:8010/git?lane=0&limit=3'
 Returns the public federal-history ledger without reading the quarantined
 Buzer cache. `act` is an exact case-insensitive JurAbk filter; `tier` is
 `exact`, `current_text_correspondence`, or `metadata_only`. `exact` means
-Lexgraph captured two different complete official GII states and hashed both
+Kerf captured two different complete official GII states and hashed both
 sides. Its `observed_at` is a retrieval date, **not** a silently inferred legal
 effective date.
 
@@ -925,7 +925,7 @@ Buzer snapshot or synopsis. The Hugging Face export makes the same boundary
 portable as four JSONL configurations:
 
 - `official_federal_state_observations.jsonl` — retrieval facts;
-- `official_federal_state_transitions.jsonl` — Lexgraph's own state diffs,
+- `official_federal_state_transitions.jsonl` — Kerf's own state diffs,
   `effective_at:null` unless separately reviewed;
 - `official_federal_state_objects.jsonl` — full verified states and their
   observation provenance;
@@ -963,7 +963,7 @@ curl 'http://127.0.0.1:8010/verified-reconstructions?act=SGB%20VIII'
 The evidence boundary is machine-readable and must survive every consumer:
 `text_status:"derived_verified"`, `body_complete:true`,
 `reverse_replay_verified:true`, and `source_exact:false`. This proves a
-complete, reproducible reconstruction; it does **not** claim that Lexgraph
+complete, reproducible reconstruction; it does **not** claim that Kerf
 retrieved those historical bytes from GII on that date. Consequently UI/API
 clients may call it a *verified reconstruction*, but never an *exact official
 snapshot*. The derived state and its later official anchor remain separate
@@ -979,7 +979,7 @@ collapsed:
   state is legally valid. It exists only after a final BGBl command, an exact
   DIP commencement clause and a complete GII state pair pass review;
 - `[knowledge_from, knowledge_to)` is the half-open RFC3339 interval in which
-  Lexgraph asserted that legal interval. A later correction closes, rather
+  Kerf asserted that legal interval. A later correction closes, rather
   than rewrites, the old assertion;
 - `published_at` is the BGBl publication date and `observed_at` is a retrieval
   or ingestion date. Neither is substituted for legal effect;
@@ -1160,7 +1160,7 @@ DIP/build/publish cycle. A first observation with no persisted fallback still
 fails closed.
 
 `/amendment-fates` returns all validation records. `procedure_id` filters by
-official DIP id and `validation_id` by the Lexgraph record id; filters can be
+official DIP id and `validation_id` by the Kerf record id; filters can be
 combined. Each record keeps reviewed document roles separate from mechanical
 checks of the current consolidated law.
 
@@ -1246,31 +1246,31 @@ The response exposes:
 
 ```text
 Content-Type: text/markdown; charset=utf-8
-X-Lexgraph-Requested-Date: 2024-03-02
-X-Lexgraph-Resolved-Date: 2024-03-02
-X-Lexgraph-Head-Date: 2026-07-15
-X-Lexgraph-Exact: false
-X-Lexgraph-Archive-Status: partial
-X-Lexgraph-Complete: false
-X-Lexgraph-Source-Exact: false
-X-Lexgraph-Verified-Reconstruction: false
-X-Lexgraph-Missing-Transitions: 3
-X-Lexgraph-Archive-Gaps: [{"reason":"…","label":"…"}]
-X-Lexgraph-Date-Basis: retrieval_observation_not_effective_date
-X-Lexgraph-State-SHA256: 012345…cdef
-X-Lexgraph-Source-URL: https://www.gesetze-im-internet.de/…/
-X-Lexgraph-Legal-Effect-Verified: true  # only for a reviewed legal transition
-X-Lexgraph-Published-Date: 2026-07-09
-X-Lexgraph-Effective-Date: 2026-07-10
-X-Lexgraph-Review-ID: fed-review:…
-X-Lexgraph-Procedure-ID: 327966
-X-Lexgraph-As-Of: 2026-07-16T12:00:00Z
-X-Lexgraph-Effective-From: 2026-07-10
-X-Lexgraph-Effective-To: 2027-01-01
-X-Lexgraph-Knowledge-From: 2026-07-16T12:00:00Z
-X-Lexgraph-Knowledge-To:
-X-Lexgraph-Text-Status: official_exact
-X-Lexgraph-Date-Status: official_verified
+X-Kerf-Requested-Date: 2024-03-02
+X-Kerf-Resolved-Date: 2024-03-02
+X-Kerf-Head-Date: 2026-07-15
+X-Kerf-Exact: false
+X-Kerf-Archive-Status: partial
+X-Kerf-Complete: false
+X-Kerf-Source-Exact: false
+X-Kerf-Verified-Reconstruction: false
+X-Kerf-Missing-Transitions: 3
+X-Kerf-Archive-Gaps: [{"reason":"…","label":"…"}]
+X-Kerf-Date-Basis: retrieval_observation_not_effective_date
+X-Kerf-State-SHA256: 012345…cdef
+X-Kerf-Source-URL: https://www.gesetze-im-internet.de/…/
+X-Kerf-Legal-Effect-Verified: true  # only for a reviewed legal transition
+X-Kerf-Published-Date: 2026-07-09
+X-Kerf-Effective-Date: 2026-07-10
+X-Kerf-Review-ID: fed-review:…
+X-Kerf-Procedure-ID: 327966
+X-Kerf-As-Of: 2026-07-16T12:00:00Z
+X-Kerf-Effective-From: 2026-07-10
+X-Kerf-Effective-To: 2027-01-01
+X-Kerf-Knowledge-From: 2026-07-16T12:00:00Z
+X-Kerf-Knowledge-To:
+X-Kerf-Text-Status: official_exact
+X-Kerf-Date-Status: official_verified
 Content-Disposition: attachment; filename="…md"   # download=true only
 ```
 
@@ -1278,9 +1278,9 @@ The truth boundary is strict: HEAD and a date backed by a verified complete GII
 CAS object are exact source snapshots. An exact observation says what GII
 served on that day; the header and Markdown front matter explicitly state that
 the date is a retrieval observation, not commencement. A replay-proven derived
-body instead returns `X-Lexgraph-Archive-Status: verified_reconstruction`,
-`X-Lexgraph-Complete: true`, `X-Lexgraph-Source-Exact: false`, and
-`X-Lexgraph-Verified-Reconstruction: true`; its Markdown front matter repeats the same
+body instead returns `X-Kerf-Archive-Status: verified_reconstruction`,
+`X-Kerf-Complete: true`, `X-Kerf-Source-Exact: false`, and
+`X-Kerf-Verified-Reconstruction: true`; its Markdown front matter repeats the same
 four-way boundary. It is complete and checkoutable, but never presented as an
 exact historical source capture. Other historical output
 uses dated complete norm states from verified Bavarian Wayback/daily snapshots
@@ -1433,12 +1433,12 @@ Read-only over `data/snapshots` — **no network, no snapshot writes**. Acts
 resolve case-insensitively by `jurabk` (federal GII corpus first, then the
 Bavarian corpus), so the same tools work for federal and Bavarian acts.
 
-## `tools/lex_log.py` — chronology for one act
+## `tools/kerf_log.py` — chronology for one act
 
 ```bash
-python3 tools/lex_log.py AsylbLG          # federal corpus
-python3 tools/lex_log.py AufnG            # Bavarian corpus
-python3 tools/lex_log.py "SGB 2" --all    # full back-history
+python3 tools/kerf_log.py AsylbLG          # federal corpus
+python3 tools/kerf_log.py AufnG            # Bavarian corpus
+python3 tools/kerf_log.py "SGB 2" --all    # full back-history
 ```
 
 Prints, in one view:
@@ -1456,15 +1456,15 @@ Prints, in one view:
 A recommended-but-unmerged patch always appears under its real status and never
 as geltendes Recht — the VISION acceptance discipline.
 
-## `tools/lex_blame.py` — `git blame` / `git checkout` over the snapshots
+## `tools/kerf_blame.py` — `git blame` / `git checkout` over the snapshots
 
 ```bash
 # every amendment/patch touching one §/Art., newest first, across all tiers
-python3 tools/lex_blame.py blame AsylbLG 3a
-python3 tools/lex_blame.py blame AufnG 4
+python3 tools/kerf_blame.py blame AsylbLG 3a
+python3 tools/kerf_blame.py blame AufnG 4
 
 # which consolidated version was in force at a date
-python3 tools/lex_blame.py checkout AsylbLG --at 2020-06-01
+python3 tools/kerf_blame.py checkout AsylbLG --at 2020-06-01
 ```
 
 - **`blame <ACT> <REF>`** — merges the official Bavarian BayRS ffn + XML tier
@@ -1483,7 +1483,7 @@ python3 tools/lex_blame.py checkout AsylbLG --at 2020-06-01
 
 ## The QFS arena & licensing
 
-The arena lives at `data/lexgraph_de_wp21.qfs` (binary; produced by
+The arena lives at `data/kerf_de_wp21.qfs` (binary; produced by
 `tools/build_qfs.py`, consumed by `build_web_data.py` and by the standalone
 `qfs_visualizer`). `graph.json` above is its JSON projection.
 
@@ -1505,7 +1505,7 @@ Integrity failures retain `integrity_check_failed`. Every other route rejects
 undeclared or repeated arguments the same way (`invalid_argument`, or
 `unsupported_temporal_request` for date-like names); only the transport cache
 keys `t`, `_`, `cb` (and `d` on `/digest`) are accepted and echoed in
-`X-Lexgraph-Ignored-Arguments`. Each search result states its
+`X-Kerf-Ignored-Arguments`. Each search result states its
 `temporal_scope` (current consolidation only).
 
 ### Norm history: log, at, diff, blame
@@ -1546,12 +1546,12 @@ included) plus the front matter as typed `provenance` and the limitations as
 `tools/law_git_export.py` exports these versions to a Git repository (default
 `~/.local/share/sntiq-legal/law-git`): one Markdown file per norm, one commit
 per consolidated version, author date = verified `valid_from` (or the first
-observation, disclosed by the `Lexgraph-Author-Date-Basis` trailer).
+observation, disclosed by the `Kerf-Author-Date-Basis` trailer).
 
 ### Joined research
 
-The Amtsgraph composition root serves `/research` (public `/v1/research`),
-joining existing Lexgraph search/text and authority/court resolution as typed
+The Taper composition root serves `/research` (public `/v1/research`),
+joining existing Kerf search/text and authority/court resolution as typed
 components. It preserves ambiguity and source failures, rejects unsupported
 historical competence queries and never invents a law-to-authority assignment.
 No second corpus is stored. Native source snapshots remain component-scoped.
@@ -1568,4 +1568,4 @@ and `GET /decisions/{id}/source` for its original ZIP. A source block locator
 is not an invented court paragraph. Metadata-only decisions return typed source
 gaps. Dates and unknown/repeated arguments are rejected; these are current
 retained representations, not historical publication-time retrieval. Existing
-`If-Lexgraph-Snapshot` checks bind related calls to one immutable generation.
+`If-Kerf-Snapshot` checks bind related calls to one immutable generation.

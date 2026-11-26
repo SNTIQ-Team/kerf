@@ -1,4 +1,4 @@
-"""Export Lexgraph snapshots + arena into web/data/*.json for the local
+"""Export Kerf snapshots + arena into web/data/*.json for the local
 visualizer (web/index.html). Pure read -> write, no network.
 
     python3 tools/build_web_data.py
@@ -120,7 +120,7 @@ QUARANTINED_SOURCES = frozenset({
 
 def include_quarantined_sources() -> bool:
     """Explicit private/research opt-in; public builds must leave this off."""
-    return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
+    return os.environ.get("KERF_INCLUDE_QUARANTINED") == "1"
 
 
 def load_buzer_cross_checks() -> dict[str, int]:
@@ -1222,7 +1222,7 @@ def build_amendment_fates(details: dict[str, dict],
                   if isinstance(check, dict)]
         row["validation"] = {
             "checked_at": timestamp,
-            "method": "current Lexgraph corpus checks",
+            "method": "current Kerf corpus checks",
             "passed": bool(checks) and all(check.get("passed")
                                            for check in checks),
             "checks": checks,
@@ -1240,7 +1240,7 @@ def build_amendment_fates(details: dict[str, dict],
 
 # ----------------------------------------------------------------- graph
 def build_graph() -> dict:
-    arena = ROOT / "data" / "lexgraph_de_wp21.qfs"
+    arena = ROOT / "data" / "kerf_de_wp21.qfs"
     policy_path = Path(f"{arena}.policy.json")
     if not policy_path.is_file():
         raise RuntimeError(
@@ -1429,7 +1429,7 @@ def build_git(official_transitions: list[dict] | None = None,
             "date": review["effective_at"],
             "lane": 1,
             "type": "commit",
-            "actor": "BGBl / Lexgraph",
+            "actor": "BGBl / Kerf",
             "msg": (("Amtliche Änderung wird wirksam · "
                      if str(review["effective_at"]) > TODAY else
                      "Amtliche Änderung wirksam · ") +
@@ -1492,7 +1492,7 @@ def build_git(official_transitions: list[dict] | None = None,
             "date": event_date,
             "lane": 1,
             "type": "commit",
-            "actor": "BGBl / Lexgraph",
+            "actor": "BGBl / Kerf",
             # An effective date in the future is a scheduled change, not
             # an effective one.
             "msg": (("Amtliche Änderung wird wirksam"
@@ -1767,7 +1767,7 @@ def main() -> int:
     if previous_path.is_file():
         try:
             candidate = json.loads(previous_path.read_text(encoding="utf-8"))
-            if candidate.get("kind") == "lexgraph-retrospective-history":
+            if candidate.get("kind") == "kerf-retrospective-history":
                 previous_retrospective = candidate
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             previous_retrospective = None
@@ -1816,6 +1816,9 @@ def main() -> int:
     data_policy = {
         "schema_version": 1,
         "public_build": not include_quarantined_sources(),
+        "sntiq_code_license": "Apache-2.0",
+        "sntiq_data_license": "CC-BY-4.0",
+        "rights_matrix": "https://github.com/SNTIQ-Team/kerf/blob/main/docs/RIGHTS.md",
         "includes_quarantined_sources": include_quarantined_sources(),
         "excluded_snapshot_families": (
             [] if include_quarantined_sources()

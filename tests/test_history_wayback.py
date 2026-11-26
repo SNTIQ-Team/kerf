@@ -23,7 +23,7 @@ Fixtures (tests/fixtures/history/) are real bytes:
 * ``gii-asylblg-2007…/2008…-norm-page__N.html.gz`` - unmodified Wayback
   captures of single-norm pages,
 * ``expected_gii_xml_norms.json`` - XML-derived texts
-  (``fetch_gii.parse_law``): Lexgraph daily states for the 2026 fixtures,
+  (``fetch_gii.parse_law``): Kerf daily states for the 2026 fixtures,
   archived xml.zip captures of the same weeks for the older ones.
 """
 from __future__ import annotations
@@ -441,7 +441,7 @@ def test_parse_tool_is_idempotent(tmp_path):
             (package, "zip", "20121227222021", "https://www.gesetze-im-internet.de/asylblg/xml.zip")]:
         sha, _ = archive.put_raw("wayback_gii", data, ext)
         archive.append_ledger("wayback_gii", {
-            "schema": "lexgraph-history-capture/1", "source": "wayback_gii",
+            "schema": "kerf-history-capture/1", "source": "wayback_gii",
             "act_id": "fed_asylblg", "status": "ok", "sha256": sha,
             "capture_timestamp": ts, "captured_at": wb.captured_at(ts),
             "original_url": url,
@@ -451,7 +451,7 @@ def test_parse_tool_is_idempotent(tmp_path):
     again = phc.run(archive, ["wayback_gii"], None, log=lambda *_: None)
     assert again["unchanged"] == 2 and again["parsed"] == 0
     records = {r["media_ext"]: r for r in archive.iter_parsed("wayback_gii")}
-    assert records["html"]["schema"] == "lexgraph-history-parsed/1"
+    assert records["html"]["schema"] == "kerf-history-parsed/1"
     assert records["html"]["parser"] == gp.PARSER_VERSION
     assert records["zip"]["parser"] == gp.XML_PARSER_VERSION
     assert records["html"]["captured_at"] == "2012-12-27T22:19:57Z"

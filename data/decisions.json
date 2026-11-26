@@ -1,5 +1,5 @@
 {
-  "_comment": "Curated court decisions (Rechtsprechung) affecting acts in the Lexgraph corpus. Personal data anonymized per German court-publication practice. Consumed by tools/build_web_data.py -> web/data/decisions.json.",
+  "_comment": "Curated court decisions (Rechtsprechung) affecting acts in the Kerf corpus. Personal data anonymized per German court-publication practice. Consumed by tools/build_web_data.py -> web/data/decisions.json.",
   "decisions": [
     {
       "id": "sg-muenchen-2026-s-42-ay-55-26-er",

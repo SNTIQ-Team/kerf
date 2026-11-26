@@ -8,13 +8,13 @@ from api.server import server
 
 def test_snapshot_precondition_survives_real_composition(monkeypatch, tmp_path):
     monkeypatch.setattr(main, 'DATA_DIR', tmp_path / 'web-data.release-fixture')
-    client = TestClient(server, root_path='/lex')
+    client = TestClient(server, root_path='/kerf')
     response = client.get('/capabilities')
-    assert response.headers['x-lexgraph-snapshot'] == 'web-data.release-fixture'
+    assert response.headers['x-kerf-snapshot'] == 'web-data.release-fixture'
     assert response.json()['snapshot'] == 'web-data.release-fixture'
-    response = client.get('/capabilities', headers={'If-Lexgraph-Snapshot':'other'})
+    response = client.get('/capabilities', headers={'If-Kerf-Snapshot':'other'})
     assert response.status_code == 409 and response.json()['status'] == 'stale_snapshot'
-    assert client.get('/capabilities', headers={'If-Lexgraph-Snapshot':'web-data.release-fixture'}).status_code == 200
+    assert client.get('/capabilities', headers={'If-Kerf-Snapshot':'web-data.release-fixture'}).status_code == 200
 
 
 def test_worker_pins_generation_across_publication_symlink_switch(tmp_path):
@@ -24,10 +24,10 @@ def test_worker_pins_generation_across_publication_symlink_switch(tmp_path):
 from api import main
 from pathlib import Path
 import os
-link=Path(os.environ['LEXGRAPH_DATA'])
+link=Path(os.environ['KERF_DATA'])
 assert main.DATA_DIR.name == 'web-data.release-old'
 link.unlink();link.symlink_to(link.parent/'web-data.release-new')
 assert main.DATA_DIR.name == 'web-data.release-old'
 assert main.corpus_snapshot() == 'web-data.release-old'
 '''
-    subprocess.run([sys.executable, '-c', code], env={**os.environ,'LEXGRAPH_DATA':str(link)}, check=True)
+    subprocess.run([sys.executable, '-c', code], env={**os.environ,'KERF_DATA':str(link)}, check=True)

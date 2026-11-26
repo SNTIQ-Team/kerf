@@ -1,4 +1,4 @@
-"""Corpus court slugs -> Amtsgraph court ids (court:de:<XJustiz-ID>, court:eu:<ECLI code>)."""
+"""Corpus court slugs -> Taper court ids (court:de:<XJustiz-ID>, court:eu:<ECLI code>)."""
 import json
 
 import pytest
@@ -47,7 +47,7 @@ def test_store_mapping_updates_decisions_and_keeps_the_slug(fixture):
     init_db(conn)
     sync_source(FixtureAdapter(fixture, [item()]), conn, FakeHttp())
     assert conn.execute("SELECT court_id, court_slug FROM decisions").fetchone()[:] == ("bverwg", "bverwg")
-    result = store_mapping(conn, {"snapshot_id": "amtsgraph-test", "records": RECORDS})
+    result = store_mapping(conn, {"snapshot_id": "taper-test", "records": RECORDS})
     assert result["decisions_mapped"] == 1
     row = conn.execute("SELECT id, court_id, court_slug FROM decisions").fetchone()
     assert tuple(row) == (ECLI, "court:de:U8572", "bverwg")

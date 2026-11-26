@@ -1,139 +1,35 @@
-# ⟠ Lexgraph
+# Kerf
 
-**Lexgraph — a temporal graph of German and EU law.**
+Kerf tracks German federal law, Bavarian law and EU instruments. A reader can open a provision on a given date, compare its wording across editions and inspect the source for a change. Each record distinguishes the date of publication, the date a provision takes effect and the date Kerf observed it.
 
-Lexgraph models legal texts, amendments, legislative procedures and case links
-across the federal (Bund), Bavarian (Bayern) and EU levels as a sourced,
-temporal graph. It distinguishes current consolidated text, past changes,
-pending bills and legally specific EU implementation/applicability links.
+[Open the reader](https://sntiq.com/dt/kerf) · [Explore the API](https://api.sntiq.com/kerf/docs) · [Download the dataset](https://huggingface.co/datasets/SNTIQ-Team/kerf)
 
-It answers, in real time and with provenance: **what law exists, where it comes
-from, when it may pass, when it was last amended, and what changed.**
+## Coverage and sources
 
-| | |
-|---|---|
-| WP21 legislative procedures (DIP) | **362** |
-| Extracted PatchInstructions | **1,484** (607 proposed · 9 adopted · 841 published · 23 rejected · 4 not merged) |
-| Federal acts (GII) + norms | **125 / 15,738** |
-| Official federal GII catalogue (metadata) | **6,126** |
-| Official federal state archive | **297 observations / 137 states / 7 transitions** |
-| Legally dated federal transitions | **1** final-text + commencement review |
-| Official retrospective BGBl inventory (2023+) | **144 documents / 484 amendment articles / 399 resolved effective dates** |
-| Bavarian acts (BAYERN.RECHT) + versions | **12 / 531** (since 1985) |
-| Curated EU instruments + German transpositions | **47 / 136** |
-| EU in-force metadata index | **7,934** directives and basic regulations |
-| Court decisions | **82** (3 reviewed + 79 official federal RII) |
-| QFS arena | 804 nodes · 810 beliefs · 3 jurisdiction worlds |
+The federal catalogue identifies acts by their official GII metadata. Selected acts have full text, norm-level search and a version history. The EU index records instruments and German transpositions. Selected instruments also have full text. The current build reports its coverage by jurisdiction at [`/stats`](https://api.sntiq.com/kerf/stats).
 
-The 125 federal acts form the curated **deep corpus**: full current text,
-norm-level search, citations, snapshots and diffs.  They are not presented as
-all German federal law.  The separate 6,126-row official GII catalogue gives
-broad discovery and source links without pretending that metadata-only rows
-already have Lexgraph's deep history.
+For German federal law, the pipeline joins GII texts to Bundestag DIP procedures, final BGBl publications and NeuRIS captures. Bavarian records use BAYERN.RECHT, GVBl and Landtag sources. EU records use official CELLAR and EUR-Lex identifiers. Each procedure keeps its observations, published documents and references to the affected acts. [Source inventory](docs/SOURCES.md)
 
-The EU breadth index covers every in-force directive (including delegated and
-implementing directives) and basic regulation exposed by CELLAR, as metadata
-only; texts and deep change history remain in the curated corpus. Court data
-combines reviewed manual cases with a forward-cumulative import from the seven
-official federal RII feeds. It is corpus-filtered and is not a catalogue of all
-German courts; lower-court decisions remain curated manually.
+## Working with dates
 
-Explicitly watched procedures are checked twice daily against DIP, EUR-Lex
-and Council evidence. Each API row carries a deterministic evidence analysis:
-verified facts, document-role and final-text checks, official chronology,
-next milestone, uncertainty factors and a qualitative forecast. Predictions
-are never promoted to facts; recommendations and political preparations are
-kept distinct from adoption and promulgation.
+A complete archived official text can support an exact historical reading. Kerf records the observation time and source hash. A reviewed reconstruction starts with a later official text, reverses the changes in the final amending act, then replays them against that text. Its record carries `body_complete: true` and `source_exact: false`.
 
-For Bavaria, the 531 official version rows are amendment metadata, not 531
-complete historical texts. Word-level old/new text is available only where
-archived official pages yield an unambiguous state transition (sparse from
-2016 onward), plus complete forward diffs between daily snapshots from July
-2026. Missing historical diffs are left missing rather than reconstructed.
+Publication and commencement can fall on different dates. If an event has an official publication date and insufficient evidence of commencement, the effective date stays empty. `/official-transition-reviews` links the command, the affected provision and the commencement evidence. `/verified-reconstructions` lists accepted reconstructions. [API contract](docs/API.md)
 
-Federal forward history is now retained as complete, content-addressed GII
-states. A retrieval observation proves exactly what GII served on that day; it
-does **not** by itself prove when the wording entered into force. Lexgraph's
-own state diff becomes a legally dated event only after every changed norm is
-matched to the integrity-checked final BGBl command and the exact DIP
-commencement clause. The observation date, publication date and effective date
-remain separate fields throughout Git, archive, Markdown, API and HF exports.
+## Court citations
 
-The retrospective layer independently walks promulgated DIP procedures and
-the final BGBl archive from 2023 onward. It verifies 144 final PDFs by their
-advertised MD5 plus Lexgraph SHA-256, links 484 amendment articles to 44 acts
-in the deep corpus and resolves 399 article-wide commencement dates. The other
-85 remain explicitly unresolved because DIP assigns different dates below the
-article level or provides no article-wide clause. This is a bitemporal store:
-`effective_from/effective_to` describe legal validity, while
-`knowledge_from/knowledge_to` describe when Lexgraph asserted that result.
-Publication, effect and observation dates are never collapsed into one field.
-An amendment event is not presented as a reconstructed historical full text;
-the source-exact label is enabled only for a verified complete GII state pair.
+Kerf records each citation with its source passage, text hash, locator and character span. The retained source can be retrieved at `/decisions/{id}/source`. An official text without paragraph numbers has `paragraph_label: null`. Use `/decision-passages` to find passages and `/decisions/{id}/relations` to inspect the citations in either direction.
 
-The modern archive's 2023 boundary is a **publication** cutoff, not an
-effective-date cutoff. A bounded supplement in `data/legacy_bgbl_reviews.json`
-restores the joint SGB XII §§ 11/12 recast from the Bürgergeld-Gesetz:
-BGBl I 2022 p. 2341, Art. 5 no. 2, published 2022-12-20 and effective
-2023-01-01 under Art. 13. Its final official PDF, full extracted text and
-reviewed command/commencement excerpts have pinned SHA-256 identities.
-`python3 pipeline/legacy_bgbl_history.py --capture` checks a fresh official
-capture without replacing the reviewed record. Every web rebuild retains
-this supplement; it does not imply complete pre-2023 history or an old body.
+## Run locally
 
-Lexgraph also admits a narrower, explicitly derived class: a **verified
-reconstruction** for one bounded interval. Its complete body is recovered by
-reversing reviewed final BGBl commands from a later official GII anchor and
-accepted only when canonical forward replay reproduces that anchor
-byte-for-byte. These rows are `body_complete:true` but always
-`source_exact:false`; neither the API nor the UI calls them exact official
-snapshots. Inspect them through `GET /verified-reconstructions`.
-
-Third-party database rights are treated separately from copyright in the
-individual legal texts. Buzer's private snapshots remain an internal candidate
-and QA layer; public act pages may link to the corresponding Buzer history as a
-non-authoritative cross-check, but do not copy its database. Lexgraph does not
-need a Buzer licence for its own workflow: public federal history is rebuilt
-independently from official GII/DIP/BGBl/NeuRIS evidence and Lexgraph's own
-state capture, matching and diff engine. See
-[`docs/RIGHTS.md`](docs/RIGHTS.md).
-
-## What's here
-
-- **`pipeline/`** — the fetchers (DIP, GII, BGBl, official RII and NeuRIS,
-  BAYERN.RECHT, GVBl, Bay. Landtag, EU CELLAR breadth + curated layers,
-  Bundesrat) and the PatchInstruction extractor. Every published source is
-  documented in [`docs/SOURCES.md`](docs/SOURCES.md),
-  [`docs/RIGHTS.md`](docs/RIGHTS.md) and
-  [`docs/source-audit.json`](docs/source-audit.json).
-- **`data/federal_states/`** — the cumulative official GII observation
-  manifest and SHA-256 content-addressed full-state store. Rebuild it from
-  complete dated GII snapshots with `tools/archive_gii_states.py`; final BGBl
-  commands are captured independently by `pipeline/fetch_bgbl_documents.py`.
-- **`pipeline/backfill_bgbl_history.py`** — reproducible 2023+ official
-  retrospective inventory from GII identifiers, DIP procedure/dates and
-  integrity-checked final BGBl articles. It writes event evidence, command
-  addresses and unresolved-date gaps without inventing historical bodies.
-- **`tools/build_qfs.py`** — fuses snapshots into a time-scrubbable QFS arena;
-  `build_web_data.py` exports web JSON and the SQLite FTS5 full-text index;
-  `export_hf.py` builds the versioned Hugging Face dataset; `lex_log.py` and
-  `lex_blame.py` inspect one act's chronology and provenance.
-- **`web/`** — a self-contained visualizer: Wiki & Realtime feed, **Laws as
-  Git** (HEAD, commits, open/closed branches and evidence-bound merge links),
-  competence-aware legal layers, a full-text Markdown
-  reader/download (whole act or one §/Art.), and the force-directed arena.
-  DE/EN/RU/UA. Current HEAD and a checkout backed by an exact archived GII
-  observation are labelled exact; incomplete historical source chains remain
-  visibly partial.
-- **`docs/`** — [`VISION.md`](docs/VISION.md) (the data model & acceptance
-  test), [`API.md`](docs/API.md) (the static-JSON + CLI interface),
-  [`SOURCES.md`](docs/SOURCES.md), [`RIGHTS.md`](docs/RIGHTS.md).
-
-## Run it
+Install the Python dependencies from `requirements.txt`. Run the build before starting the reader or the API. Start each long-running server in a separate terminal.
 
 ```bash
-./refresh.sh                       # pull the live legislative state, rebuild
-python3 -m http.server -d web 8777 # then open http://localhost:8777
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+./refresh.sh                       # fetch sources and build the data
+python3 -m http.server -d web 8777 # serve web/ at http://localhost:8777
 uvicorn api.server:server --port 8010   # REST API over web/data (see docs/API.md)
 curl 'localhost:8010/acts/fed_aufenthg_2004/markdown?norm=%C2%A7%2024'
 curl 'localhost:8010/acts/fed_asylvfg_1992/markdown?at=2026-07-06&norm=%C2%A7%2029a'
@@ -145,40 +41,22 @@ curl 'localhost:8010/amending-acts/bgbl-1-2024-323'
 curl 'localhost:8010/changes.atom'
 curl 'localhost:8010/acts/fed_asylvfg_1992/markdown?at=2026-07-10'
 curl -OJ 'localhost:8010/retrospective-history.sqlite'
-python3 tools/lex_log.py AsylbLG   # chronology for one act
+python3 tools/kerf_log.py AsylbLG   # chronology for one act
 curl 'localhost:8010/federal-history?act=AsylbLG&tier=current_text_correspondence'
 ```
 
-Data ships via the Hugging Face dataset; the repository carries the pipeline
-that reproduces it. The portable official-history layer is split into
-retrieval observations, own state transitions, full canonical state objects
-and stricter BGBl/DIP transition reviews; see the exact file contracts in
-[`docs/API.md`](docs/API.md). SNTIQ-authored software and annotations use the SNTIQ
-licensing set in [`LICENSING.md`](LICENSING.md); official and third-party
-source material retains the file-level regimes in [`docs/RIGHTS.md`](docs/RIGHTS.md).
+## Repository
 
-Built by **[SNTIQ](https://sntiq.com/)**.
+| Path | Contents |
+| --- | --- |
+| `api/` | Read-only HTTP API, source provenance and historical queries |
+| `pipeline/` | Official-source fetchers and amendment extraction |
+| `tools/` | Data builds, export, chronology and source verification |
+| `courts/` | Court identity, decision parsing and citation records |
+| `web/` | The standalone reader and its generated data |
+| [conformance/](conformance/README.md) | Shared fixtures and expected results |
+| [deploy/](deploy/README.md) | Publishing, refresh jobs and signed archives |
 
-### Retained decision text and citation passages
+## Rights
 
-`pipeline/fetch_decision_sources.py` captures the bounded official-source list in
-`data/decision_sources.json`; refresh runs it before rebuilding. Each retained
-representation is content addressed and validated against court, docket, date
-and document type. HTTP challenges, wrong identities and changed numbering fail
-without replacing the prior capture. Captures retain their observation time;
-source publication dates are not inferred from judgment dates or portal updates.
-
-`/decision-passages` and `/decisions/{id}/passages/{passage_id}` read the immutable
-`official-passages/2` index. RII supplies original ZIP/XML hashes; BSG HTML,
-Cellar XHTML and Sozialgerichtsbarkeit JSON supply a typed `content_sha256` and
-source locator. `/decisions/{id}/source` returns exactly those retained bytes.
-An official representation without paragraph markers has `paragraph_label:null`;
-local block order must never be cited as a court Randnummer.
-
-`/decisions/{id}/relations?direction=incoming|outgoing&limit=10&offset=0` returns
-literal citations qualified by a nearby court name and a unique docket in the
-retained corpus. Every mention names its source passage, role, text hash and
-Unicode-codepoint span. Legal treatment remains unclassified: a citation in a
-headnote, reported argument or reasoning passage does not establish adoption,
-causality, or another independent witness. Both passage and relation reads reject
-unsupported temporal filters; use the snapshot header to pin a corpus generation.
+SNTIQ publishes its code under Apache-2.0 and its original database arrangement and annotations under CC BY 4.0. Both licenses permit commercial reuse. Legal texts, source databases and other third-party material retain their source terms. [Attribution](LICENSING.md) · [File-level rights](docs/RIGHTS.md)

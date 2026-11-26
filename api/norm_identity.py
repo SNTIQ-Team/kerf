@@ -263,7 +263,7 @@ def gii_norm_url(toc: dict[str, Any] | None, slug: str, unit: str,
 #
 # Used by /norms/resolve (api/norm_history.py) and by the courts corpus
 # (courts/acts.py).  Identity prefixes follow the grammar above: federal acts
-# are addressed by their GII slug, Bavarian acts by their Lexgraph slug, other
+# are addressed by their GII slug, Bavarian acts by their Kerf slug, other
 # Länder by ``de/<land>/<abbreviation key>``, EU acts by CELEX work and
 # treaties by ``int/<name>``.  An abbreviation that cannot be resolved
 # unambiguously is ``unresolved`` - never guessed.
@@ -396,7 +396,7 @@ def gii_slug_candidates(abbreviation: str) -> list[str]:
 class ActIdentity:
     prefix: str | None          # "de/bund/sgb_14", "de/by/bayvwvfg", "eu/32016R0679", "int/emrk" or None
     basis: str                  # act_index|alias|gii_catalog|land_affix|land_context|eu|international|ambiguous|unresolved
-    act_id: str | None = None   # Lexgraph act id when the act is in the deep corpus
+    act_id: str | None = None   # Kerf act id when the act is in the deep corpus
     jurabk: str | None = None
     in_corpus: bool = False
     candidates: tuple[str, ...] = ()
@@ -408,7 +408,7 @@ class ActIdentity:
 
 
 class ActResolver:
-    """Abbreviation -> act identity over Lexgraph's act index and the full GII catalogue."""
+    """Abbreviation -> act identity over Kerf's act index and the full GII catalogue."""
 
     def __init__(self, act_index: Iterable[dict[str, Any]] = (), catalog: Iterable[dict[str, Any]] = ()):
         self.act_index = [row for row in act_index if isinstance(row, dict)]
@@ -482,7 +482,7 @@ class ActResolver:
             juris, slug = act_slug(extra)
             basis = "eu" if juris == "eu" else "international" if juris == "int" else "act_index"
             return ActIdentity(f"{juris}/{slug}", basis, extra.get("id"), extra.get("jurabk"), True)
-        # 1. Lexgraph's deep corpus (federal and Bavarian acts with a jurabk).
+        # 1. Kerf's deep corpus (federal and Bavarian acts with a jurabk).
         rows = self._by_alias.get(key, [])
         if len(rows) == 1:
             juris, slug = act_slug(rows[0])
