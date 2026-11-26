@@ -859,3 +859,26 @@ def test_cited_form_disambiguates_only_the_named_document(conn):
     assert targets() == [None] * len(ids)
     conn.execute("UPDATE decisions SET decision_type='Teilurteil' WHERE id=?", (order_id,))
     assert relink(conn) == 0  # two judgments on the same day and docket
+
+
+def test_sole_docket_match_respects_an_explicit_conflicting_form(conn):
+    from courts.store import relink, store_decision
+
+    ecli = "ECLI:DE:BSG:2025:180625UB6KA424R0"
+    doc, _ = store_decision(conn, _bsg("rii", "judgment", ecli, ("1", "2")),
+                            content_hash="a", capture_path="-", media_type="x")
+    key = conn.execute("SELECT case_key FROM case_numbers WHERE decision_id=?", (doc,)).fetchone()[0]
+    words = ("Urteil", "Beschluss", "Urt. und Beschl.", "Entscheidung", "Urteile Urteil", "Senatsurteil Urteil", "Urteil, nicht Beschluss")
+    for word in words:
+        conn.execute("""
+            INSERT INTO relations(decision_id,relation,target_kind,target_id,target_court_id,
+              target_date,target_case_key,target_decision_id,target_raw,quoted_context,origin,derived_by,
+              legal_effect_verified,confidence)
+            VALUES(?,'mentions','decision','court:bsg/example','bsg','2025-06-18',?,?,?,'context',
+                   'decision_text','parser',0,1)
+        """, (doc, key, doc, f"BSG, {word} vom 18.06.2025 – B 6 KA 4/24 R"))
+    assert relink(conn) == 1
+    rows = list(conn.execute("SELECT target_raw,target_decision_id FROM relations ORDER BY id"))
+    assert [r[1] for r in rows] == [doc, None, doc, doc, doc, doc, doc]
+    assert all(word in row[0] for word, row in zip(words, rows))
+    assert relink(conn) == 0
