@@ -276,7 +276,8 @@ def test_archive_rejects_existing_symlink_and_corrupt_object(tmp_path):
         archive.put("objects", b"pdf", ".pdf")
 
 
-def test_legacy_capture_verifies_identity_and_emits_only_event_evidence(tmp_path):
+def test_legacy_capture_verifies_identity_and_emits_only_event_evidence(tmp_path, monkeypatch):
+    monkeypatch.setattr(legacy, "SNAPSHOT_ROOT", tmp_path / "snapshots")
     archive = legacy.LegacyArchive(tmp_path, max_bytes=1000000, min_free_bytes=0)
     document = legacy.capture_legacy_bytes(selection(), pdf_bytes(), archive,
                                           captured_at="2026-09-21T10:00:00+00:00")
