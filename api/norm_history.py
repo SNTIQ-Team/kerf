@@ -348,8 +348,11 @@ class NormHistoryStore:
         # SGB Roman/Arabic books, renamed acts (AsylG -> asylvfg_1992).
         identity = self._resolver().resolve_act(citation["act"])
         if identity.basis == "ambiguous":
-            candidates = [row for row in self.act_index()
-                          if row.get("id") in set(identity.candidates)]
+            indexed = {row.get("id"): row for row in self.act_index()}
+            # The Brussels I abbreviation also names its predecessor when the
+            # reader contains just the recast. Both have canonical EU ids.
+            candidates = [indexed.get(act_id, {"id": act_id}) for act_id in identity.candidates
+                          if act_id in indexed or act_id.startswith("eu_")]
         elif identity.in_corpus:
             candidates = [row for row in self.act_index()
                           if row.get("id") == identity.act_id]
