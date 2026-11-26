@@ -91,14 +91,26 @@ def test_basic_law_dates_and_addresses_through_the_reader(tmp_path, monkeypatch)
     monkeypatch.setattr(main, "_NORM_STORES", {})
     monkeypatch.setattr(main, "_RETROSPECTIVE_MANIFEST", None)
     monkeypatch.setattr(main, "_RETROSPECTIVE_SOURCE", None)
-    assert len(public["acts"]["fed_gg"]["intervals"]) == 9
+    assert len(public["acts"]["fed_gg"]["intervals"]) == 12
     with TestClient(main.app) as client:
         def reading(day, article):
             return client.get("/acts/fed_gg/markdown", params={"at": day, "norm": article})
-        gap = reading("2017-07-19", "Art. 93")
+        gap = reading("2010-07-26", "Art. 93")
         assert gap.headers["x-kerf-complete"] == "false"
         assert client.get("/acts/fed_gg/markdown", params={
-            "at": "2017-07-19", "norm": "Art. 93", "as_of": BUILT}).status_code == 404
+            "at": "2010-07-26", "norm": "Art. 93", "as_of": BUILT}).status_code == 404
+        for article, signed_wording in [
+                ("Art. 23", "Stellungnahmen des Bundestages"),
+                ("Art. 26", "Zur Kriegführung bestimmte Waffen"),
+                ("Art. 33", "öffentlich-rechtlichen Dienst- und Treueverhältnis")]:
+            evidence = client.get(f"/norms/de/bund/gg/art/{article.split()[-1]}/at",
+                                  params={"date": "2010-07-27"})
+            assert evidence.status_code == 200
+            assert signed_wording in evidence.json()["evidence"][0]["text"]
+        for inserted in ("104c", "143e", "143f", "143g"):
+            path = f"/norms/de/bund/gg/art/{inserted}/at"
+            assert client.get(path, params={"date": "2017-07-19"}).status_code == 404
+            assert client.get(path, params={"date": "2017-07-20"}).status_code == 200
         for day, court, spending, status in [
             ("2022-12-24", False, False, "derived_verified"),
             ("2024-12-27", False, False, "derived_verified"),
@@ -153,6 +165,9 @@ def test_basic_law_dates_and_addresses_through_the_reader(tmp_path, monkeypatch)
                 assert md.status_code == evidence.status_code == 200
                 assert wording in md.text and wording in evidence.json()["evidence"][0]["text"]
         for label, change, previous, boundary in [
+                ("Art. 93", "Nichtanerkennung als Partei", "2012-07-16", "2012-07-17"),
+                ("Art. 91b", "im Schwerpunkt Hochschulen", "2014-12-31", "2015-01-01"),
+                ("Art. 21", "von staatlicher Finanzierung ausgeschlossen", "2017-07-19", "2017-07-20"),
                 ("Art. 104b", "zusätzlich zu eigenen Mitteln", "2019-04-03", "2019-04-04"),
                 ("Art. 105", "über die Grundsteuer", "2019-11-20", "2019-11-21"),
                 ("Art. 104a", "drei Viertel der Ausgaben", "2020-10-07", "2020-10-08"),
@@ -214,7 +229,7 @@ def test_publisher_replays_source_metadata_and_rejects_substitutions(tmp_path):
     manifest["objects"] = {anchor: meta}
     add_reviewed_editions(artifact, manifest, states)
     valid = validate_published_editions(tmp_path, manifest, artifact)
-    assert valid == set(artifact["state_objects"]) and len(valid) == 8
+    assert valid == set(artifact["state_objects"]) and len(valid) == 11
     for record, field, value in [
         ("row", "effective_from", "2017-07-21"),
         ("row", "source_exact", True),
@@ -237,3 +252,28 @@ def test_publisher_replays_source_metadata_and_rejects_substitutions(tmp_path):
     del partial["object_metadata"][next(iter(valid))]
     with pytest.raises(ReconstructionError):
         validate_published_editions(tmp_path, manifest, partial)
+
+
+@pytest.mark.parametrize("start,count", [("2017-07-20", 8), ("2022-12-24", 2)])
+def test_prior_complete_federal_releases_remain_verifiable(tmp_path, start, count):
+    from verified_editions import validate_published_editions
+    artifact, manifest, states = _inputs()
+    anchor, meta = store_state_object(tmp_path / "federal_states", next(iter(states.values())))
+    manifest["objects"] = {anchor: meta}
+    review = json.loads(GG_REVIEW.read_bytes())
+    review["editions"] = [ed for ed in review["editions"] if ed["effective_from"] >= start]
+    review["editions"][0]["changes_from_previous"] = []
+    for key in ["gazette-58", "gazette-59", "gazette-60", "9482", "14373", "17608",
+                "gg-gazette-1949", "gg-gazette-1992"]:
+        del review["sources"][key]
+    if start == "2022-12-24":
+        del review["expiry_confirmations"]
+        for key in ["17609", "gazette-61", "gazette-62", "gazette-63", "gazette-64", "gazette-65", "gazette-66"]:
+            del review["sources"][key]
+    prior = tmp_path / "archived-review.json"
+    prior.write_text(json.dumps(review))
+    add_reviewed_editions(artifact, manifest, states, review_path=prior)
+    assert len(validate_published_editions(tmp_path, manifest, artifact)) == count
+    artifact["reconstructions"][0]["evidence"].pop()
+    with pytest.raises(ReconstructionError, match="source evidence"):
+        validate_published_editions(tmp_path, manifest, artifact)
