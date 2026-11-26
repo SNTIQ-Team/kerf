@@ -205,11 +205,11 @@ def test_history_versions_and_dated_change_records():
     assert [n["enbez"] for n in detail["norms"]] == ["Art. 1", "Art. 2"]
 
 
-def _generation(tmp_path: Path) -> Path:
+def _generation(tmp_path: Path, row=None) -> Path:
     from tools import build_law_history
     data = tmp_path / "web-data"
     (data / "acts").mkdir(parents=True)
-    detail = eu_history.build(_row())
+    detail = eu_history.build(row if row is not None else _row())
     (data / "acts" / "eu_32016r0679.json").write_text(json.dumps(detail, ensure_ascii=False))
     (data / "wiki.json").write_text(json.dumps([eu_history.index_row(detail)]))
     build_law_history.main(["--data-dir", str(data), "--documents", str(tmp_path / "none"),
@@ -343,7 +343,7 @@ def test_formex_nested_list_points_keep_their_printed_markers():
     assert article["text"] == "(2) a) Einrichtungen: i) Netze; ii) Dienste."
 
 
-def test_future_consolidation_enters_the_reader_on_its_edition_date():
+def test_future_consolidation_enters_the_reader_on_its_edition_date(tmp_path):
     row = _row()
     prior = row["editions"][-1]
     prior["articles"] = [
@@ -364,3 +364,14 @@ def test_future_consolidation_enters_the_reader_on_its_edition_date():
     assert later_detail["stand"] == later["celex"]
     assert [(a["enbez"], a["text"]) for a in later_detail["norms"]] == [
         ("Art. 1", "Later wording."), ("Art. 3", "New article.")]
+    from api.law_routes import create_router
+    data = _generation(tmp_path, row)
+    app = FastAPI()
+    app.include_router(create_router(lambda: data, lambda: None, lambda: "fixture"))
+    client = TestClient(app)
+    path = "/norms/eu/32016R0679/art/3/at"
+    for on in ("2026-09-29", "2026-12-31"):
+        before = client.get(path, params={"date": on}).json()
+        assert before["status"] == "not_in_corpus" and not before.get("evidence")
+    after = client.get(path, params={"date": "2027-01-11"}).json()
+    assert after["status"] == "ok" and after["evidence"][0]["text"] == "New article."
