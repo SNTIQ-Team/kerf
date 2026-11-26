@@ -38,6 +38,7 @@ from official_states import (  # noqa: E402
     transitions as build_official_state_transitions,
 )
 from api.retrospective_store import validate_manifest  # noqa: E402
+from verified_editions import validate_stored_editions  # noqa: E402
 
 
 # Output name -> (snapshot family, source filename, description)
@@ -507,6 +508,7 @@ def _export_verified_reconstructions(
     store = Path(store)
     official_manifest = load_official_state_manifest(store)
     official_objects = official_manifest.get("objects") or {}
+    reviewed_editions = validate_stored_editions(store, official_manifest, artifact)
     states_by_digest: dict[str, dict] = {}
     expected_paths: set[Path] = set()
     for digest, metadata in metadata_by_digest.items():
@@ -520,8 +522,8 @@ def _export_verified_reconstructions(
                 anchor == digest or metadata.get("path") != \
                 expected.as_posix() or \
                 metadata.get("state_sha256") != digest or \
-                metadata.get("origin") != \
-                "derived_verified_reverse_replay" or \
+                (digest not in reviewed_editions and metadata.get("origin") !=
+                 "derived_verified_reverse_replay") or \
                 metadata.get("source_exact") is not False or \
                 not _DIGEST.fullmatch(str(metadata.get("gzip_sha256") or "")) \
                 or isinstance(metadata.get("gzip_bytes"), bool) or \
@@ -541,10 +543,11 @@ def _export_verified_reconstructions(
         state = load_official_state(store, digest)
         if len(canonical_json_bytes(state)) != metadata["canonical_bytes"]:
             raise RuntimeError(f"derived canonical size mismatch: {digest}")
-        anchor_state = load_official_state(store, anchor)
-        projection = ("id", "jurabk", "juris", "title", "stand", "build")
-        if any(state[field] != anchor_state[field] for field in projection):
-            raise RuntimeError(f"derived anchor projection drift: {digest}")
+        if digest not in reviewed_editions:
+            anchor_state = load_official_state(store, anchor)
+            projection = ("id", "jurabk", "juris", "title", "stand", "build")
+            if any(state[field] != anchor_state[field] for field in projection):
+                raise RuntimeError(f"derived anchor projection drift: {digest}")
         states_by_digest[digest] = state
         expected_paths.add(expected)
 
@@ -568,7 +571,8 @@ def _export_verified_reconstructions(
                 row.get("body_complete") is not True or \
                 row.get("source_exact") is not False or \
                 row.get("reverse_replay_verified") is not True or \
-                row.get("anchor_projection_metadata_retained") is not True:
+                (digest not in reviewed_editions and
+                 row.get("anchor_projection_metadata_retained") is not True):
             raise RuntimeError(
                 f"verified reconstruction crossed evidence boundary: {row_id}")
     if row_digests != set(metadata_by_digest):
