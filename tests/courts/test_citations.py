@@ -76,6 +76,25 @@ def test_norm_quote_detection():
     assert extract_norms("§ 24 Abs. 4 AsylG lautet: „Das Bundesamt hat …“", "p")[0].relation == "quotes"
 
 
+def test_patent_register_in_a_cited_docket():
+    # VG Hamburg, 11 E 3588/09, Rn. 20; the second docket is published in JURE109006024.
+    for cite, docket in [
+        ("BPatG, Beschl. v. 14.1.2003 – 24 W (pat) 50/02", "24 W (pat) 50/02"),
+        ("Bundespatentgericht, Beschluss vom 18.05.2010 - 3 ZA (pat) 1/09", "3 ZA (pat) 1/09"),
+    ]:
+        text = "(" + cite + "), Rn. 4."
+        hit, = extract_decisions(text, "p", own_court_id=None)
+        assert hit.detail["court_id"] == "bpatg"
+        assert hit.detail["case_number"] == docket
+        assert text[hit.span_start:hit.span_end] == cite
+        assert hit.target_id.endswith("/" + docket.replace(" ", "_").replace("/", "-"))
+
+    assert not extract_decisions("BGH, Beschluss vom 18.05.2010 - 3 ZA (pat) 1/09", "p", own_court_id=None)
+    assert not extract_decisions("BPatG, Beschluss vom 18.05.2010 - 3 W (Anmerkung) 1/09", "p", own_court_id=None)
+    assert not extract_decisions("BPatG wurde erwähnt. DPMA, Beschluss vom 18.05.2010 - 3 W (pat) 1/09",
+                                 "p", own_court_id=None)
+
+
 def test_decision_mentions_from_real_rn5(rii_paragraphs):
     rels = extract_decisions(rii_paragraphs["rn-5"].text, "rn-5", own_court_id="bverwg",
                              own_case_keys={"1B19/16", "1PKH55/16"})
