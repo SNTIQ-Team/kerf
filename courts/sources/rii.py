@@ -84,6 +84,11 @@ def section_blocks(node: ET.Element, xml_path: str) -> list[Block]:
     blocks: list[Block] = []
 
     def visit(el: ET.Element, path: str) -> None:
+        # RII sometimes interleaves prose and legal references directly between
+        # RspDL elements. Text nodes of the wrapper have their own source paths.
+        leading = squash(el.text or "")
+        if leading:
+            blocks.append(Block(text=leading, locator=path if not len(el) else path + "/text()[1]", unnumbered=True))
         counts: dict[str, int] = {}
         pending: Block | None = None
         for child in el:
@@ -127,6 +132,10 @@ def section_blocks(node: ET.Element, xml_path: str) -> list[Block]:
                                     kind="heading" if child.tag in {"h1", "h2", "h3", "h4", "h5", "h6"} else "text"))
             else:
                 visit(child, cpath)
+            tail = squash(child.tail or "")
+            if tail:
+                pending = None
+                blocks.append(Block(text=tail, locator=cpath + "/following-sibling::text()[1]", unnumbered=True))
     visit(node, xml_path)
     return blocks
 
@@ -191,8 +200,6 @@ def parse_xml_decision(xml: bytes, doc: str, source_url: str) -> ParsedDecision:
         if node is None or len(node) == 0 and not (node.text or "").strip():
             continue
         blocks = section_blocks(node, f"/dokument/{tag}[1]")
-        if not blocks and (node.text or "").strip():
-            blocks = [Block(text=squash(node.text), locator=f"/dokument/{tag}[1]")]
         if blocks:
             sections.append(Section(name=name, authorship=authorship, authorship_basis=basis, blocks=blocks))
     norms = [squash("".join(n.itertext())) for n in root.findall("norm")]
