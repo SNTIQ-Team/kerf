@@ -1,0 +1,42 @@
+{
+  "act_id": "fed_bgbeg",
+  "source_url": "https://www.gesetze-im-internet.de/bgbeg/xml.zip",
+  "source_doknr": "BJNR006049896",
+  "source_xml_sha256": "624854c58decfc3959898e4c8eea7c18c77a536647d88d64fddf9eaea24987f6",
+  "legacy_projections": [
+    {
+      "builddate": "20260709215519",
+      "norms": 243,
+      "sha256": "8140bd25c24b7f7c94b45933c3f0f79f3bef4ca1d09c45ce0b4ed1ccfd9f5a65"
+    },
+    {
+      "builddate": "20260722220016",
+      "norms": 250,
+      "sha256": "621c7e808ab4736f07a6c9d2aac6eed6738389e0531735ecfcaf8c26129daf2d"
+    },
+    {
+      "builddate": "20260909215513",
+      "norms": 250,
+      "sha256": "c09c1e17745ca761488c6818eea6d341eb36e711114df3301058a66e75e16ed7"
+    },
+    {
+      "builddate": "20260926215514",
+      "norms": 250,
+      "sha256": "5cdd5c32fba483f2997b3daca9397708291bb07cd9cd7f154ea5a8220f6b2802"
+    },
+    {
+      "builddate": "20261027220011",
+      "norms": 250,
+      "sha256": "f6d79b6eb8736ecd0296a449c1a3ce1d01832564b43db72902b91182d794ea8b"
+    },
+    {
+      "builddate": "20261119215516",
+      "norms": 252,
+      "sha256": "4124493cd8073b5eb51c012f4e2376b4dd261095364de6b8b15748f5acb1ab21"
+    }
+  ],
+  "corrected_source_build": "20261119215516",
+  "preceding_projection_sha256": "4124493cd8073b5eb51c012f4e2376b4dd261095364de6b8b15748f5acb1ab21",
+  "corrected_projection_sha256": "aba222db3022d945b6023206090dd43ff284c5914424acdb859846f734a63cbc",
+  "corrected_norms": 445
+}

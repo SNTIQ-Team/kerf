@@ -38,6 +38,9 @@ if [ -z "$PYTHON" ]; then
 fi
 
 stage_args=()
+if [ "${2:-}" = --consume-upload ]; then
+    stage_args+=(--consume-upload)
+fi
 if [ -L "$TARGET" ]; then
     previous="$(readlink -f -- "$TARGET")"
     case "$previous" in "$ROOT"/web-data.release-*) stage_args+=(--previous "$previous");; esac
@@ -45,6 +48,7 @@ fi
 "$PYTHON" "$(dirname "$0")/../tools/stage_release.py" "$SRC" "$RELEASE" \
     "${stage_args[@]}" --reserve-mib "${KERF_PUBLISH_RESERVE_MIB:-2048}"
 
+export KERF_PUBLISH_TOOLS="$(cd -- "$(dirname -- "$0")/../tools" && pwd -P)"
 "$PYTHON" - "$RELEASE" <<'PY'
 import gzip
 import hashlib
@@ -404,6 +408,16 @@ if not isinstance(reconstruction_rows, list) or \
     raise SystemExit(
         "publish validation: malformed verified reconstruction artifact")
 
+# Uploaded metadata cannot introduce a new source type. The trusted checkout
+# regenerates the reviewed edition chain from the hash-verified GII anchor.
+import os
+sys.path.insert(0, os.environ["KERF_PUBLISH_TOOLS"])
+from verified_editions import ReconstructionError, validate_published_editions
+try:
+    reviewed_editions = validate_published_editions(root, states, verified_reconstructions)
+except (ReconstructionError, ValueError, KeyError, OSError) as exc:
+    raise SystemExit(f"publish validation: invalid reviewed federal editions: {exc}") from exc
+
 derived_loaded_states = {}
 for digest, metadata in derived_objects.items():
     if not digest_re.fullmatch(str(digest)) or not isinstance(metadata, dict):
@@ -414,8 +428,8 @@ for digest, metadata in derived_objects.items():
         f"{digest}.json.gz"
     if digest in objects or metadata.get("path") != expected.as_posix() or \
             metadata.get("state_sha256") != digest or \
-            metadata.get("origin") != \
-            "derived_verified_reverse_replay" or \
+            (digest not in reviewed_editions and
+             metadata.get("origin") != "derived_verified_reverse_replay") or \
             metadata.get("source_exact") is not False or \
             anchor not in loaded_states or anchor == digest:
         raise SystemExit(
@@ -454,7 +468,7 @@ for digest, metadata in derived_objects.items():
             f"publish validation: canonical derived state mismatch {digest}")
     projection = tuple(state[field] for field in (
         "id", "jurabk", "juris", "title", "stand", "build"))
-    if projection != official_state_projection[anchor]:
+    if digest not in reviewed_editions and projection != official_state_projection[anchor]:
         raise SystemExit(
             f"publish validation: derived anchor projection drift {digest}")
     derived_loaded_states[digest] = (
@@ -471,6 +485,12 @@ for row in reconstruction_rows:
     reconstruction_ids.add(row["id"])
     digest = str(row.get("state_sha256") or "")
     anchor = str(row.get("anchor_state_sha256") or "")
+    if digest in reviewed_editions:
+        # The independently replayed row includes its complete events, dates,
+        # evidence, source pins and successor. The CAS bytes passed the common gate.
+        reconstruction_digests.add(digest)
+        reconstruction_intervals.add((row["act_id"], digest, row["effective_from"], row["effective_to"]))
+        continue
     if digest not in derived_loaded_states or \
             derived_objects[digest].get("anchor_state_sha256") != anchor or \
             anchor not in loaded_states or \

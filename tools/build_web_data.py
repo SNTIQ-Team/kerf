@@ -44,7 +44,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from api.norm_identity import load_gii_toc  # noqa: E402
-from api.official_state_store import single_state_observations
+from api.official_state_store import single_state_observations, with_projection_coverage
 from api.source_freshness import build_freshness  # noqa: E402
 from tools.reader_blocks import refresh_cached_sidecars  # noqa: E402
 from tools.archived_reader_store import publish_archived_readers  # noqa: E402
@@ -1640,6 +1640,7 @@ def publish_official_federal_states() -> tuple[dict, list[dict]]:
         manifest, FEDERAL_STATE_STORE) if observations else []
     public = {
         **manifest,
+        "observations": [with_projection_coverage(row) for row in observations],
         "total_observations": len(observations),
         "total_states": len(objects),
         "total_transitions": len(change_rows),
