@@ -71,6 +71,10 @@ CHANGE_STATES = {"in_force", "pending", "incorporated_date_unknown",
                  "date_unknown", "not_yet_promulgated"}
 
 
+class _BeforeTextHistory(EnvelopeError):
+    """A valid date lookup before the known history of a resolved norm."""
+
+
 def create_router(data_dir: Callable[[], Path],
                   manifest: Callable[[], dict | None],
                   snapshot: Callable[[], str | None]) -> APIRouter:
@@ -142,7 +146,10 @@ def create_router(data_dir: Callable[[], Path],
             payload = error_envelope(exc, operation=f"law_{operation}",
                                      request_scope=scope,
                                      snapshot_id=snapshot())
-            return response(payload)
+            result = response(payload)
+            if isinstance(exc, _BeforeTextHistory):
+                result.headers["X-Kerf-Lookup-Outcome"] = "before-text-history"
+            return result
         payload["request_scope"] = scope
         payload["snapshot_id"] = snapshot()
         return response(payload, cache_control="public, max-age=600")
@@ -251,7 +258,9 @@ def create_router(data_dir: Callable[[], Path],
                 else:
                     detail = (f"Kerf holds no text of {resolved['norm_id']} for {on}. "
                               f"Its text history starts {resolution.get('text_history_start')}")
-                raise EnvelopeError(
+                error = (_BeforeTextHistory if resolution.get("resolution") == "before_text_history"
+                         else EnvelopeError)
+                raise error(
                     "not_in_corpus", detail,
                     searched=_searched(chain))
             evidence = []

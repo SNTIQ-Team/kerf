@@ -87,6 +87,12 @@ def test_at_is_typed_when_validity_is_not_verified(data):
     assert body["evidence"][0]["temporal"]["valid_from"] is None
     before = client.get(f"/norms/{P29A}/at?date=2020-01-01")
     assert before.status_code == 404
+    assert before.headers["X-Kerf-Lookup-Outcome"] == "before-text-history"
+    header = {"X-Kerf-Lookup-Outcome": "before-text-history"}
+    missing = client.get("/norms/de/bund/unknown-act/para/1/at?date=2020-01-01", headers=header)
+    assert missing.status_code == 404
+    assert "X-Kerf-Lookup-Outcome" not in missing.headers
+    assert "X-Kerf-Lookup-Outcome" not in unresolved.headers
     assert before.json()["status"] == "not_in_corpus"
     assert before.json()["evidence"] == []
 
