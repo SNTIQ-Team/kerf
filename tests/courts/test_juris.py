@@ -461,3 +461,46 @@ def test_sync_records_robots_disallowed_and_blocks_source(tmp_path):
     assert failure["kind"] == "robots_disallowed"
     assert failure["url"] == "https://www.landesrecht-bw.de/jportal/portal/page/bsbw"
     assert conn.execute("SELECT status FROM sources WHERE source_id='bw'").fetchone()[0] == "blocked"
+
+
+def test_printed_endnotes_remain_separate_from_randnummern():
+    text = """
+        <h4 class="doc">Gründe</h4><div><dl class="RspDL"><dt>1</dt><dd><p>
+        EU:C:2017:120<a class="footnotelink" data-juris-target="t" data-juris-target-tooltip="f">43</a>
+        <span id="t" class="hidefootnote">Vgl. <i>Quelle</i>.</span><span id="f" class="hidefootnote">Vgl. Quelle.</span>
+        und weiterer Text</p></dd></dl><dl><dt>2</dt><dd>Ende.</dd></dl></div>
+        <h3 class="doc"><a name="fn">Fußnoten</a></h3>
+        <div><div class="footnoteDL"><dl><dt>43) </dt><dd>Vgl. <i>Quelle</i>.</dd></dl></div></div>
+    """
+    result = juris.parse_body(text, "doc")
+    paragraphs, numbering = assemble("doc", result["sections"])
+    assert numbering == "rn"
+    first, second, note = paragraphs
+    assert first.rn == "1"
+    assert " ".join(first.text.split()) == "EU:C:2017:120 43 und weiterer Text"
+    assert (second.rn, second.text) == ("2", "Ende.")
+    assert (note.id, note.rn, note.text) == ("doc#fussnoten-1", None, "43) Vgl. Quelle.")
+    assert result["sections"][-1].authorship == "court"
+    assert result["sections"][-1].heading == "Fußnoten"
+    assert note.blocks[0].locator == "text:/div[2]/div[1]"
+
+
+def test_endnote_attribution_and_hidden_text_without_matching_printed_copy():
+    text = """
+        <h4 class="doc">Orientierungssatz</h4><p>Erster Hinweis<a class="footnotelink"
+        data-juris-target="t" data-juris-target-tooltip="f">1</a><span id="t" class="hidefootnote">Quelle A</span><span
+        id="f" class="hidefootnote">Quelle</span>.</p>
+        <h4 class="doc">Gründe</h4><p>Text<a class="footnotelink" data-juris-target="x"
+        data-juris-target-tooltip="y">2</a><span id="x" class="hidefootnote">Andere Fassung</span>
+        <span id="y" class="hidefootnote">Andere Fassung</span></p>
+        <div class="footnoteDL"><dl><dt>1) </dt><dd>Quelle A</dd></dl></div>
+        <div class="footnoteDL"><dl><dt>2) </dt><dd>Quelle B</dd></dl></div>
+    """
+    result = juris.parse_body(text, "doc")
+    paragraphs, numbering = assemble("doc", result["sections"])
+    assert numbering == "none"
+    assert [p.id for p in paragraphs] == ["doc#orientierungssatz-1", "doc#p-1",
+                                          "doc#redaktionelle_fussnoten-1", "doc#fussnoten_unklar-1"]
+    assert [s.authorship for s in result["sections"]] == ["editorial", "court", "editorial", "unknown"]
+    assert "Andere Fassung" in paragraphs[1].text
+    assert [p.text for p in paragraphs[-2:]] == ["1) Quelle A", "2) Quelle B"]
