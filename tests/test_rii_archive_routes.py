@@ -83,6 +83,7 @@ def test_numbered_and_unnumbered_addresses(archive):
     assert hit.status_code==200 and hit.json()['passage']['printed_number']=='7'
     assert hit.json()['passage']['source_locators']==['/dokument/gruende[1]/p[1]']
     assert hit.headers['x-kerf-rii-revision']=='a'*40
+    assert hit.headers['cache-control'] == 'no-store'
     assert client.get(path+'/passages',params={'rn':'7'}).json()['total']==1
     base = '/rii/decisions/jb-JURE456/passages'
     assert client.get(base+'/p-1').json()['passage']['printed_number'] is None
@@ -96,11 +97,14 @@ def test_originals_keep_offered_format(archive):
         res=client.get('/rii/decisions/'+key+'/source')
         assert (res.status_code,res.content,res.headers['content-type'])==(200,items[key],mime)
         assert res.headers['x-kerf-source-sha256'] == h(items[key])
+        assert res.headers['cache-control'] == 'no-store'
 
 
 def test_absence_upstream_failure_and_bad_hash_are_distinct(archive):
     client, files, _=archive
-    assert client.get('/rii/decisions/jb-ABSENT').status_code==404
+    missing = client.get('/rii/decisions/jb-ABSENT')
+    assert missing.status_code == 404
+    assert missing.headers['cache-control'] == 'no-store'
     path='/rii/decisions/jb-KORE123'
     files['documents/bgh/0.bin']=OSError('upstream unavailable')
     assert client.get(path).status_code==503
@@ -137,3 +141,19 @@ def test_unpinned_manifest_is_not_served(archive, monkeypatch):
     result = client.get('/rii/decisions/jb-KORE123')
     assert result.status_code == 503
     assert result.headers['cache-control'] == 'no-store'
+
+
+def test_present_but_invalid_catalogue_entry_is_a_service_error(archive, monkeypatch):
+    client, _, _ = archive
+    monkeypatch.setattr(rii_archive.RiiArchive, '_bucket', lambda self, key: {'jb-KORE123': None})
+    assert client.get('/rii/decisions/jb-KORE123').status_code == 503
+    assert client.get('/rii/decisions/jb-ABSENT').status_code == 404
+
+
+@pytest.mark.parametrize('error', [RuntimeError('encrypted'), NotImplementedError('unsupported compression')])
+def test_unreadable_zip_is_a_service_error(archive, monkeypatch, error):
+    client, _, _ = archive
+    def unsupported(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(zipfile.ZipFile, 'read', unsupported)
+    assert client.get('/rii/decisions/jb-KORE123/source').status_code == 503
