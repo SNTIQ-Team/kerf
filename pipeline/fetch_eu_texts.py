@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 if __package__:
     from .eu_dates import general_date
@@ -196,7 +196,7 @@ class Cellar:
 
 
 def celex_uri(celex: str) -> str:
-    return f"<{CELEX_URI}{quote(celex, safe='()')}>"
+    return f"<{CELEX_URI}{quote(celex, safe='')}>"
 
 
 # ----------------------------------------------------------------- metadata
@@ -312,7 +312,7 @@ def manifestations(cellar: Cellar, celexes: list[str]) -> dict[str, dict[str, st
           ?e cdm:expression_belongs_to_work ?w ; cdm:expression_uses_language <{DEU}> .
           ?m cdm:manifestation_manifests_expression ?e ; cdm:manifestation_type ?t }}""")
         for row in rows:
-            celex = row["s"].removeprefix(CELEX_URI).replace("%2F", "/")
+            celex = unquote(row["s"].removeprefix(CELEX_URI))
             out.setdefault(celex, {})[row["t"]] = row["m"]
     return out
 
