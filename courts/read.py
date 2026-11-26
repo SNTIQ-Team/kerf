@@ -154,7 +154,7 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
         where.append("d.decision_date <= ?")
         params.append(date_to)
     if ecli:
-        where.append("d.ecli = ?")
+        where.append("d.ecli = ? COLLATE NOCASE")
         params.append(ecli)
     if section:
         where.append("p.section = ?")
@@ -214,9 +214,14 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
                      warnings=warnings, applied=scope)
 
 
+def _stored_decision_ids(conn: sqlite3.Connection, ref: str) -> list[str]:
+    return [r["id"] for r in conn.execute(
+        "SELECT id FROM decisions WHERE id = ? OR ecli = ? COLLATE NOCASE ORDER BY id", (ref, ref))]
+
+
 def resolve_decision(conn: sqlite3.Connection, ref: str) -> tuple[str, list[str]]:
     """Return (status, candidate ids) for an id, ECLI, source doc id or Aktenzeichen."""
-    ids = [r["id"] for r in conn.execute("SELECT id FROM decisions WHERE id = ? OR ecli = ? ORDER BY id", (ref, ref))]
+    ids = _stored_decision_ids(conn, ref)
     if len(ids) == 1:
         return "ok", ids
     if ids:  # one portal gave two documents the same ECLI: both are candidates
@@ -270,7 +275,7 @@ def get_decision(conn: sqlite3.Connection, ref: str, *, with_paragraphs: bool = 
     result = {k: d[k] for k in d.keys() if k not in ("metadata", "case_numbers")}
     result["case_numbers"] = json.loads(d["case_numbers"])
     result["metadata"] = json.loads(d["metadata"])
-    if ref.upper().startswith("ECLI:") and ref not in (d["ecli"], d["id"]):
+    if ref.upper().startswith("ECLI:") and ref.upper() not in ((d["ecli"] or "").upper(), d["id"].upper()):
         # Found by court code + date + docket (decisions_by_ecli_components), not by a stored ECLI.
         result["identity_match"] = {"request": ref, "matched_by": "ecli_court_code_date_docket"}
     result["sections"] = [dict(r) for r in conn.execute(
@@ -342,9 +347,21 @@ def relation_row(r, conn=None) -> dict:
 
 def get_paragraph(conn: sqlite3.Connection, paragraph_id: str) -> dict:
     key = split_paragraph_id(paragraph_id)
-    row = conn.execute(f"SELECT {PARAGRAPH_COLUMNS}, p.blocks FROM paragraphs p JOIN decisions d "
-                       "ON d.id = p.decision_id WHERE p.decision_id = ? AND p.anchor = ?", key).fetchone() \
-        if key else None
+    if key is None:
+        return {"status": "not_in_corpus", "request": paragraph_id}
+    lookup = (f"SELECT {PARAGRAPH_COLUMNS}, p.blocks FROM paragraphs p JOIN decisions d "
+              "ON d.id = p.decision_id WHERE p.decision_id = ? AND p.anchor = ?")
+    row = conn.execute(lookup, key).fetchone()
+    if row is None and key[0].upper().startswith("ECLI:"):
+        # An exact paragraph id addresses a stored document. A variant ECLI
+        # can address several documents and needs the usual identity check.
+        candidates = _stored_decision_ids(conn, key[0])
+        if key[0] in candidates:
+            return {"status": "not_in_corpus", "request": paragraph_id}
+        if len(candidates) > 1:
+            return {"status": "ambiguous_identity", "request": paragraph_id, "candidates": candidates}
+        if candidates:
+            row = conn.execute(lookup, (candidates[0], key[1])).fetchone()
     if row is None:
         return {"status": "not_in_corpus", "request": paragraph_id}
     if hashlib.sha256(row["text"].encode()).hexdigest() != row["text_hash"]:
