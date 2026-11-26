@@ -32,8 +32,12 @@ def general_date(rows: list[dict], role: str | None) -> str | None:
 def application_clause(editions: list[dict], expected: list[str], article: str, paragraph: str,
                        cellar_date: str | None) -> dict:
     """Read a general application date from a designated paragraph across the fetched editions."""
+    date_pattern = r"\d{1,2}\. [^\W\d_]+ \d{4}"
+    # The second date in a qualified clause belongs only to the named articles.
+    exception = (r", mit Ausnahme des Artikels \d+[a-z]*(?: Absatz \d+)? und "
+                 rf"des Artikels \d+[a-z]*, die ab dem {date_pattern} gelten")
     sentence = re.compile(rf"^\({re.escape(paragraph)}\) Diese Verordnung gilt ab dem "
-                          r"\d{1,2}\. [^\W\d_]+ \d{4}\.(?=\s|$)", re.MULTILINE)
+                          rf"{date_pattern}(?:{exception})?\.(?=\s|$)", re.MULTILINE)
     sources = []
     for edition in editions:
         provision = next((a["text"] for a in edition["articles"] if a["enbez"] == article), "")

@@ -110,6 +110,15 @@ CORPUS: list[dict[str, Any]] = [
      "aliases": ["Entsenderichtlinie"]},
     {"celex": "32011L0083", "jurabk": "RL 2011/83/EU", "family": "directive",
      "aliases": ["Verbraucherrechterichtlinie"]},
+    {"celex": "32007R0715", "jurabk": "VO (EG) Nr. 715/2007", "family": "regulation",
+     "application_clause": ("Art. 18", "2")},
+    {"celex": "32003L0088", "jurabk": "RL 2003/88/EG", "family": "directive",
+     "aliases": ["Arbeitszeitrichtlinie"]},
+    {"celex": "32012R1215", "jurabk": "VO (EU) Nr. 1215/2012", "family": "regulation",
+     "aliases": ["Brüssel-Ia-VO", "Brüssel-Ia-Verordnung"]},
+    {"celex": "32000L0078", "jurabk": "RL 2000/78/EG", "family": "directive"},
+    {"celex": "32006L0112", "jurabk": "RL 2006/112/EG", "family": "directive",
+     "aliases": ["MwStSystRL", "Mehrwertsteuersystemrichtlinie"]},
     # The ten legislative acts in the 2024 Pact on Migration and Asylum.
     {"celex": "32024L1346", "jurabk": "RL (EU) 2024/1346", "family": "directive"},
     *[{"celex": f"32024R{number}", "jurabk": f"VO (EU) 2024/{number}", "family": "regulation"}
@@ -801,21 +810,28 @@ def fetch_edition(cellar: Cellar, celex: str, manifs: dict[str, str]) -> dict[st
     urls = urls or manifestation_items(cellar, manifs[kind])
     if not urls:
         raise RuntimeError(f"{celex}: manifestation {manifs[kind]} lists no items")
-    articles, items, parsed_meta = [], [], {"annexes_skipped": 0, "corrigenda": [], "consleg": None}
+    articles, text_items, attachments = [], [], []
+    parsed_meta = {"annexes_skipped": 0, "corrigenda": [], "consleg": None}
     for url in urls:
         got = cellar.get(url)
-        items.append({k: got.get(k) for k in ("url", "sha256", "bytes_len", "retrieved_at",
-                                              "content_type")})
+        receipt = {k: got.get(k) for k in ("url", "sha256", "bytes_len", "retrieved_at", "content_type")}
         try:
             parsed = parse_edition(got["bytes"], kind)
         except ET.ParseError:
+            attachments.append(receipt)
             continue
+        # The dated reader cites the first item. CELLAR can list several annex
+        # images before the XML that actually supplies the articles.
+        if parsed["articles"]:
+            text_items.append(receipt)
+        else:
+            attachments.append(receipt)
         articles.extend(parsed["articles"])
         parsed_meta["annexes_skipped"] += parsed["annexes_skipped"]
         parsed_meta["corrigenda"].extend(parsed["corrigenda"])
         parsed_meta["consleg"] = parsed_meta["consleg"] or parsed["consleg"]
-    return {"celex": celex, "format": kind, "manifestation": manifs[kind], "items": items,
-            "articles": _dedupe_articles(articles), **parsed_meta}
+    return {"celex": celex, "format": kind, "manifestation": manifs[kind],
+            "items": text_items + attachments, "articles": _dedupe_articles(articles), **parsed_meta}
 
 
 def _dedupe_articles(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
