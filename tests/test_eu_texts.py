@@ -341,3 +341,26 @@ def test_formex_nested_list_points_keep_their_printed_markers():
       </NP></ITEM></LIST></ALINEA></PARAG></ARTICLE></ENACTING.TERMS></ACT>"""
     [article] = eu.parse_formex(xml)["articles"]
     assert article["text"] == "(2) a) Einrichtungen: i) Netze; ii) Dienste."
+
+
+def test_future_consolidation_enters_the_reader_on_its_edition_date():
+    row = _row()
+    prior = row["editions"][-1]
+    prior["articles"] = [
+        {"enbez": "Art. 1", "titel": "", "text": "Current wording."},
+        {"enbez": "Art. 2", "titel": "", "text": "Present until the change."},
+    ]
+    later = {**prior, "celex": "02016R0679-20270111", "date": "2027-01-11",
+             "articles": [{"enbez": "Art. 1", "titel": "", "text": "Later wording."},
+                          {"enbez": "Art. 3", "titel": "", "text": "New article."}]}
+    row["editions"].append(later)
+    current = eu_history.build(row)
+    assert current["stand"] == prior["celex"]
+    assert [(a["enbez"], a["text"]) for a in current["norms"]] == [
+        ("Art. 1", "Current wording."), ("Art. 2", "Present until the change.")]
+    assert any(s["stand"] == later["celex"] for s in current["history"]["states"])
+    assert any(v["temporal"]["valid_from"] == "2027-01-11" for v in current["history"]["version"])
+    later_detail = eu_history.build(row, as_of="2027-01-11")
+    assert later_detail["stand"] == later["celex"]
+    assert [(a["enbez"], a["text"]) for a in later_detail["norms"]] == [
+        ("Art. 1", "Later wording."), ("Art. 3", "New article.")]
