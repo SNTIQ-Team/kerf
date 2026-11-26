@@ -1584,6 +1584,7 @@ Open a federal court decision by its RII document number. Both `JURE100056775` a
 
 | Request | Response |
 | --- | --- |
+| `GET /rii/decisions?ecli=…` | All decision records for an exact ECLI, checked against each decision’s metadata. Uppercase and lowercase identifiers are accepted. |
 | `GET /rii/decisions/{document}` | Court, date, docket, ECLI where published, passage counts and official source URLs. |
 | `GET /rii/decisions/{document}/passages` | Passages in source order. Filter by printed `rn` or case-insensitive text `q`. Use `limit` (1–250) and `offset` for pagination. |
 | `GET /rii/decisions/{document}/passages/{anchor}` | One passage with its exact text, printed number, section, authorship, XML locators and text SHA-256. A positional anchor such as `p-1` has a null `printed_number`. |
@@ -1591,4 +1592,6 @@ Open a federal court decision by its RII document number. Both `JURE100056775` a
 
 A verified catalogue or passage miss returns HTTP 404. If the upstream release is unavailable or a hash check fails, the service returns HTTP 503. The server pins the Hugging Face commit with `KERF_RII_REVISION` and the SHA-256 of `rii/manifest.json` with `KERF_RII_MANIFEST_SHA256`.
 
-The command-line reader uses the same settings. For example, `python3 tools/read_rii_archive.py JURE100056775 --anchor rn-1` prints the sourced passage. Use `--passages --rn 1` to list all occurrences of a printed number or `--source` to write the original bytes to stdout.
+An exact ECLI lookup with no matches returns HTTP 200 with an empty `decisions` list. Releases predating the optional ECLI index return HTTP 501 for this lookup.
+
+The command-line reader uses the same settings. Use `python3 tools/read_rii_archive.py --ecli <ECLI>` to list all matching decisions. For example, `python3 tools/read_rii_archive.py JURE100056775 --anchor rn-1` prints the sourced passage. Use `--passages --rn 1` to list all occurrences of a printed number or `--source` to write the original bytes to stdout.

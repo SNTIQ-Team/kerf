@@ -13,12 +13,14 @@ import zlib
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from api.rii_archive import MissingRecord, open_archive, passage_for, select_passages
+from api.rii_archive import EcliIndexUnavailable, MissingRecord, canonical_ecli, open_archive, passage_for, select_passages
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("document", help="official RII document number, with optional jb- prefix")
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--ecli", help="look up all documents matching an exact official ECLI")
+    target.add_argument("document", nargs="?", help="official RII document number, with optional jb- prefix")
     parser.add_argument("--revision", default=os.environ.get("KERF_RII_REVISION", ""),
                         help="immutable Hugging Face dataset commit")
     parser.add_argument("--manifest-sha256", default=os.environ.get("KERF_RII_MANIFEST_SHA256", ""),
@@ -36,8 +38,19 @@ def main(argv=None):
         parser.error("filters and pagination require --passages")
     if not 1 <= args.limit <= 250 or args.offset < 0:
         parser.error("limit must be 1–250 and offset must be nonnegative")
+    if args.ecli is not None:
+        if args.source or args.passages or args.anchor is not None:
+            parser.error("passage and source options require a document number")
+        try:
+            identifier = canonical_ecli(args.ecli)
+        except ValueError as exc:
+            parser.error(str(exc))
     try:
         archive = open_archive(args.revision, args.manifest_sha256)
+        if args.ecli is not None:
+            result = archive.decisions_by_ecli(identifier)
+            print(json.dumps({"revision": archive.revision, **result}, ensure_ascii=False))
+            return 0
         if args.source:
             sys.stdout.buffer.write(archive.source(args.document)[0])
             return 0
@@ -49,6 +62,9 @@ def main(argv=None):
         else:
             response = {"metadata": result["metadata"]}
         print(json.dumps({"revision": archive.revision, **response}, ensure_ascii=False))
+    except EcliIndexUnavailable:
+        print("The pinned RII release has no ECLI index", file=sys.stderr)
+        return 2
     except MissingRecord as exc:
         print(f"No such document or passage in the pinned RII release: {exc}", file=sys.stderr)
         return 1
