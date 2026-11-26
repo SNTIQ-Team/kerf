@@ -12,6 +12,7 @@ import re
 import sqlite3
 import time
 from datetime import date, datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 from . import PARSER_VERSION, SCHEMA_VERSION
@@ -1192,21 +1193,38 @@ _CITED_FORM_WORD = re.compile(
 )
 
 
-def _target_by_cited_form(candidates: str, raw: str, day: str, docket: str) -> str | None:
-    """Disambiguate one dated citation with the form printed beside its date and docket."""
+@lru_cache(maxsize=8192)
+def _cited_form(raw: str, day: str, docket: str) -> str | None:
+    """Return the single legal form explicitly attached to this date and docket."""
     matches = [match for match in DECISION_REF_RE.finditer(raw)
                if match.group("dtype") and parse_date(match) == day and case_key(match.group("az")) == docket]
     if len(matches) != 1:
         return None
     match = matches[0]
     prefix = raw[:match.start("dtype")]
+    # An editorial correction may explicitly negate the following label.
+    if re.search(r"\b(?:nicht(?:\s+als)?|kein(?:e[snmr]?)?|(?:an)?statt(?:\s+des)?|anstelle(?:\s+des)?)\s*$",
+                 prefix, re.IGNORECASE):
+        return None
     previous_words = list(_CITED_FORM_WORD.finditer(prefix))
     if previous_words:
         between = prefix[previous_words[-1].end():]
         if re.fullmatch(r"[\s,;/&+()-]*(?:(?:und|oder|sowie|bzw\.?|u\.|o\.|als\s+auch|wie\s+auch)[\s,;/&+()-]*)*",
                         between, re.IGNORECASE):
             return None
-    word = match.group("dtype").lower()
+    return match.group("dtype").lower()
+
+
+def _sole_target_agrees(raw: str, day: str, docket: str, stored_type: str | None) -> bool:
+    """Withhold a docket match only when both documents name incompatible forms."""
+    wanted = _decision_family(_cited_form(raw, day, docket) or "")
+    actual = _decision_family(stored_type or "")
+    return wanted is None or actual is None or wanted == actual
+
+
+def _target_by_cited_form(candidates: str, raw: str, day: str, docket: str) -> str | None:
+    """Disambiguate one dated citation with the form printed beside its date and docket."""
+    word = _cited_form(raw, day, docket) or ""
     wanted = _decision_family(word)
     if wanted is None:
         return None
@@ -1237,11 +1255,13 @@ def relink(conn: sqlite3.Connection) -> int:
     by users or models keep their recorded target.
     """
     conn.create_function("kerf_target_by_cited_form", 4, _target_by_cited_form, deterministic=True)
+    conn.create_function("kerf_sole_target_agrees", 4, _sole_target_agrees, deterministic=True)
     conn.execute("""
         WITH
         dated AS MATERIALIZED (
             SELECT d.court_slug AS court, d.decision_date AS day, n.case_key AS docket,
                    CASE WHEN count(DISTINCT d.id) = 1 THEN min(d.id) END AS candidate,
+                   min(d.decision_type) AS stored_type,
                    CASE WHEN count(DISTINCT d.id) > 1 THEN
                        json_group_array(DISTINCT json_array(d.id, d.decision_type)) END AS choices
             FROM decisions d JOIN case_numbers n ON n.decision_id = d.id
@@ -1264,7 +1284,9 @@ def relink(conn: sqlite3.Connection) -> int:
                         WHEN r.target_date IS NULL THEN undated.candidate
                         WHEN dated.choices IS NOT NULL THEN
                             kerf_target_by_cited_form(dated.choices, r.target_raw, r.target_date, r.target_case_key)
-                        ELSE dated.candidate END AS candidate
+                        WHEN dated.candidate IS NOT NULL AND
+                             kerf_sole_target_agrees(r.target_raw, r.target_date, r.target_case_key, dated.stored_type)
+                        THEN dated.candidate END AS candidate
             FROM relations r
             LEFT JOIN published ON published.ecli = r.target_id COLLATE NOCASE
             LEFT JOIN dated ON dated.court = r.target_court_id AND dated.day = r.target_date
