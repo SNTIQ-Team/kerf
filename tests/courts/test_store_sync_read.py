@@ -690,6 +690,31 @@ def test_a_shared_ecli_belongs_to_the_document_whose_date_it_encodes():
     assert resolve_decision(conn, ARBG_ECLI) == ("ok", [ARBG_ECLI])
 
 
+def test_reviewed_targets_follow_the_document_that_releases_its_ecli(conn):
+    from courts.store import store_decision
+
+    reviewed = _doc("he", "LARE909", ["Das Urteil."], date="2017-11-08", dtype="Urteil", ecli=ARBG_ECLI)
+    old, _ = store_decision(conn, reviewed, content_hash="a", capture_path="-", media_type="x")
+    citing, _ = store_decision(conn, _doc("he", "citation", ["Zitiert das Urteil."], az="9 Ca 11/18"),
+                               content_hash="b", capture_path="-", media_type="x")
+    assert old == ARBG_ECLI
+    conn.executemany("""
+        INSERT INTO relations(decision_id,relation,target_kind,target_id,target_decision_id,target_raw,
+                              quoted_context,origin,derived_by,legal_effect_verified,confidence)
+        VALUES(?,'mentions','decision',?,?,'Urteil vom 08.11.2017','Urteil','decision_text',?,?,1)
+    """, [(citing, old, old, "user", 1), (citing, old, old, "model", 0)])
+
+    owner = _doc("he", "LARE914", ["Der Beschluss."], ecli=ARBG_ECLI)
+    new, _ = store_decision(conn, owner, content_hash="c", capture_path="-", media_type="x")
+    assert new == old
+    targets = conn.execute("""
+        SELECT r.derived_by, r.legal_effect_verified, r.target_id, d.source_doc_id
+        FROM relations r JOIN decisions d ON d.id=r.target_decision_id
+        WHERE r.decision_id=? ORDER BY r.derived_by
+    """, (citing,)).fetchall()
+    assert [tuple(row) for row in targets] == [("model", 0, old, "LARE909"), ("user", 1, old, "LARE909")]
+
+
 def test_dedupe_repairs_duplicates_stored_under_the_old_rules(monkeypatch):
     import courts.store as store_module
     from courts.dedupe import dedupe

@@ -892,9 +892,14 @@ DECISION_ID_COLUMNS = (("paragraphs", "decision_id"), ("sections", "decision_id"
 
 
 def rekey_decision(conn: sqlite3.Connection, old_id: str, new_id: str) -> None:
-    """Move one stored decision to another id (inside the caller's transaction).  Citations resolved to the old
-    id (relations.target_decision_id) are left alone: they were resolved by the ECLI or court+date+Az the
-    id stood for.  The append-only corrections ledger cannot follow; callers refuse ids it names."""
+    """Move the document and its reviewed citation targets in the caller's transaction.
+
+    The recorded citation and parser links retain their original ECLI or docket.
+    Callers protect document IDs referenced by the append-only corrections ledger.
+    """
+    conn.execute("""UPDATE relations SET target_decision_id=?
+                    WHERE target_decision_id=? AND target_kind='decision' AND derived_by IN ('user', 'model')""",
+                 (new_id, old_id))
     for table, column in DECISION_ID_COLUMNS:
         conn.execute(f"UPDATE {table} SET {column}=? WHERE {column}=?", (new_id, old_id))
     conn.execute("UPDATE decisions SET id=? WHERE id=?", (new_id, old_id))
