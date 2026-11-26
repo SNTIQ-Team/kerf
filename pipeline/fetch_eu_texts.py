@@ -794,7 +794,8 @@ def parse_edition(data: bytes, kind: str) -> dict[str, Any]:
 PREFERENCE = ("fmx4", "xhtml", "html")
 
 
-def fetch_edition(cellar: Cellar, celex: str, manifs: dict[str, str]) -> dict[str, Any]:
+def fetch_edition(cellar: Cellar, celex: str, manifs: dict[str, str], *,
+                  article_sources: bool = False) -> dict[str, Any]:
     kind = next((k for k in PREFERENCE if k in manifs), None)
     if kind is None:
         raise RuntimeError(f"{celex}: no German fmx4/xhtml/html manifestation")
@@ -826,6 +827,9 @@ def fetch_edition(cellar: Cellar, celex: str, manifs: dict[str, str]) -> dict[st
             text_items.append(receipt)
         else:
             attachments.append(receipt)
+        if article_sources:
+            for article in parsed["articles"]:
+                article["source_item_sha256"] = got["sha256"]
         articles.extend(parsed["articles"])
         parsed_meta["annexes_skipped"] += parsed["annexes_skipped"]
         parsed_meta["corrigenda"].extend(parsed["corrigenda"])
@@ -854,7 +858,7 @@ def fetch_article_works(cellar: Cellar, base: str, count: int) -> dict[str, Any]
         if not kinds:
             missing.append(celex)
             continue
-        edition = fetch_edition(cellar, celex, kinds)
+        edition = fetch_edition(cellar, celex, kinds, article_sources=True)
         items.extend(edition["items"])
         number = str(int(celex[len(base):]))
         found = [a for a in edition["articles"] if a["enbez"] == f"Art. {number}"]

@@ -115,18 +115,37 @@ def _intervals(row: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def _attestation(interval: dict[str, Any]) -> dict[str, Any]:
-    edition = interval["edition"]
+def _source_item(edition: dict[str, Any], article: dict[str, Any] | None = None) -> dict[str, Any]:
     items = edition.get("items") or []
+    if edition.get("format") != "xhtml_per_article":
+        return items[0] if items else {}
+    if article is None:
+        return {"url": EURLEX.format(celex=edition["celex"] + "/TXT")}
+    digest = article.get("source_item_sha256")
+    if digest:
+        for item in items:
+            if item.get("sha256") == digest:
+                return item
+    # Older snapshots preserved the files but did not record which one yielded
+    # this article. The treaty's individual article CELEX still identifies it.
+    label = re.fullmatch(r"Art\. (\d{1,3})", article.get("enbez") or "")
+    if label:
+        return {"url": EURLEX.format(celex=edition["celex"] + label[1].zfill(3))}
+    return {}
+
+
+def _attestation(interval: dict[str, Any], article: dict[str, Any]) -> dict[str, Any]:
+    edition = interval["edition"]
+    item = _source_item(edition, article)
     return {
         "source": interval.get("source_name") or "CELLAR",
         "role": interval["role"], "known_from": interval["known_from"],
         "known_until": interval["known_until"], "count": 1,
         "kind": "norm_html" if interval.get("partial") else "full",
         "samples": [{k: v for k, v in {
-            "url": (items[0].get("url") if items else None),
-            "archive_url": (items[0].get("archive_url") if items else None),
-            "sha256": (items[0].get("sha256") if items else None),
+            "url": item.get("url"),
+            "archive_url": item.get("archive_url"),
+            "sha256": item.get("sha256"),
             "celex": edition.get("celex"), "format": edition.get("format"),
             "known_at": interval["known_from"],
             "stand": edition.get("oj_ref") or edition.get("celex")}.items() if v}],
@@ -274,7 +293,7 @@ def build(row: dict[str, Any], *, juris: str = "EU", as_of: str | None = None,
                                  "text_sha256": hashlib.sha256(
                                      (article.get("text") or "").encode("utf-8")).hexdigest()},
                 "temporal": temporal,
-                "attestations": [_attestation(g[0]) for g in group],
+                "attestations": [_attestation(g[0], g[1]) for g in group],
                 "change": {"change_id": change_id} if change_id else {},
                 "source_role": ("official_consolidation" if any(
                     g[0]["role"] == "official_consolidation" for g in group)
@@ -320,19 +339,22 @@ def build(row: dict[str, Any], *, juris: str = "EU", as_of: str | None = None,
         listed.add(norm_id)
     head.extend(article for norm, (_, interval, article) in latest_rows.items()
                 if norm not in listed and interval.get("partial"))
-    states = [{"source": i.get("source_key") or "cellar", "role": i["role"],
-               **({"complete": False, "notes": {"capture_kind": "norm_html"}}
-                  if i.get("partial") else {}),
-               "known_from": i["known_from"], "known_until": i["known_until"],
-               "url": ((i["edition"].get("items") or [{}])[0].get("url")),
-               **({"archive_url": i["edition"]["items"][0]["archive_url"]}
-                  if (i["edition"].get("items") or [{}])[0].get("archive_url") else {}),
-               "sha256": ((i["edition"].get("items") or [{}])[0].get("sha256")),
-               "stand": i["edition"].get("celex"), "valid_from": i["valid_from"],
-               "valid_from_status": ((i.get("status") or VALID_STATUS) if i["valid_from"]
-                                     else "unresolved"),
-               "valid_from_basis": i["valid_from_basis"], "valid_until": i["valid_until"]}
-              for i in intervals]
+    states = []
+    for interval in intervals:
+        edition = interval["edition"]
+        item = _source_item(edition)
+        states.append({
+            "source": interval.get("source_key") or "cellar", "role": interval["role"],
+            **({"complete": False, "notes": {"capture_kind": "norm_html"}}
+               if interval.get("partial") else {}),
+            "known_from": interval["known_from"], "known_until": interval["known_until"],
+            "url": item.get("url"), "sha256": item.get("sha256"),
+            **({"archive_url": item["archive_url"]} if item.get("archive_url") else {}),
+            "stand": edition.get("celex"), "valid_from": interval["valid_from"],
+            "valid_from_status": ((interval.get("status") or VALID_STATUS) if interval["valid_from"]
+                                  else "unresolved"),
+            "valid_from_basis": interval["valid_from_basis"], "valid_until": interval["valid_until"],
+        })
     display_versions = sorted(({"date": c["dates"]["in_force"]["date"] or
                                 (c["dates"].get("promulgated") or {}).get("date"),
                                 "text": _display(c)} for c in changes
