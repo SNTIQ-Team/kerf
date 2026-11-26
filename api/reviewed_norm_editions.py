@@ -44,13 +44,15 @@ def validate(package: dict) -> dict:
         if (juris != "de/bund" or sub or expected.get(unit) != record["label"]
                 or record["act_id"] != f"fed_{slug}" or not record["title"]):
             raise ValueError("inconsistent reviewed norm identity")
-        _instant(record["known_from"])
+        first_review = _instant(record["known_from"])
         through = _day(record["verified_through"])
         previous_end = None
         editions = record["editions"]
         if not editions:
             raise ValueError("reviewed norm has no editions")
         for index, edition in enumerate(editions):
+            if "known_from" in edition and _instant(edition["known_from"]) < first_review:
+                raise ValueError("edition precedes its provision review")
             start = _day(edition["valid_from"])
             end = edition["valid_until_exclusive"]
             if start > through or (index and start != previous_end):
@@ -93,12 +95,18 @@ def available(record: dict, as_of: str | None) -> bool:
     return as_of is None or _instant(as_of) >= _instant(record["known_from"])
 
 
-def edition_at(record: dict, on: str) -> dict | None:
+def _known_from(record: dict, edition: dict) -> str:
+    return edition.get("known_from", record["known_from"])
+
+
+def edition_at(record: dict, on: str, as_of: str | None = None) -> dict | None:
     if on > record["verified_through"]:
         return None
     for edition in record["editions"]:
         end = edition["valid_until_exclusive"]
         if edition["valid_from"] <= on and (end is None or on < end):
+            if as_of and _instant(as_of) < _instant(_known_from(record, edition)):
+                return None
             return edition
     return None
 
@@ -106,18 +114,21 @@ def edition_at(record: dict, on: str) -> dict | None:
 def provenance(record: dict, edition: dict) -> dict[str, Any]:
     return {"date_basis": BASIS, "effective_from": edition["valid_from"],
             "effective_to": edition["valid_until_exclusive"],
-            "knowledge_from": record["known_from"],
+            "knowledge_from": _known_from(record, edition),
             "verified_through_observed_at": record["verified_through"],
             "text_sha256": edition["text_sha256"],
             "source_url": edition["sources"][0]["url"],
             "sources": edition["sources"]}
 
 
-def versions_for(norm_id: str, record: dict):
+def versions_for(norm_id: str, record: dict, as_of: str | None = None):
     from api.norm_history import NormVersion, StateVersion, norm_content_hash
 
     result = []
     for index, edition in enumerate(record["editions"]):
+        known = _known_from(record, edition)
+        if as_of and _instant(as_of) < _instant(known):
+            continue
         src = edition["sources"][0]
         state = StateVersion(
             act_id=record["act_id"], key=f"section:{edition['text_sha256']}", index=index,
@@ -126,7 +137,7 @@ def versions_for(norm_id: str, record: dict):
             valid_until=edition["valid_until_exclusive"],
             valid_until_status=BASIS if edition["valid_until_exclusive"] else "open",
             valid_until_basis=BASIS if edition["valid_until_exclusive"] else None,
-            knowledge_from=record["known_from"], first_observed_at=record["known_from"][:10])
+            knowledge_from=known, first_observed_at=known[:10])
         row = {"enbez": record["label"], "titel": record["title"], "text": edition["text"]}
         result.append(NormVersion(norm_id, record["label"], record["title"], edition["text"],
                                   norm_content_hash(row), state, state, [state],
@@ -134,11 +145,13 @@ def versions_for(norm_id: str, record: dict):
     return result
 
 
-def merge_versions(norm_id: str, record: dict, versions: list, selector: str | None):
+def merge_versions(norm_id: str, record: dict, versions: list, selector: str | None, as_of: str | None = None):
     """Keep observations outside the reviewed span and make existing version IDs addressable."""
-    reviewed = versions_for(norm_id, record)
+    reviewed = versions_for(norm_id, record, as_of)
+    if not reviewed:
+        return versions
     if selector and re.fullmatch(r"\d{4}-\d{2}-\d{2}", selector):
-        if edition_at(record, selector) is None:
+        if edition_at(record, selector, as_of) is None:
             return versions
         return reviewed
     if selector and selector.lower() != "head":
@@ -146,13 +159,11 @@ def merge_versions(norm_id: str, record: dict, versions: list, selector: str | N
         if not any(selector == v.version_id or (len(suffix) >= 8 and
                    v.content_sha256.startswith(suffix)) for v in reviewed):
             return versions
-    last = record["editions"][-1]
     outside = []
     reviewed_ids = {version.version_id for version in reviewed}
     for version in versions:
         day = version.valid_from or version.first_state.first_observed_at
-        if (day is None or day < reviewed[0].valid_from or day > record["verified_through"]
-                or (last["valid_until_exclusive"] and day >= last["valid_until_exclusive"])):
+        if day is None or edition_at(record, day, as_of) is None:
             if version.version_id not in reviewed_ids:
                 outside.append(version)
     return sorted([*outside, *reviewed], key=lambda v: v.valid_from or v.first_state.first_observed_at or "")

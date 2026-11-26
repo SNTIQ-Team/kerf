@@ -855,7 +855,7 @@ def reviewed_section_markdown(act, query, target, knowledge, records, fallback_h
     except UnknownNormError:
         return None  # Existing archives can contain additional historical labels.
     record = covered.get(ref.label)
-    edition = edition_at(record, target) if record else None
+    edition = edition_at(record, target, knowledge) if record else None
     if not edition:
         return None
     row = {"enbez": record["label"], "titel": record["title"], "text": edition["text"]}

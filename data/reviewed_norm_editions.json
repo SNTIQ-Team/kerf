@@ -9,6 +9,72 @@
       "verified_through": "2026-11-26",
       "editions": [
         {
+          "valid_from": "1991-01-01",
+          "valid_until_exclusive": "1993-04-01",
+          "known_from": "2026-11-26T09:32:42Z",
+          "text": "(1) Inobhutnahme eines Kindes oder eines Jugendlichen ist die vorläufige Unterbringung des Kindes oder des Jugendlichen bei 1. einer geeigneten Person oder 2. in einer Einrichtung oder 3. in einer sonstigen betreuten Wohnform. Mit der Inobhutnahme ist dem Kind oder dem Jugendlichen unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Während der Inobhutnahme übt das Jugendamt das Recht der Beaufsichtigung, Erziehung und Aufenthaltsbestimmung aus; der mutmaßliche Wille des Personensorgeberechtigten oder des Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. Es hat für das Wohl des Kindes oder des Jugendlichen zu sorgen, das Kind oder den Jugendlichen in seiner gegenwärtigen Lage zu beraten und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. (2) Das Jugendamt ist verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn das Kind oder der Jugendliche um Obhut bittet. Das Jugendamt hat den Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten. Widerspricht der Personensorge- oder Erziehungsberechtigte der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen dem Personensorge- oder Erziehungsberechtigten zu übergeben oder 2. eine Entscheidung des Vormundschaftsgerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Ist der Personensorge- oder Erziehungsberechtigte nicht erreichbar, so gilt Satz 3 Nr. 2 entsprechend. (3) Das Jugendamt ist verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert. Freiheitsentziehende Maßnahmen sind dabei nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. Absatz 2 Satz 2 bis 4 gilt entsprechend.",
+          "text_sha256": "8a4e9ddbef593fc98ede088d705ceb63c10c6139e99acdc9f063099584d5ee88",
+          "sources": [
+            {
+              "role": "wording",
+              "locator": "BGBl. 1990 I S. 1163, 1173, § 42",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl190s1163.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "9d76f0710c62f16ee8b2a2efa26434e036174c8672638965dd99d196dfee7384"
+            },
+            {
+              "role": "commencement",
+              "locator": "Art. 24, BGBl. 1990 I S. 1195, allgemeines Inkrafttreten",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl190s1163.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "9d76f0710c62f16ee8b2a2efa26434e036174c8672638965dd99d196dfee7384"
+            },
+            {
+              "role": "republication",
+              "locator": "BGBl. 1993 I S. 637, Nr. 1 Buchst. a und b",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl193s0637b.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "1e4c0281f4b419b7bd3d17f890b1ec7783fa7acd97d9833c3f438e1d3b453d29"
+            },
+            {
+              "role": "next_amendment",
+              "locator": "BGBl. 1993 I S. 239, 241, Art. 1; Art. 7 Abs. 1",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl193s0239.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "48e8e41f0a843a1008af1bff46d83345514886982c988de1465391a49bfe62d3"
+            }
+          ]
+        },
+        {
+          "valid_from": "1993-04-01",
+          "valid_until_exclusive": "1998-07-01",
+          "known_from": "2026-11-26T09:32:42Z",
+          "text": "(1) Inobhutnahme eines Kindes oder eines Jugendlichen ist die vorläufige Unterbringung des Kindes oder des Jugendlichen bei 1. einer geeigneten Person oder 2. in einer Einrichtung oder 3. in einer sonstigen betreuten Wohnform. Während der Inobhutnahme sind der notwendige Unterhalt des Kindes oder des Jugendlichen und die Krankenhilfe sicherzustellen. Mit der Inobhutnahme ist dem Kind oder dem Jugendlichen unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Während der Inobhutnahme übt das Jugendamt das Recht der Beaufsichtigung, Erziehung und Aufenthaltsbestimmung aus; der mutmaßliche Wille des Personensorgeberechtigten oder des Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. Es hat für das Wohl des Kindes oder des Jugendlichen zu sorgen, das Kind oder den Jugendlichen in seiner gegenwärtigen Lage zu beraten und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. (2) Das Jugendamt ist verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn das Kind oder der Jugendliche um Obhut bittet. Das Jugendamt hat den Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten. Widerspricht der Personensorge- oder Erziehungsberechtigte der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen dem Personensorge- oder Erziehungsberechtigten zu übergeben oder 2. eine Entscheidung des Vormundschaftsgerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Ist der Personensorge- oder Erziehungsberechtigte nicht erreichbar, so gilt Satz 3 Nr. 2 entsprechend. (3) Das Jugendamt ist verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert. Freiheitsentziehende Maßnahmen sind dabei nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. Absatz 2 Satz 2 bis 4 gilt entsprechend.",
+          "text_sha256": "83b1d4ee09a29ec5607ef42f025c655afa8740d119d59d91f5a1d60cf14cab9d",
+          "sources": [
+            {
+              "role": "wording",
+              "locator": "BGBl. 1993 I S. 637, 648–649, § 42",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl193s0637b.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "1e4c0281f4b419b7bd3d17f890b1ec7783fa7acd97d9833c3f438e1d3b453d29"
+            },
+            {
+              "role": "amendment",
+              "locator": "BGBl. 1993 I S. 239, 241, Art. 1; Art. 7 Abs. 1",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl193s0239.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "48e8e41f0a843a1008af1bff46d83345514886982c988de1465391a49bfe62d3"
+            },
+            {
+              "role": "republication",
+              "locator": "BGBl. 1996 I S. 477, 488–489, § 42",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl196s0477.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "7878813431820c19cd5c72c3196e7b0d135629a7f7617e2ce4c734e17f487fc3"
+            },
+            {
+              "role": "next_amendment",
+              "locator": "BGBl. 1997 I S. 2942, 2963, Art. 13; Art. 17 § 1",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl197s2942.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "4e89f106a887360b3d4d6270d9268930efdd71b5548dd6293199d572ec524a0b"
+            }
+          ]
+        },
+        {
           "valid_from": "1998-07-01",
           "valid_until_exclusive": "2005-10-01",
           "text": "(1) Inobhutnahme eines Kindes oder eines Jugendlichen ist die vorläufige Unterbringung des Kindes oder des Jugendlichen bei 1. einer geeigneten Person oder 2. in einer Einrichtung oder 3. in einer sonstigen betreuten Wohnform. Während der Inobhutnahme sind der notwendige Unterhalt des Kindes oder des Jugendlichen und die Krankenhilfe sicherzustellen. Mit der Inobhutnahme ist dem Kind oder dem Jugendlichen unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Während der Inobhutnahme übt das Jugendamt das Recht der Beaufsichtigung, Erziehung und Aufenthaltsbestimmung aus; der mutmaßliche Wille des Personensorgeberechtigten oder des Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. Es hat für das Wohl des Kindes oder des Jugendlichen zu sorgen, das Kind oder den Jugendlichen in seiner gegenwärtigen Lage zu beraten und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. (2) Das Jugendamt ist verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn das Kind oder der Jugendliche um Obhut bittet. Das Jugendamt hat den Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten. Widerspricht der Personensorge- oder Erziehungsberechtigte der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen dem Personensorge- oder Erziehungsberechtigten zu übergeben oder 2. eine Entscheidung des Familiengerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Ist der Personensorge- oder Erziehungsberechtigte nicht erreichbar, so gilt Satz 3 Nr. 2 entsprechend. (3) Das Jugendamt ist verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert. Freiheitsentziehende Maßnahmen sind dabei nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. Absatz 2 Satz 2 bis 4 gilt entsprechend.",
@@ -148,6 +214,94 @@
         }
       ],
       "reviewed_instructions": [
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl192s1398.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "a441e53dd325b85b7cc460123b3cbf393306d1a67325db0d949c646781ed9121",
+          "article": "Article 5",
+          "subdivision": null,
+          "instruction_sha256": "841aadce1a2b2f42b0da229110ad921adb2243b9d7eb3ccacb81d87b23392177",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl193s0239.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "48e8e41f0a843a1008af1bff46d83345514886982c988de1465391a49bfe62d3",
+          "article": "Article 1, inserted second sentence in § 42(1); Article 7(1)",
+          "subdivision": null,
+          "instruction_sha256": "4d136344417eddba288b5b631ff1733755348948cb754cbc7a2dce776b100048",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl193s0944.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "254475dc79d87b6ec5ba1d5985f11a67dcc8e6a50c5ab5d898de33bc744374b0",
+          "article": "Article 13",
+          "subdivision": null,
+          "instruction_sha256": "ada8bec6e4dbf2459e395ea9cfd3926ac5e76e4d4d1e427a4528aefde626bc4c",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl194s1229.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "7e1470ff7986a2a3b3d704a9977d54b125e446d7db1c1e7327eedb2a083ed447",
+          "article": "Article 5",
+          "subdivision": null,
+          "instruction_sha256": "eeb1ba1e1ca725617e2f2f10f64da157765b0745bac7fbe6250ca7ad589fe35e",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl195s1775.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "e1ab20b5906523834dec83ba7a3bfefa0a70e36dff8767efb4e3502308fe4dc8",
+          "article": "Article 1",
+          "subdivision": null,
+          "instruction_sha256": "b1dbea32b51d982a63648a78b4c365757612e2e279e24a7e8456f85fe7624beb",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl196s1088.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "4b79eaf80372686ec8538f89359ef582a52fe03c87ba8bfd83850c4792f5b91c",
+          "article": "Article 3",
+          "subdivision": null,
+          "instruction_sha256": "27cb47218d7fb7bbfa04590f3d9cb5d046927343df624557eb533e0e92720239",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl197s2846.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "969defd73346acd4986d04aed4443d44aad6af69db8fa39e58999a85eb785aad",
+          "article": "Article 4",
+          "subdivision": null,
+          "instruction_sha256": "a8915a2b65ab33cd3d3c5270fa4761bdfc434d320c5736b9b0eca27a4350cd52",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl197s2942.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "4e89f106a887360b3d4d6270d9268930efdd71b5548dd6293199d572ec524a0b",
+          "article": "Article 13, § 42(2) third sentence; Article 17 § 1",
+          "subdivision": null,
+          "instruction_sha256": "e681c78c9b5e2d446a9e3f9d31f3a2a732378c3243395bd2320e10891b4813da",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl198s0666.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "9e48c8772b271954fd035252dd7dd590a7d50fd9784e4bf5f8ef0ed0bdbe1be8",
+          "article": "Article 4(11)",
+          "subdivision": null,
+          "instruction_sha256": "914f7d9454fa2e8eaa5a9792971c2e723b5e96393a837d6ae0ad6a86982fde5b",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl198s0833.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "d734b3e86b36cf2956347ce24fc8ac3f3c97e5aebd8d54f88880ea3e0a761074",
+          "article": "Article 16",
+          "subdivision": null,
+          "instruction_sha256": "6fd9833f16509770039a409a5a7fab4936736020fad2ba87c65f7068e53083e9",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl198s1188.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "bd9b6e0b57db79f2c2d7caa699cab7874368bab2cf59227de7d9050f01027e13",
+          "article": "Article 2",
+          "subdivision": null,
+          "instruction_sha256": "917d5c6607ca825af6897814f2fb8c5fcdfc65b364c13564f9a78930a1cab567",
+          "known_from": "2026-11-26T09:32:42Z"
+        },
         {
           "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl100s1426.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
           "pdf_sha256": "8baee1e61b0e54a33e08da898fe1e1cf4e78951e202f8541e3b3a532d8822bd7",
