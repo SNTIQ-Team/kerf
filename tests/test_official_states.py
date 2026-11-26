@@ -204,3 +204,34 @@ def test_duplicate_norm_labels_match_unchanged_state_before_deletion(
     assert [(change["operation"], change["para"], change["old"])
             for change in rows[0]["changes"]] == [
                 ("delete", "Anlage", "entfällt")]
+
+
+def test_two_captures_on_one_day_preserve_evidence_and_exact_date_boundaries(tmp_path: Path):
+    from api.official_state_store import observation_on
+    from api.act_archive import build_archive_index
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    store = tmp_path / "store"
+    before = _snapshot(first, "2026-11-17", text="alt")
+    morning = _snapshot(first, "2026-11-18", text="alt")
+    evening = _snapshot(second, "2026-11-18", text="neu", builddate="20261117215504")
+    after = _snapshot(second, "2026-11-19", text="neu", builddate="20261117215504")
+    manifest = archive_gii_states([before, morning, evening, after], store)
+    assert len(manifest["observations"]) == 4
+    assert len(manifest["objects"]) == 2
+
+    rows = transitions(manifest, store)
+    assert len(rows) == 1
+    assert rows[0]["previous_observed_at"] == "2026-11-17"
+    assert rows[0]["observed_at"] == "2026-11-19"
+    assert rows[0]["unordered_observation_dates"] == ["2026-11-18"]
+    assert rows[0]["effective_at"] is None
+
+    act = {"official_states": manifest["observations"]}
+    assert observation_on(act, "2026-11-18") is None
+    index = build_archive_index(act, fallback_head="2026-11-19")
+    assert index["unordered_observation_dates"] == ["2026-11-18"]
+    assert "2026-11-18" not in {r["date"] for r in index["entries"] if r["exact"]}
+    assert observation_on(act, "2026-11-17")["state_sha256"] == rows[0]["previous_state_sha256"]
+    assert observation_on(act, "2026-11-19")["state_sha256"] == rows[0]["state_sha256"]

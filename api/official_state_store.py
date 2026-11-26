@@ -14,6 +14,7 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
 
@@ -22,6 +23,33 @@ class OfficialStateError(ValueError):
 
 
 _DIGEST = re.compile(r"[0-9a-f]{64}")
+
+
+def unordered_observation_days(
+        observations: Iterable[dict[str, Any]]) -> set[tuple[str | None, str]]:
+    """Identify act/date pairs with distinct complete source states and no retrieval order."""
+    first = {}
+    ambiguous = set()
+    for row in observations:
+        if not isinstance(row, dict) or row.get("source_store") == "bavarian_states":
+            continue
+        day = str(row.get("observed_at") or row.get("date") or "")[:10]
+        digest = str(row.get("state_sha256") or row.get("state_digest") or "")
+        if not day or not _DIGEST.fullmatch(digest):
+            continue
+        key = (row.get("act_id"), day)
+        if first.setdefault(key, digest) != digest:
+            ambiguous.add(key)
+    return ambiguous
+
+
+def single_state_observations(
+        observations: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Select rows whose act and retrieval day identify one complete state."""
+    rows = list(observations)
+    ambiguous = unordered_observation_days(rows)
+    return [row for row in rows if isinstance(row, dict) and
+            (row.get("act_id"), str(row.get("observed_at") or row.get("date") or "")[:10]) not in ambiguous]
 
 
 def observation_on(act: dict[str, Any], requested_at: str | None
@@ -38,7 +66,7 @@ def observation_on(act: dict[str, Any], requested_at: str | None
         if observed == requested_at and _DIGEST.fullmatch(digest):
             matches.append({**row, "observed_at": observed,
                             "state_sha256": digest})
-    if not matches:
+    if not matches or unordered_observation_days(matches):
         return None
     return max(matches, key=lambda row: (
         str(row.get("builddate") or ""), row["state_sha256"]))
