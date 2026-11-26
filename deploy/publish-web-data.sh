@@ -38,6 +38,9 @@ if [ -z "$PYTHON" ]; then
 fi
 
 stage_args=()
+if [ "${2:-}" = --consume-upload ]; then
+    stage_args+=(--consume-upload)
+fi
 if [ -L "$TARGET" ]; then
     previous="$(readlink -f -- "$TARGET")"
     case "$previous" in "$ROOT"/web-data.release-*) stage_args+=(--previous "$previous");; esac
