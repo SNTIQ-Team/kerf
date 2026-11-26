@@ -99,6 +99,51 @@ def test_randnummern_new_template(kammer):
     assert paras[3].id == f"{e}#gruende-u1" and paras[3].rn is None
 
 
+@pytest.mark.parametrize("invalid", [None, "missing_left", "missing_right", "number_without_text"])
+def test_legacy_flat_columns_keep_their_published_paragraph_numbers(fixture, invalid):
+    from bs4 import BeautifulSoup
+    from courts.sources.bverfg import parse_decision
+
+    doc, folder, _, _ = KOPFTUCH
+    original = capture(fixture, doc, folder)
+    page = BeautifulSoup(original.body, "html.parser")
+    # BVerfGE 62, 1 publishes each Rn column immediately before its text column.
+    for wrapper in page.select("div.entscheidung div.absatz"):
+        wrapper.unwrap()
+    if invalid:
+        right = next(r for r in page.select("div.rechts") if r.get_text(strip=True) == "159")
+        if invalid == "missing_left":
+            right.find_next_sibling().extract()
+        elif invalid == "missing_right":
+            right.extract()
+        else:
+            right.find_next_sibling().clear()
+        with pytest.raises(UpstreamFailure) as err:
+            parse_decision(page.encode(), original.url)
+        assert err.value.kind == "parse_error"
+        return
+    parsed_page = parse_decision(page.encode(), original.url)
+    paras, _ = assemble(parsed_page.ecli, parsed_page.sections)
+    assert locate_quote(paras, "Die Entscheidung ist mit 6 : 2 Stimmen ergangen.") == [f"{parsed_page.ecli}#rn-159"]
+    assert any(p.id == f"{parsed_page.ecli}#abweichende_meinung-rn-1" for p in paras)
+
+
+def test_flat_rows_from_the_1999_electronic_edition(fixture):
+    from bs4 import BeautifulSoup
+    from courts.sources.bverfg import _old_template
+
+    # Official edition of 1 BvR 2161/94, 19 January 1999. The fixture retains
+    # three consecutive number/text pairs; the surrounding container is minimal.
+    page = BeautifulSoup(fixture("bverfg/rs19990119_1bvr216194-excerpt.html.gz"), "html.parser")
+    source = page.select("div.rechts")
+    rows = _old_template(page.select_one("div.entscheidung"))
+    numbered = [b for sec in rows.sections for b in sec.blocks if b.label]
+    assert [b.label for b in numbered] == [label.get_text(strip=True) for label in source] == ["1", "2", "3"]
+    for marker, block in zip(source, numbered):
+        assert "".join(block.text.split()) == "".join(marker.find_next_sibling().get_text().split())
+        assert block.locator.startswith("/div[1]/div[1]/div[1]/div[")
+
+
 def test_old_template_with_dissent_restarting_numbering(kopftuch):
     d = kopftuch
     assert d.metadata["template"] == "entscheidung"
