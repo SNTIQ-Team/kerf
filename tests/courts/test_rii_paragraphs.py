@@ -101,3 +101,77 @@ def test_toc_parsing_and_priority():
     assert items[0]["url"].startswith("https://") and items[0]["listed_court"] == "bverwg"
     assert items[0]["priority"] == 0 and items[1]["priority"] == 1
     assert items[0]["listed_modified"] == "2025-06-23T21:55:54.378Z"
+
+
+def _read_rii_section(markup):
+    import xml.etree.ElementTree as ET
+
+    from courts.model import Section
+    from courts.sources.rii import section_blocks
+
+    node = ET.fromstring("<tatbestand><div>" + markup + "</div></tatbestand>")
+    blocks = section_blocks(node, "/dokument/tatbestand")
+    paragraphs, _ = assemble("test", [Section("tatbestand", "court", "RII", blocks)])
+    return paragraphs
+
+
+def test_blank_number_starts_its_following_rii_continuation():
+    # BAG, 20 January 2010, 7 AZR 542/08, RII KARE600029801, Rn. 5.
+    paragraphs = _read_rii_section('''
+        <dl class="RspDL"><dt><a name="rd_4">4</a></dt><dd><p>First claim.</p></dd></dl>
+        <dl class="RspDL"><dt><a name="rd_5">5</a></dt><dd><p> </p></dd></dl>
+        <dl class="RspDL"><dt/><dd><p>Die Klägerin hat zuletzt beantragt</p></dd></dl>
+        <dl class="RspDL"><dt/><dd><table><tr><td>festzustellen</td></tr></table></dd></dl>
+        <dl class="RspDL"><dt><a name="rd_6">6</a></dt><dd>Next claim.</dd></dl>
+    ''')
+    assert [(p.rn, p.text) for p in paragraphs] == [
+        ("4", "First claim."), ("5", "Die Klägerin hat zuletzt beantragt\n\nfestzustellen"),
+        ("6", "Next claim."),
+    ]
+    assert paragraphs[1].blocks[0].locator.endswith("/dl[3]/dd[1]")
+    assert locate_quote(paragraphs, "Klägerin hat zuletzt beantragt") == ["test#rn-5"]
+
+
+@pytest.mark.parametrize("boundary", [
+    '<dl class="RspDL"><dt/><dd><h2>New section</h2></dd></dl>',
+    '<dl class="RspDL"><dt/><dd><p>III</p></dd></dl>',
+    '<dl class="RspDL"><dt><a name="rd_7">7</a></dt><dd>Next.</dd></dl>',
+    '<div><dl class="RspDL"><dt/><dd>Different container.</dd></dl></div>',
+    '<p>Separate paragraph.</p>',
+    '<dl class="RspDL"><dt/><dd><p><img src="fig.png"/></p></dd></dl>',
+])
+def test_rii_empty_number_stops_at_a_structural_boundary(boundary):
+    before = '<dl class="RspDL"><dt><a name="rd_5">5</a></dt><dd><p/></dd></dl>'
+    after = '<dl class="RspDL"><dt/><dd><p>Later material.</p></dd></dl>'
+    assert all(p.rn != "5" for p in _read_rii_section(before + boundary + after))
+
+
+@pytest.mark.parametrize("first", [
+    '<dt><a name="rd_5">5</a></dt><dd><p><img src="fig.png"/></p></dd>',
+    '<dt><a name="rd_7">5</a></dt><dd><p/></dd>',
+])
+def test_nontextual_or_conflicting_marker_is_not_transferred(first):
+    following = '<dl class="RspDL"><dt/><dd><p>Following text.</p></dd></dl>'
+    assert all(p.rn != "5" for p in _read_rii_section('<dl class="RspDL">' + first + '</dl>' + following))
+
+
+def test_plain_empty_rows_preserve_the_marker_without_duplicating_its_label():
+    import xml.etree.ElementTree as ET
+    from courts.sources.rii import section_blocks
+
+    node = ET.fromstring('''<div>
+        <dl class="RspDL"><dt><a name="rd_5">5</a></dt><dd><p/></dd></dl>
+        <dl class="RspDL"><dt/><dd><p><br/></p></dd></dl>
+        <dl class="RspDL"><dt/><dd>Continuation.</dd></dl>
+    </div>''')
+    blocks = section_blocks(node, "/div")
+    assert [(b.label, b.text) for b in blocks] == [(None, ""), (None, ""), ("5", "Continuation.")]
+    assert blocks[0].locator.endswith("#rd_5")
+    assert blocks[2].locator.endswith("/dl[3]/dd[1]")
+
+
+def test_missing_body_in_rii_list_still_rejects_the_document():
+    from courts.errors import UpstreamFailure
+
+    with pytest.raises(UpstreamFailure, match="without <dd>"):
+        _read_rii_section('<dl class="RspDL"><dt><a name="rd_5">5</a></dt></dl>')
