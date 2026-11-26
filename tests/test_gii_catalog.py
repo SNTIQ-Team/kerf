@@ -155,3 +155,18 @@ def test_api_search_appends_only_non_deep_catalog_matches(
     assert [row["id"] for row in result["catalog_matches"]] == [
         "gii:sozsichabkg_ukr"]
     assert "act_id" not in result["catalog_matches"][0]
+
+def test_rebuilding_without_a_valid_source_removes_old_section_links(tmp_path: Path) -> None:
+    source = tmp_path / "bundled.json"
+    target = tmp_path / "published.json"
+    captured = {"acts": {"urhg": {"norms": {"para/5": "__5.html"}}}}
+    for invalid in (None, "{}", "truncated"):
+        source.write_text(json.dumps(captured), encoding="utf-8")
+        assert web_data.publish_gii_toc(source, target) == target.stat().st_size
+        assert json.loads(target.read_text(encoding="utf-8")) == captured
+        if invalid is None:
+            source.unlink()
+        else:
+            source.write_text(invalid, encoding="utf-8")
+        assert web_data.publish_gii_toc(source, target) is None
+        assert not target.exists()
