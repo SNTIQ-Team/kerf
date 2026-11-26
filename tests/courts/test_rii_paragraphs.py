@@ -175,3 +175,32 @@ def test_missing_body_in_rii_list_still_rejects_the_document():
 
     with pytest.raises(UpstreamFailure, match="without <dd>"):
         _read_rii_section('<dl class="RspDL"><dt><a name="rd_5">5</a></dt></dl>')
+
+
+def test_rii_mixed_text_and_inline_references_retain_order_and_evidence():
+    import xml.etree.ElementTree as ET
+    from courts.sources.rii import section_blocks
+
+    node = ET.fromstring('''<div>Introductory text.
+      <dl class="RspDL"><dt><a name="rd_3">3</a></dt><dd>Numbered text.</dd></dl>
+      Separate source text referring to <dl class="RspDL"><dt/><dd>§ 74 StGB</dd></dl>
+      and continuing here.<dl class="RspDL"><dt><a name="rd_5">5</a></dt><dd>Next.</dd></dl>
+    </div>''')
+    blocks = section_blocks(node, "/div")
+    assert [b.text for b in blocks] == ["Introductory text.", "Numbered text.",
+        "Separate source text referring to", "§ 74 StGB", "and continuing here.", "Next."]
+    assert [b.locator for b in blocks if b.unnumbered] == [
+        "/div/text()[1]", "/div/dl[1]/following-sibling::text()[1]",
+        "/div/dl[2]/following-sibling::text()[1]"]
+    paragraphs = _read_rii_section(ET.tostring(node, encoding="unicode"))
+    assert [(p.rn, " ".join(p.text.split())) for p in paragraphs] == [
+        (None, "Introductory text."), ("3", "Numbered text."),
+        (None, "Separate source text referring to § 74 StGB and continuing here."), ("5", "Next.")]
+
+
+def test_rii_free_text_intervening_after_an_empty_number_is_not_skipped():
+    body = ('<dl class="RspDL"><dt><a name="rd_5">5</a></dt><dd><p/></dd></dl>'
+            'Printed outside the row.<dl class="RspDL"><dt/><dd>Later text.</dd></dl>')
+    paragraphs = _read_rii_section(body)
+    assert all(p.rn is None for p in paragraphs)
+    assert "Printed outside the row." in " ".join(p.text for p in paragraphs)

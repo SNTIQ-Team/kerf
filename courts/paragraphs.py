@@ -88,6 +88,9 @@ def assemble(decision_id: str, sections: list[Section]) -> tuple[list[Paragraph]
                 current = None
                 leading[section.name] = leading.get(section.name, 0) + 1
                 add(f"{decision_id}#{section.name}-u{leading[section.name]}", section, None, block)
+            elif block.unnumbered and (current is None or current.rn is not None):
+                leading[section.name] = leading.get(section.name, 0) + 1
+                current = add(f"{decision_id}#{section.name}-u{leading[section.name]}", section, None, block)
             elif current is not None:
                 current.blocks.append(block)
             else:
