@@ -295,7 +295,8 @@ EU_ACTS = {
     "dublin3vo": "32013R0604", "dublinverordnung": "32013R0604", "aufnahmerl": "32013L0033",
     "qualifikationsrl": "32011L0095", "asylverfahrensrl": "32013L0032",
     "rueckfuehrungsrl": "32008L0115", "unionsbuergerrl": "32004L0038",
-    "freizuegigkeitsrl": "32004L0038", "eugvvo": "32012R1215", "brueiavo": "32019R1111",
+    "freizuegigkeitsrl": "32004L0038", "bruesselivo": "32001R0044",
+    "brueiavo": "32012R1215", "bruesseliavo": "32012R1215",
     "dublin3": "32013R0604", "dubliniii": "32013R0604", "dublinivverordnung": "32013R0604",
     "dublin3verordnung": "32013R0604", "dubliniiiverordnung": "32013R0604", "dublinvo": "32013R0604",
     "aufnahmerichtlinie": "32013L0033", "verfahrensrl": "32013L0032",
@@ -480,6 +481,10 @@ class ActResolver:
         key = act_key(abbreviation)
         if not key:
             return ActIdentity(None, "unresolved")
+        # Courts use EuGVVO for both Brussels I regulations, including in
+        # decisions about proceedings governed by the predecessor after 2015.
+        if key == "eugvvo":
+            return ActIdentity(None, "ambiguous", candidates=("eu_32001r0044", "eu_32012r1215"))
         if key in EU_ACTS:
             return self._in_corpus(f"eu/{EU_ACTS[key]}", "eu")
         if key in INTERNATIONAL_ACTS:

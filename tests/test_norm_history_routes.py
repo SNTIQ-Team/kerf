@@ -231,3 +231,12 @@ def test_dates_after_the_last_observation_keep_the_latest_text_as_evidence(
     assert body["status"] == "temporally_unresolved"
     assert body["resolution"]["resolution"] == "after_last_observation"
     assert body["evidence"][0]["canonical_id"] == "de/bund/sgb_14/para/37"
+
+
+@pytest.mark.parametrize("available", [(), ("eu_32012r1215",), ("eu_32001r0044", "eu_32012r1215")])
+def test_eugvvo_remains_ambiguous_with_incomplete_reader_coverage(data, available):
+    rows = [{"id": act_id, "juris": "EU", "aliases": ["EuGVVO"]} for act_id in available]
+    (data / "wiki.json").write_text(json.dumps(rows))
+    body = _client(data).get("/norms/resolve", params={"q": "Art. 15 EuGVVO"}).json()
+    assert body["status"] == "ambiguous_identity"
+    assert {item["prefix"] for item in body["candidates"]} == {"eu/32001R0044", "eu/32012R1215"}
