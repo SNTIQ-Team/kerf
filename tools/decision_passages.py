@@ -136,6 +136,13 @@ def build_index(decisions,cache:Path,destination:Path,*,observed_at:str,official
      descriptor={'profile':record['profile'],'url':record['url'],'media_type':record['media_type'],
                  'extension':{'cellar-xhtml/1':'xhtml','sozialgerichtsbarkeit-json/1':'json','bsg-html/1':'html','neuris-akn/1':'xml'}[record['profile']],
                  'canonical_url':d.get('url'),'xml_sha256':xml_hash,'zip_sha256':None}
+     if d.get('text_source'):
+      text_source=d['text_source']
+      if text_source['url']!=record['url']:
+       raise ValueError(f'published text URL differs from its retained capture for {identity}')
+      descriptor['provider']=text_source['name']
+      descriptor['canonical_url']=record['url']
+      descriptor['catalogue_reference']={'name':d['source'],'url':d['url']}
      if record['profile']=='neuris-akn/1':
       from tools.neuris_passages import NS
       descriptor['xml_namespaces']=NS
