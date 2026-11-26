@@ -45,9 +45,203 @@
       "url": "https://www.bundestag.de/resource/blob/272508/Kapitel_13_02_Grundgesetz-__nderungsgesetze-pdf.pdf",
       "pdf_sha256": "284a8925253f6e4efa1529218509d8770f8e95e36297c5e9d09b382367ed230f",
       "source_file": "bundestag-amendments-since-1990.pdf"
+    },
+    "gazette-61": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl117s2346.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "983c1a4223941dd52f71f7a7277a7bf4f93aabb325a89cd48d2b132e1f6c9c5e",
+      "source_file": "bgbl117s2346.pdf"
+    },
+    "gazette-62": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl117s2347.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "2ad4df22ae45992fee61d00c2ba533221eb25adb2b5f203021fe533574953092",
+      "source_file": "bgbl117s2347.pdf"
+    },
+    "gazette-63": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl119s0404.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "ac696bca9d40d6ccc5ef8b3ae19848bed1e831978f7a860ea975843297e891c1",
+      "source_file": "bgbl119s0404.pdf"
+    },
+    "gazette-64": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl119s1546.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "812ecdb5002185ee1712e04f23adcfe32854f3c81dc6d096321dc8d87a666f2e",
+      "source_file": "bgbl119s1546.pdf"
+    },
+    "gazette-65": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl120s2048.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "29400f936ea06608a081a7cabe013eb203e2c2b10145ade7b12fca6713026b1f",
+      "source_file": "bgbl120s2048.pdf"
+    },
+    "gazette-66": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl122s0968.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "28ba92acdc91c6ef743b0f10d3a0e72b8ec1b955a8583425c1f9573dcfce9ca9",
+      "source_file": "bgbl122s0968.pdf"
+    },
+    "17609": {
+      "source": "German federal edition archived by WIPO Lex",
+      "url": "https://www.wipo.int/wipolex/en/legislation/details/17609",
+      "pdf_sha256": "7646119989c1a52d3cb6d21a27d731b98dab425ef8ff1d805fe8815e15db9b9c",
+      "source_file": "17609.pdf"
     }
   },
   "editions": [
+    {
+      "effective_from": "2017-07-20",
+      "published_at": "2017-07-19",
+      "gazette": "gazette-62",
+      "document_id": "bgbl-1-2017-s2347",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2017 I S. 2347",
+      "changes_from_previous": [],
+      "printed_state_sha256": "f99d0722958263c61bcb8486ef4644854530280ec6cee8ec037c37cdc461318b",
+      "printed_blocks": 202,
+      "companion_gazettes": [
+        "gazette-61"
+      ],
+      "state_sha256": "a29c8484775434e251ef4064043324283ddcf64042e0d3a858b17c5814f25d11"
+    },
+    {
+      "effective_from": "2019-04-04",
+      "published_at": "2019-04-03",
+      "gazette": "gazette-63",
+      "document_id": "bgbl-1-2019-s404",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2019 I S. 404",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 104b",
+          "current_norm_sha256": "f67aee4811d65131ce31088e682c31280421a62f813c58bf7cb58c8a6972c066",
+          "previous_text": "(1) Der Bund kann, soweit dieses Grundgesetz ihm Gesetzgebungsbefugnisse verleiht, den Ländern Finanzhilfen für besonders bedeutsame Investitionen der Länder und der Gemeinden (Gemeindeverbände) gewähren, die 1. zur Abwehr einer Störung des gesamtwirtschaftlichen Gleichgewichts oder 2. zum Ausgleich unterschiedlicher Wirtschaftskraft im Bundesgebiet oder 3. zur Förderung des wirtschaftlichen Wachstums erforderlich sind. Abweichend von Satz 1 kann der Bund im Falle von Naturkatastrophen oder außergewöhnlichen Notsituationen, die sich der Kontrolle des Staates entziehen und die staatliche Finanzlage erheblich beeinträchtigen, auch ohne Gesetzgebungsbefugnisse Finanzhilfen gewähren. (2) Das Nähere, insbesondere die Arten der zu fördernden Investitionen, wird durch Bundesgesetz, das der Zustimmung des Bundesrates bedarf, oder auf Grund des Bundeshaushaltsgesetzes durch Verwaltungsvereinbarung geregelt. Das Bundesgesetz oder die Verwaltungsvereinbarung kann Bestimmungen über die Ausgestaltung der jeweiligen Länderprogramme zur Verwendung der Finanzhilfen vorsehen. Die Festlegung der Kriterien für die Ausgestaltung der Länderprogramme erfolgt im Einvernehmen mit den betroffenen Ländern. Zur Gewährleistung der zweckentsprechenden Mittelverwendung kann die Bundesregierung Bericht und Vorlage der Akten verlangen und Erhebungen bei allen Behörden durchführen. Die Mittel sind befristet zu gewähren und hinsichtlich ihrer Verwendung in regelmäßigen Zeitabständen zu überprüfen. Die Finanzhilfen sind im Zeitablauf mit fallenden Jahresbeträgen zu gestalten. (3) Bundestag, Bundesregierung und Bundesrat sind auf Verlangen über die Durchführung der Maßnahmen und die erzielten Verbesserungen zu unterrichten."
+        },
+        {
+          "enbez": "Art 104c",
+          "current_norm_sha256": "24d123672a18bd0a82cd314af600685fc57c3b7fea4e63b1bd236802c4491396",
+          "previous_text": "Der Bund kann den Ländern Finanzhilfen für gesamtstaatlich bedeutsame Investitionen der finanzschwachen Gemeinden (Gemeindeverbände) im Bereich der kommunalen Bildungsinfrastruktur gewähren. Artikel 104b Absatz 2 und 3 gilt entsprechend."
+        },
+        {
+          "enbez": "Art 125c",
+          "current_norm_sha256": "41dfdf311b3f0224dd80b916ae7041ef93e6ddc3a5ad319ddd8ce16fc270240d",
+          "previous_text": "(1) Recht, das auf Grund des Artikels 91a Abs. 2 in Verbindung mit Abs. 1 Nr. 1 in der bis zum 1. September 2006 geltenden Fassung erlassen worden ist, gilt bis zum 31. Dezember 2006 fort. (2) Die nach Artikel 104a Abs. 4 in der bis zum 1. September 2006 geltenden Fassung in den Bereichen der Gemeindeverkehrsfinanzierung und der sozialen Wohnraumförderung geschaffenen Regelungen gelten bis zum 31. Dezember 2006 fort. Die im Bereich der Gemeindeverkehrsfinanzierung für die besonderen Programme nach § 6 Absatz 1 des Gemeindeverkehrsfinanzierungsgesetzes sowie die mit dem Gesetz über Finanzhilfen des Bundes nach Artikel 104a Absatz 4 des Grundgesetzes an die Länder Bremen, Hamburg, Mecklenburg-Vorpommern, Niedersachsen sowie Schleswig-Holstein für Seehäfen vom 20. Dezember 2001 nach Artikel 104a Absatz 4 in der bis zum 1. September 2006 geltenden Fassung geschaffenen Regelungen gelten bis zu ihrer Aufhebung fort. Eine Änderung des Gemeindeverkehrsfinanzierungsgesetzes durch Bundesgesetz ist ab dem 1. Januar 2025 zulässig. Die sonstigen nach Artikel 104a Absatz 4 in der bis zum 1. September 2006 geltenden Fassung geschaffenen Regelungen gelten bis zum 31. Dezember 2019 fort, soweit nicht ein früherer Zeitpunkt für das Außerkrafttreten bestimmt ist oder wird."
+        },
+        {
+          "enbez": "Art 143e",
+          "current_norm_sha256": "56a008961c379d77384a52f136f85580e4e9c50f0864b99bac6822773d76782e",
+          "previous_text": "(1) Die Bundesautobahnen werden abweichend von Artikel 90 Absatz 2 längstens bis zum 31. Dezember 2020 in Auftragsverwaltung durch die Länder oder die nach Landesrecht zuständigen Selbstverwaltungskörperschaften geführt. Der Bund regelt die Umwandlung der Auftragsverwaltung in Bundesverwaltung nach Artikel 90 Absatz 2 und 4 durch Bundesgesetz mit Zustimmung des Bundesrates. (2) Auf Antrag eines Landes, der bis zum 31. Dezember 2018 zu stellen ist, übernimmt der Bund abweichend von Artikel 90 Absatz 4 die sonstigen Bundesstraßen des Fernverkehrs, soweit sie im Gebiet dieses Landes liegen, mit Wirkung zum 1. Januar 2021 in Bundesverwaltung."
+        },
+        {
+          "enbez": "Art 104d",
+          "current_norm_sha256": "1036332f8835e4ede4fa056ea625d6b5bfb9aabef323e95d3c95e0add3fc1fe5",
+          "previous_text": null,
+          "after": "Art 104c",
+          "before": "Art 105"
+        }
+      ],
+      "printed_state_sha256": "3aa0d9c762c16ba6fc0a4b5abaaf88715af47a00b73c023f822449b2d875ed63",
+      "printed_blocks": 203,
+      "state_sha256": "f4a84734fbec893e1a6f02f6df11a7195b17de42ad07a1f86adafb78b6e310e6"
+    },
+    {
+      "effective_from": "2019-11-21",
+      "published_at": "2019-11-20",
+      "gazette": "gazette-64",
+      "document_id": "bgbl-1-2019-s1546",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2019 I S. 1546",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 72",
+          "current_norm_sha256": "84498c6a85f4d7681948fb261f152ad67d54b2cd8a14d458d7e544f48a2fbe8c",
+          "previous_text": "(1) Im Bereich der konkurrierenden Gesetzgebung haben die Länder die Befugnis zur Gesetzgebung, solange und soweit der Bund von seiner Gesetzgebungszuständigkeit nicht durch Gesetz Gebrauch gemacht hat. (2) Auf den Gebieten des Artikels 74 Abs. 1 Nr. 4, 7, 11, 13, 15, 19a, 20, 22, 25 und 26 hat der Bund das Gesetzgebungsrecht, wenn und soweit die Herstellung gleichwertiger Lebensverhältnisse im Bundesgebiet oder die Wahrung der Rechts- oder Wirtschaftseinheit im gesamtstaatlichen Interesse eine bundesgesetzliche Regelung erforderlich macht. (3) Hat der Bund von seiner Gesetzgebungszuständigkeit Gebrauch gemacht, können die Länder durch Gesetz hiervon abweichende Regelungen treffen über: 1. das Jagdwesen (ohne das Recht der Jagdscheine); 2. den Naturschutz und die Landschaftspflege (ohne die allgemeinen Grundsätze des Naturschutzes, das Recht des Artenschutzes oder des Meeresnaturschutzes); 3. die Bodenverteilung; 4. die Raumordnung; 5. den Wasserhaushalt (ohne stoff- oder anlagenbezogene Regelungen); 6. die Hochschulzulassung und die Hochschulabschlüsse. Bundesgesetze auf diesen Gebieten treten frühestens sechs Monate nach ihrer Verkündung in Kraft, soweit nicht mit Zustimmung des Bundesrates anderes bestimmt ist. Auf den Gebieten des Satzes 1 geht im Verhältnis von Bundes- und Landesrecht das jeweils spätere Gesetz vor. (4) Durch Bundesgesetz kann bestimmt werden, daß eine bundesgesetzliche Regelung, für die eine Erforderlichkeit im Sinne des Absatzes 2 nicht mehr besteht, durch Landesrecht ersetzt werden kann."
+        },
+        {
+          "enbez": "Art 105",
+          "current_norm_sha256": "787ee8dea5117e7e9c0d4e6367a4729e80aa737fa17bc6235ebff0daaae76e52",
+          "previous_text": "(1) Der Bund hat die ausschließliche Gesetzgebung über die Zölle und Finanzmonopole. (2) Der Bund hat die konkurrierende Gesetzgebung über die übrigen Steuern, wenn ihm das Aufkommen dieser Steuern ganz oder zum Teil zusteht oder die Voraussetzungen des Artikels 72 Abs. 2 vorliegen. (2a) Die Länder haben die Befugnis zur Gesetzgebung über die örtlichen Verbrauch- und Aufwandsteuern, solange und soweit sie nicht bundesgesetzlich geregelten Steuern gleichartig sind. Sie haben die Befugnis zur Bestimmung des Steuersatzes bei der Grunderwerbsteuer. (3) Bundesgesetze über Steuern, deren Aufkommen den Ländern oder den Gemeinden (Gemeindeverbänden) ganz oder zum Teil zufließt, bedürfen der Zustimmung des Bundesrates."
+        },
+        {
+          "enbez": "Art 125b",
+          "current_norm_sha256": "d456d5806b8b510dbd94c1aa2e42ad8fd3f11d064c523c6476d429c255c888c8",
+          "previous_text": "(1) Recht, das auf Grund des Artikels 75 in der bis zum 1. September 2006 geltenden Fassung erlassen worden ist und das auch nach diesem Zeitpunkt als Bundesrecht erlassen werden könnte, gilt als Bundesrecht fort. Befugnisse und Verpflichtungen der Länder zur Gesetzgebung bleiben insoweit bestehen. Auf den in Artikel 72 Abs. 3 Satz 1 genannten Gebieten können die Länder von diesem Recht abweichende Regelungen treffen, auf den Gebieten des Artikels 72 Abs. 3 Satz 1 Nr. 2, 5 und 6 jedoch erst, wenn und soweit der Bund ab dem 1. September 2006 von seiner Gesetzgebungszuständigkeit Gebrauch gemacht hat, in den Fällen der Nummern 2 und 5 spätestens ab dem 1. Januar 2010, im Falle der Nummer 6 spätestens ab dem 1. August 2008. (2) Von bundesgesetzlichen Regelungen, die auf Grund des Artikels 84 Abs. 1 in der vor dem 1. September 2006 geltenden Fassung erlassen worden sind, können die Länder abweichende Regelungen treffen, von Regelungen des Verwaltungsverfahrens bis zum 31. Dezember 2008 aber nur dann, wenn ab dem 1. September 2006 in dem jeweiligen Bundesgesetz Regelungen des Verwaltungsverfahrens geändert worden sind."
+        }
+      ],
+      "printed_state_sha256": "afffd96c41f3c4c72248c32c168d206354fdd42741030c8c03ee1593f28ccbef",
+      "printed_blocks": 203,
+      "state_sha256": "a9da2c2439c42dc80a1ca8cbdfab6c5e3b8ad73c997d4a504a1c64679092218a"
+    },
+    {
+      "effective_from": "2020-10-08",
+      "published_at": "2020-10-07",
+      "gazette": "gazette-65",
+      "document_id": "bgbl-1-2020-s2048",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2020 I S. 2048",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 104a",
+          "current_norm_sha256": "e001fe30b819339c7035c4061dc80832490c1fe4f9675b07b9e00c5076253d8d",
+          "previous_text": "(1) Der Bund und die Länder tragen gesondert die Ausgaben, die sich aus der Wahrnehmung ihrer Aufgaben ergeben, soweit dieses Grundgesetz nichts anderes bestimmt. (2) Handeln die Länder im Auftrage des Bundes, trägt der Bund die sich daraus ergebenden Ausgaben. (3) Bundesgesetze, die Geldleistungen gewähren und von den Ländern ausgeführt werden, können bestimmen, daß die Geldleistungen ganz oder zum Teil vom Bund getragen werden. Bestimmt das Gesetz, daß der Bund die Hälfte der Ausgaben oder mehr trägt, wird es im Auftrage des Bundes durchgeführt. (4) Bundesgesetze, die Pflichten der Länder zur Erbringung von Geldleistungen, geldwerten Sachleistungen oder vergleichbaren Dienstleistungen gegenüber Dritten begründen und von den Ländern als eigene Angelegenheit oder nach Absatz 3 Satz 2 im Auftrag des Bundes ausgeführt werden, bedürfen der Zustimmung des Bundesrates, wenn daraus entstehende Ausgaben von den Ländern zu tragen sind. (5) Der Bund und die Länder tragen die bei ihren Behörden entstehenden Verwaltungsausgaben und haften im Verhältnis zueinander für eine ordnungsmäßige Verwaltung. Das Nähere bestimmt ein Bundesgesetz, das der Zustimmung des Bundesrates bedarf. (6) Bund und Länder tragen nach der innerstaatlichen Zuständigkeits- und Aufgabenverteilung die Lasten einer Verletzung von supranationalen oder völkerrechtlichen Verpflichtungen Deutschlands. In Fällen länderübergreifender Finanzkorrekturen der Europäischen Union tragen Bund und Länder diese Lasten im Verhältnis 15 zu 85. Die Ländergesamtheit trägt in diesen Fällen solidarisch 35 vom Hundert der Gesamtlasten entsprechend einem allgemeinen Schlüssel; 50 vom Hundert der Gesamtlasten tragen die Länder, die die Lasten verursacht haben, anteilig entsprechend der Höhe der erhaltenen Mittel. Das Nähere regelt ein Bundesgesetz, das der Zustimmung des Bundesrates bedarf."
+        },
+        {
+          "enbez": "Art 143h",
+          "current_norm_sha256": "974471c83bd4114e4eb8a024144a439949f5a6b3bf9f757a9d0e1c0f1a614dc6",
+          "previous_text": null,
+          "after": "Art 143g",
+          "before": "Art 144"
+        }
+      ],
+      "printed_state_sha256": "90cbafb9f1be7caf8c6db332a2c1f521b918aac14f4b1e81e0f3f0a45a4dc774",
+      "printed_blocks": 204,
+      "state_sha256": "0971faa16172f4d9d72aa240ab19408ce88c08ef2015d938a10de8e45a861bc0"
+    },
+    {
+      "effective_from": "2021-01-01",
+      "published_at": "2020-10-07",
+      "gazette": "gazette-65",
+      "document_id": "bgbl-1-2020-s2048",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2020 I S. 2048",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 143h",
+          "previous_norm": {
+            "enbez": "Art 143h",
+            "text": "Als Folgewirkung der COVID-19-Pandemie im Jahr 2020 gewährt der Bund im Jahr 2020 einmalig einen pauschalen Ausgleich für Mindereinnahmen aus der Gewerbesteuer zugunsten der Gemeinden und zu gleichen Teilen mit dem jeweiligen Land. Der Ausgleich wird von den Ländern an die Gemeinden auf Grundlage der erwarteten Mindereinnahmen weitergeleitet. Bestehen in einem Land keine Gemeinden, so steht der Ausgleich durch den Bund dem Land zu. Der den Ländern vom Bund zum Ausgleich geleistete Betrag berücksichtigt zusätzlich Auswirkungen der Mindereinnahmen gemäß Satz 1 auf Zu- und Abschläge sowie auf Zuweisungen gemäß Artikel 107 Absatz 2. Das Nähere regelt ein Bundesgesetz, das der Zustimmung des Bundesrates bedarf. Der Ausgleich bleibt bei der Bemessung der Finanzkraft nach Artikel 107 Absatz 2 unberücksichtigt. Artikel 106 Absatz 6 Satz 6 gilt entsprechend.",
+            "titel": "",
+            "glied": "XI. Übergangs- und Schlußbestimmungen"
+          },
+          "after": "Art 143g",
+          "before": "Art 144"
+        }
+      ],
+      "printed_state_sha256": "1dd2d2760eb460c6128c9088a3f915afcb53764b5a770e58a2ad5dce4e1b44e4",
+      "printed_blocks": 203,
+      "amending_article": "2",
+      "expiry_last_day": "2020-12-31",
+      "state_sha256": "4fb003ed9ad875ecc83dd565fbde86a717158b8e787502c17b36c9108be20f8d"
+    },
+    {
+      "effective_from": "2022-07-01",
+      "published_at": "2022-06-30",
+      "gazette": "gazette-66",
+      "document_id": "bgbl-1-2022-s968",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2022 I S. 968",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 87a",
+          "current_norm_sha256": "817ce61ac4f0df0bd6e5e77472a980db4ddccc2b7e18a40a3c4479b3e23d852d",
+          "previous_text": "(1) Der Bund stellt Streitkräfte zur Verteidigung auf. Ihre zahlenmäßige Stärke und die Grundzüge ihrer Organisation müssen sich aus dem Haushaltsplan ergeben. (2) Außer zur Verteidigung dürfen die Streitkräfte nur eingesetzt werden, soweit dieses Grundgesetz es ausdrücklich zuläßt. (3) Die Streitkräfte haben im Verteidigungsfalle und im Spannungsfalle die Befugnis, zivile Objekte zu schützen und Aufgaben der Verkehrsregelung wahrzunehmen, soweit dies zur Erfüllung ihres Verteidigungsauftrages erforderlich ist. Außerdem kann den Streitkräften im Verteidigungsfalle und im Spannungsfalle der Schutz ziviler Objekte auch zur Unterstützung polizeilicher Maßnahmen übertragen werden; die Streitkräfte wirken dabei mit den zuständigen Behörden zusammen. (4) Zur Abwehr einer drohenden Gefahr für den Bestand oder die freiheitliche demokratische Grundordnung des Bundes oder eines Landes kann die Bundesregierung, wenn die Voraussetzungen des Artikels 91 Abs. 2 vorliegen und die Polizeikräfte sowie der Bundesgrenzschutz nicht ausreichen, Streitkräfte zur Unterstützung der Polizei und des Bundesgrenzschutzes beim Schutze von zivilen Objekten und bei der Bekämpfung organisierter und militärisch bewaffneter Aufständischer einsetzen. Der Einsatz von Streitkräften ist einzustellen, wenn der Bundestag oder der Bundesrat es verlangen."
+        }
+      ],
+      "printed_state_sha256": "c6533c194d4ce8515ad415ba3a01b06f651b61810175c16a411732d8959b39a5",
+      "printed_blocks": 203,
+      "state_sha256": "7cd49c3e31cdc8c6150736d28a1766a32720fcfbb58ef368b00689dbc9a562ee"
+    },
     {
       "effective_from": "2022-12-24",
       "published_at": "2022-12-23",
@@ -55,7 +249,13 @@
       "document_id": "bgbl-1-2022-s2478",
       "projection_stand": "Stand: Zuletzt geändert durch Art. 1 G v. 19.12.2022 I 2478",
       "projection_build": "",
-      "changes_from_previous": [],
+      "changes_from_previous": [
+        {
+          "enbez": "Art 82",
+          "current_norm_sha256": "d72be07f5521a1a85714c3ee77f05a8836a8a07bdcacfcd20682560c4de80034",
+          "previous_text": "(1) Die nach den Vorschriften dieses Grundgesetzes zustande gekommenen Gesetze werden vom Bundespräsidenten nach Gegenzeichnung ausgefertigt und im Bundesgesetzblatte verkündet. Rechtsverordnungen werden von der Stelle, die sie erläßt, ausgefertigt und vorbehaltlich anderweitiger gesetzlicher Regelung im Bundesgesetzblatte verkündet. (2) Jedes Gesetz und jede Rechtsverordnung soll den Tag des Inkrafttretens bestimmen. Fehlt eine solche Bestimmung, so treten sie mit dem vierzehnten Tage nach Ablauf des Tages in Kraft, an dem das Bundesgesetzblatt ausgegeben worden ist."
+        }
+      ],
       "printed_state_sha256": "2ebf2e2bba07e675376d1f6e783394854cea83e93d67c631695c5fa7422b3219",
       "printed_blocks": 203,
       "state_sha256": "d70eac0e5d9dd4d03de9037c840ea2b5dc71dfe2699926be28dfbdf840413e77"
@@ -113,5 +313,19 @@
       "printed_blocks": 204,
       "state_sha256": "877207743f28e62c0b05ada4b89988028f072ef8797ac31bdd5da50955b29f97"
     }
-  ]
+  ],
+  "expiry_confirmations": {
+    "2020": {
+      "source": "Deutsche Rentenversicherung",
+      "url": "https://rvrecht.deutsche-rentenversicherung.de/SharedDocs/rvRecht/05_Normen_und_Vertraege/02_C-K/GG/0143h/0143h_2020_10_08.html",
+      "html_sha256": "97c72a37127c5f5a98489382aa252102466d079c7b43679544a1297a40f479a1",
+      "source_file": "drv-143h-2020.html"
+    },
+    "2021": {
+      "source": "Deutsche Rentenversicherung",
+      "url": "https://rvrecht.deutsche-rentenversicherung.de/SharedDocs/rvRecht/05_Normen_und_Vertraege/02_C-K/GG/0143h/0143h_2021_01_01.html",
+      "html_sha256": "cff1e2190e6da9ff8ac1a815883c638defc9692fabb51b5b1569529176b6e2e2",
+      "source_file": "drv-143h-2021.html"
+    }
+  }
 }

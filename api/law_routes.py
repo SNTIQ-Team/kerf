@@ -215,11 +215,14 @@ def create_router(data_dir: Callable[[], Path],
                     "the requested date is in the future; later amendments "
                     "not yet recorded may change the answer")
             if version is None and status == "not_in_corpus":
+                if resolution.get("resolution") == "absent_from_verified_edition":
+                    detail = (f"The complete edition for {on} contains no "
+                              f"{resolved['norm_id']}.")
+                else:
+                    detail = (f"Kerf holds no text of {resolved['norm_id']} for {on}. "
+                              f"Its text history starts {resolution.get('text_history_start')}")
                 raise EnvelopeError(
-                    "not_in_corpus",
-                    f"Kerf holds no text of {resolved['norm_id']} for "
-                    f"{on}; its text history starts "
-                    f"{resolution.get('text_history_start')}",
+                    "not_in_corpus", detail,
                     searched=_searched(chain))
             evidence = []
             changes = _changes_of(chain)
