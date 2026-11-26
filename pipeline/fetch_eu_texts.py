@@ -377,7 +377,7 @@ def _clean(value: str) -> str:
     return _WS.sub(" ", value or "").strip()
 
 
-def _formex_text(el: ET.Element) -> str:
+def _formex_text(el: ET.Element, *, keep_markers: bool = False) -> str:
     """Flatten Formex inline content (tails of ``el`` itself excluded).
 
     Quoted articles and embedded lists keep their printed markers. The
@@ -386,7 +386,7 @@ def _formex_text(el: ET.Element) -> str:
     parts: list[str] = []
 
     def walk(node: ET.Element, keep_markers: bool = False) -> None:
-        keep_markers = keep_markers or node.tag in {"ARTICLE", "LIST"}
+        keep_markers = keep_markers or node.tag in {"ARTICLE", "LIST", "QUOT.S"}
         if node.tag == "NOTE" or (not keep_markers and node.tag in {"NO.P", "NO.PARAG"}):
             return
         if node.tag in {"QUOT.START", "QUOT.END"}:
@@ -401,7 +401,7 @@ def _formex_text(el: ET.Element) -> str:
                 "TI.ART", "STI.ART", "NO.P", "NO.PARAG", "ALINEA", "PARAG"}):
             parts.append(" ")
 
-    walk(el)
+    walk(el, keep_markers)
     return _clean("".join(parts))
 
 
@@ -507,6 +507,15 @@ def _formex_articles(node: ET.Element) -> Iterable[ET.Element]:
             yield from _formex_articles(child)
 
 
+def _formex_article_parts(article: ET.Element) -> Iterable[ET.Element]:
+    """Traverse structural subdivisions, leaving quotations and lists to their renderers."""
+    for child in article:
+        if child.tag == "SUBDIV":
+            yield from _formex_article_parts(child)
+        else:
+            yield child
+
+
 def _formex_reading_tree(data: bytes) -> ET.Element:
     """Keep the text printed in a consolidation, including tails across deletion boundaries."""
     if b"<?CLG.MDFO" not in data or b"DELETED" not in data:
@@ -563,8 +572,10 @@ def parse_formex(data: bytes) -> dict[str, Any]:
             continue
         title_el = article.find("STI.ART")
         paragraphs: list[tuple[str | None, list[tuple[str, Any]]]] = []
-        for child in article:
-            if child.tag == "PARAG":
+        for child in _formex_article_parts(article):
+            if child.tag == "TITLE":
+                paragraphs.append((None, [("text", _formex_text(child, keep_markers=True))]))
+            elif child.tag == "PARAG":
                 no = child.find("NO.PARAG")
                 segments: list[tuple[str, Any]] = []
                 for part in child:

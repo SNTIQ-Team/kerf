@@ -104,6 +104,32 @@ def test_formex_rejects_unpaired_deletion(closing):
         eu.parse_formex(xml.encode())
 
 
+def test_formex_article_subdivisions_keep_titles_and_paragraphs_in_order():
+    # Regulation 987/2009, Article 25, places its numbered paragraphs under A., B. and C.
+    xml = b'''<ACT><ENACTING.TERMS><ARTICLE><TI.ART>Artikel 25</TI.ART><STI.ART>Aufenthalt</STI.ART>
+      <SUBDIV><TITLE><TI><NP><NO.P>A.</NO.P><TXT>Verfahren</TXT></NP></TI></TITLE>
+      <PARAG><NO.PARAG>(1)</NO.PARAG><ALINEA>Erster Absatz.</ALINEA></PARAG>
+      <SUBDIV><TITLE><TI><NP><NO.P>I.</NO.P><TXT>Belege</TXT></NP></TI></TITLE>
+      <ALINEA>Eine Bescheinigung.</ALINEA></SUBDIV></SUBDIV>
+      <SUBDIV><TITLE><TI><NP><NO.P>B.</NO.P><TXT>Zahlung</TXT></NP></TI></TITLE>
+      <PARAG><NO.PARAG>(2)</NO.PARAG><ALINEA>Weitere Angaben.</ALINEA></PARAG></SUBDIV>
+      <ALINEA>Schluss.</ALINEA></ARTICLE></ENACTING.TERMS></ACT>'''
+    assert eu.parse_formex(xml)['articles'] == [{
+        'enbez': 'Art. 25', 'titel': 'Aufenthalt',
+        'text': 'A. Verfahren\n(1) Erster Absatz.\nI. Belege\nEine Bescheinigung.\nB. Zahlung\n(2) Weitere Angaben.\nSchluss.',
+    }]
+
+
+def test_formex_quoted_paragraph_keeps_its_number_and_opening_quote():
+    # Article 105 of the AI Act adds a numbered paragraph to Directive 2014/90/EU.
+    # Its Formex puts the opening quotation mark inside the quoted paragraph number.
+    xml = b'''<ACT><ARTICLE><TI.ART>Artikel 105</TI.ART><PARAG><NO.PARAG>(1)</NO.PARAG>
+      <ALINEA>Folgender Absatz wird angefuegt:</ALINEA><ALINEA><QUOT.S>
+      <PARAG><NO.PARAG><QUOT.START CODE="201E"/>(5)</NO.PARAG><ALINEA>Erster Satz.
+      <QUOT.END CODE="201C"/></ALINEA></PARAG></QUOT.S></ALINEA></PARAG></ARTICLE></ACT>'''
+    assert eu.parse_formex(xml)['articles'][0]['text'] == '(1) Folgender Absatz wird angefuegt:\n„(5) Erster Satz. “'
+
+
 def test_formex_article_renders_absatz_unterabsatz_and_points():
     parsed = eu.parse_formex(FORMEX_OJ.encode())
     art1, art2 = parsed["articles"]
