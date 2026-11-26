@@ -1598,3 +1598,11 @@ A verified catalogue or passage miss returns HTTP 404. If the upstream release i
 An exact ECLI lookup with no matches returns HTTP 200 with an empty `decisions` list. Releases predating the optional ECLI index return HTTP 501 for this lookup.
 
 The command-line reader uses the same settings. Use `python3 tools/read_rii_archive.py --ecli <ECLI>` to list all matching decisions. For example, `python3 tools/read_rii_archive.py JURE100056775 --anchor rn-1` prints the sourced passage. Use `--passages --rn 1` to list all occurrences of a printed number or `--source` to write the original bytes to stdout.
+
+### Full-text search of court decisions
+
+`GET /courts/decisions/search?q=Kindeswohl&limit=20` searches the complete wording of decisions whose source file matches a publication in the pinned RII release. Each result includes the court, decision date, docket, ECLI where available, official source URL and Kerf document path.
+
+All terms must match. The service returns the newest decisions first and orders decisions from the same day by native identifier. A page contains up to 100 decisions. Pass the returned `next` value as `after` to read the next page. A change of index revision returns HTTP 409 for an earlier cursor.
+
+`GET /courts/decisions/search/operator` accepts the same parameters and searches the full native ledger. It requires a Bearer credential and returns `Cache-Control: private, no-store`. Deployment sets `KERF_NATIVE_COURT_INDEX` to the release directory and `KERF_NATIVE_COURT_TOKEN_FILE` to a credential readable by the service. The public and operator indexes are separate SQLite files.
