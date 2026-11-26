@@ -178,3 +178,35 @@ def test_later_observations_do_not_bridge_an_intervening_change():
     earlier, *_, latest = artifact["reconstructions"]
     assert earlier["observed_at"] == latest["observed_at"] == "2026-11-26"
     assert latest["anchor_verified_through"] == "2026-11-27"
+
+
+def test_publisher_replays_source_metadata_and_rejects_substitutions(tmp_path):
+    from verified_editions import validate_published_editions
+    artifact, manifest, states = _inputs()
+    anchor, meta = store_state_object(tmp_path / "federal_states", next(iter(states.values())))
+    manifest["objects"] = {anchor: meta}
+    add_reviewed_editions(artifact, manifest, states)
+    valid = validate_published_editions(tmp_path, manifest, artifact)
+    assert valid == set(artifact["state_objects"]) and len(valid) == 8
+    for record, field, value in [
+        ("row", "effective_from", "2017-07-21"),
+        ("row", "source_exact", True),
+        ("row", "evidence", []),
+        ("row", "successor_state_sha256", "d"*64),
+        ("meta", "anchor_state_sha256", "f"*64),
+    ]:
+        defective = copy.deepcopy(artifact)
+        row = defective["reconstructions"][0]
+        target = row if record == "row" else defective["object_metadata"][row["state_sha256"]]
+        target[field] = value
+        with pytest.raises(ReconstructionError):
+            validate_published_editions(tmp_path, manifest, defective)
+
+    extra = copy.deepcopy(artifact)
+    extra["reconstructions"].append({**extra["reconstructions"][0], "id": "a-different-claim"})
+    with pytest.raises(ReconstructionError):
+        validate_published_editions(tmp_path, manifest, extra)
+    partial = copy.deepcopy(artifact)
+    del partial["object_metadata"][next(iter(valid))]
+    with pytest.raises(ReconstructionError):
+        validate_published_editions(tmp_path, manifest, partial)
