@@ -507,9 +507,54 @@ def _formex_articles(node: ET.Element) -> Iterable[ET.Element]:
             yield from _formex_articles(child)
 
 
+def _formex_reading_tree(data: bytes) -> ET.Element:
+    """Keep the text printed in a consolidation, including tails across deletion boundaries."""
+    if b"<?CLG.MDFO" not in data or b"DELETED" not in data:
+        return ET.fromstring(data)
+    root = ET.fromstring(data, parser=ET.XMLParser(target=ET.TreeBuilder(insert_pis=True)))
+    deletions: dict[str, str] = {}
+
+    def visit(node: ET.Element) -> ET.Element | None:
+        if node.tag is ET.ProcessingInstruction:
+            target, _, fields = (node.text or "").partition(" ")
+            if target in {"CLG.MDFO", "CLG.MDFC"}:
+                try:
+                    attrs = ET.fromstring(f"<marker {fields}/>").attrib
+                except ET.ParseError as exc:
+                    raise ValueError("Invalid Formex consolidation marker") from exc
+                if target == "CLG.MDFO" and attrs.get("ACTION") == "DELETED":
+                    closer, opener = attrs.get("IDREF"), attrs.get("ID")
+                    if not closer or not opener or closer in deletions:
+                        raise ValueError("Invalid Formex deletion opener")
+                    deletions[closer] = opener
+                elif target == "CLG.MDFC" and attrs.get("ID") in deletions:
+                    if deletions.pop(attrs["ID"]) != attrs.get("IDREF"):
+                        raise ValueError("Mismatched Formex deletion closer")
+            return None
+
+        visible_start = not deletions
+        kept = ET.Element(node.tag, node.attrib)
+        kept.text = node.text if visible_start else None
+        for child in node:
+            subtree = visit(child)
+            if subtree is not None:
+                kept.append(subtree)
+            if child.tail and not deletions:
+                if len(kept):
+                    kept[-1].tail = (kept[-1].tail or "") + child.tail
+                else:
+                    kept.text = (kept.text or "") + child.tail
+        return kept if visible_start or len(kept) or kept.text else None
+
+    clean = visit(root)
+    if deletions or clean is None:
+        raise ValueError("Unclosed Formex deletion")
+    return clean
+
+
 def parse_formex(data: bytes) -> dict[str, Any]:
     """Articles of one Formex 4 act (OJ ``ACT`` or consolidated ``CONS.ACT``)."""
-    root = ET.fromstring(data)
+    root = _formex_reading_tree(data)
     articles, annexes = [], 0
     for article in _formex_articles(root):
         label = _clean("".join(article.find("TI.ART").itertext())) if article.find("TI.ART") is not None else ""
