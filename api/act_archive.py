@@ -650,6 +650,7 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
               state_meta: dict[str, Any] | None = None,
               legal_meta: dict[str, Any] | None = None,
               retrospective_meta: dict[str, Any] | None = None,
+              reviewed_meta: dict[str, Any] | None = None,
               paragraph_layouts: ParagraphLayouts | None = None) -> str:
     status = archive_status
     scope = norm_ref.label if norm_ref is not None else "entire act"
@@ -672,7 +673,11 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
     ]
     if paragraph_layouts is not None:
         lines.append("paragraph_layout: separated")
-    if retrospective_meta:
+    if reviewed_meta:
+        for field, value in reviewed_meta.items():
+            lines.append(f"{field}: {json.dumps(value, ensure_ascii=False)}")
+        lines.append("legal_effect_verified: true")
+    elif retrospective_meta:
         lines.extend([
             f"as_of: {_yaml_string(retrospective_meta.get('as_of'))}",
             f"effective_from: {_yaml_string(retrospective_meta.get('effective_from'))}",
@@ -739,7 +744,13 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         "",
         f"> Archive status: **{status}** · requested/resolved {target} · HEAD {head_date}.",
     ])
-    if retrospective_meta:
+    if reviewed_meta:
+        source = reviewed_meta["sources"][0]
+        lines.extend([
+            f"> {scope} · {reviewed_meta['effective_from']} · "
+            f"[{source['locator']}]({source['url']})",
+        ])
+    elif retrospective_meta:
         if verified_reconstruction:
             lines.append(
                 "> The body is a complete verified reconstruction derived "
@@ -824,6 +835,41 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
                      "_Kein Normtext im konsolidierten Quellsnapshot._")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def reviewed_section_markdown(act, query, target, knowledge, records, fallback_head):
+    """Render a dated provision from a reviewed source without claiming a complete act."""
+    from api.reviewed_norm_editions import available, edition_at, provenance
+
+    if not query or not target:
+        return None
+    covered = {r["label"]: r for r in records.values()
+               if r["act_id"] == act["id"] and available(r, knowledge)}
+    if not covered:
+        return None
+    head = head_date_for(act, fallback_head)
+    if not head or target > head:
+        return None
+    try:
+        ref = _resolve_norm(act.get("norms") or [], query, covered)
+    except UnknownNormError:
+        return None  # Existing archives can contain additional historical labels.
+    record = covered.get(ref.label)
+    edition = edition_at(record, target) if record else None
+    if not edition:
+        return None
+    row = {"enbez": record["label"], "titel": record["title"], "text": edition["text"]}
+    ref = _resolve_norm([row], record["label"])
+    meta = provenance(record, edition)
+    if knowledge:
+        meta["as_of"] = knowledge
+    body = _markdown(act, [row], target=target, head_date=head, norm_ref=ref,
+                     exact=True, complete=True, source_exact=True, verified_reconstruction=False,
+                     archive_status="exact", gaps=[], reviewed_meta=meta)
+    return {"act_id": act["id"], "norm": ref.label, "requested_at": target, "resolved_at": target,
+            "head_date": head, "exact": True, "source_exact": True, "complete": True,
+            "archive_status": "exact", "verified_reconstruction": False, "gaps": [],
+            "legal_effect_verified": True, "markdown": body, **meta}
 
 
 def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
