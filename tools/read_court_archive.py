@@ -83,6 +83,7 @@ class CourtArchive:
         manifest = json.loads(fetch(self.base + "/manifest.json", MAX_MANIFEST))
         if manifest.get("schema") != "kerf-court-archive/1":
             raise ValueError("unknown archive schema")
+        self.public_database_sha256 = manifest["public_database_sha256"]
         self.files = manifest["files"]
         entry = self.files["catalog.json.gz"]
         if not 0 < entry["size"] <= MAX_CATALOG:
