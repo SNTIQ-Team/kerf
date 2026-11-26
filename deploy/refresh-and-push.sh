@@ -32,7 +32,14 @@ cleanup_remote() {
 trap cleanup_remote EXIT
 
 echo "==> upload complete generation -> sntiq:$remote_stage"
-rsync -az --delete web/data/ "sntiq:$remote_stage/"
+upload_args=(-az --delete)
+# Reuse unchanged bytes from the immutable serving release while the incoming
+# generation is uploaded. The publisher independently checks its disk reserve.
+if ssh sntiq 'test -L /srv/sntiq-kerf-api/data/web-data && test -d /srv/sntiq-kerf-api/data/web-data'; then
+    upload_args+=(--checksum --no-times --no-owner --no-group --no-perms
+                  --link-dest=/srv/sntiq-kerf-api/data/web-data)
+fi
+rsync "${upload_args[@]}" web/data/ "sntiq:$remote_stage/"
 
 echo "==> acquire production lock + atomic publish"
 ssh sntiq "flock -w 1800 /run/lock/kerf-refresh.lock \
