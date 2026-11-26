@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "act_id": "fed_gg",
+  "jurabk": "GG",
+  "reviewed_on": "2026-11-26",
+  "anchor": {
+    "state_sha256": "877207743f28e62c0b05ada4b89988028f072ef8797ac31bdd5da50955b29f97",
+    "builddate": "20260506174650",
+    "source_doknr": "BJNR000010949",
+    "source_url": "https://www.gesetze-im-internet.de/gg/"
+  },
+  "sources": {
+    "2022-2478": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl122s2478.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "f728b3d70ec038a6e5b7320e19179fa11ed36fd37220bf44d16c28d249cca774",
+      "source_file": "bgbl122s2478.pdf"
+    },
+    "2024-439": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.recht.bund.de/bgbl/1/2024/439/VO.html",
+      "pdf_sha256": "01c6cca34c2e5e7969585f905b799a0794eedb784e2d6965cd3da204cf11ae4c",
+      "source_file": "2024-439.pdf"
+    },
+    "2025-94": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.recht.bund.de/bgbl/1/2025/94/VO.html",
+      "pdf_sha256": "787a6aa654c42e95a34c35904c38eb52e99bc7ddcab4b18353c30b9f11d7b329",
+      "source_file": "2025-94.pdf"
+    },
+    "21843": {
+      "source": "German federal edition archived by WIPO Lex",
+      "url": "https://www.wipo.int/wipolex/en/legislation/details/21843",
+      "pdf_sha256": "d408312c9b630b674ba3e6df141ee842748196e2332283cef70cf050ae686af8",
+      "source_file": "21843.pdf"
+    },
+    "23183": {
+      "source": "German federal edition archived by WIPO Lex",
+      "url": "https://www.wipo.int/wipolex/en/legislation/details/23183",
+      "pdf_sha256": "caf85f799f2f7b4184b674690ed0d8636c203290169af9ddce16db11dcaa366b",
+      "source_file": "23183.pdf"
+    },
+    "bundestag-amendments-since-1990": {
+      "source": "Deutscher Bundestag",
+      "url": "https://www.bundestag.de/resource/blob/272508/Kapitel_13_02_Grundgesetz-__nderungsgesetze-pdf.pdf",
+      "pdf_sha256": "284a8925253f6e4efa1529218509d8770f8e95e36297c5e9d09b382367ed230f",
+      "source_file": "bundestag-amendments-since-1990.pdf"
+    }
+  },
+  "editions": [
+    {
+      "effective_from": "2022-12-24",
+      "published_at": "2022-12-23",
+      "gazette": "2022-2478",
+      "document_id": "bgbl-1-2022-s2478",
+      "projection_stand": "Stand: Zuletzt geändert durch Art. 1 G v. 19.12.2022 I 2478",
+      "projection_build": "",
+      "changes_from_previous": [],
+      "printed_state_sha256": "2ebf2e2bba07e675376d1f6e783394854cea83e93d67c631695c5fa7422b3219",
+      "printed_blocks": 203,
+      "state_sha256": "d70eac0e5d9dd4d03de9037c840ea2b5dc71dfe2699926be28dfbdf840413e77"
+    },
+    {
+      "effective_from": "2024-12-28",
+      "published_at": "2024-12-27",
+      "gazette": "2024-439",
+      "document_id": "bgbl-1-2024-439",
+      "projection_stand": "Art. 1 G v. 20.12.2024, BGBl. 2024 I Nr. 439",
+      "projection_build": "",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 93",
+          "current_norm_sha256": "6e0a0679883fd373706fe55fbccfb8f7a74b3dc0c3004b300a7ddc434ddc8ec8",
+          "previous_text": "(1) Das Bundesverfassungsgericht entscheidet: 1. über die Auslegung dieses Grundgesetzes aus Anlaß von Streitigkeiten über den Umfang der Rechte und Pflichten eines obersten Bundesorgans oder anderer Beteiligter, die durch dieses Grundgesetz oder in der Geschäftsordnung eines obersten Bundesorgans mit eigenen Rechten ausgestattet sind; 2. bei Meinungsverschiedenheiten oder Zweifeln über die förmliche und sachliche Vereinbarkeit von Bundesrecht oder Landesrecht mit diesem Grundgesetze oder die Vereinbarkeit von Landesrecht mit sonstigem Bundesrechte auf Antrag der Bundesregierung, einer Landesregierung oder eines Viertels der Mitglieder des Bundestages; 2a. bei Meinungsverschiedenheiten, ob ein Gesetz den Voraussetzungen des Artikels 72 Abs. 2 entspricht, auf Antrag des Bundesrates, einer Landesregierung oder der Volksvertretung eines Landes; 3. bei Meinungsverschiedenheiten über Rechte und Pflichten des Bundes und der Länder, insbesondere bei der Ausführung von Bundesrecht durch die Länder und bei der Ausübung der Bundesaufsicht; 4. in anderen öffentlich-rechtlichen Streitigkeiten zwischen dem Bunde und den Ländern, zwischen verschiedenen Ländern oder innerhalb eines Landes, soweit nicht ein anderer Rechtsweg gegeben ist; 4a. über Verfassungsbeschwerden, die von jedermann mit der Behauptung erhoben werden können, durch die öffentliche Gewalt in einem seiner Grundrechte oder in einem seiner in Artikel 20 Abs. 4, 33, 38, 101, 103 und 104 enthaltenen Rechte verletzt zu sein; 4b. über Verfassungsbeschwerden von Gemeinden und Gemeindeverbänden wegen Verletzung des Rechts auf Selbstverwaltung nach Artikel 28 durch ein Gesetz, bei Landesgesetzen jedoch nur, soweit nicht Beschwerde beim Landesverfassungsgericht erhoben werden kann; 4c. über Beschwerden von Vereinigungen gegen ihre Nichtanerkennung als Partei für die Wahl zum Bundestag; 5. in den übrigen in diesem Grundgesetze vorgesehenen Fällen. (2) Das Bundesverfassungsgericht entscheidet außerdem auf Antrag des Bundesrates, einer Landesregierung oder der Volksvertretung eines Landes, ob im Falle des Artikels 72 Abs. 4 die Erforderlichkeit für eine bundesgesetzliche Regelung nach Artikel 72 Abs. 2 nicht mehr besteht oder Bundesrecht in den Fällen des Artikels 125a Abs. 2 Satz 1 nicht mehr erlassen werden könnte. Die Feststellung, dass die Erforderlichkeit entfallen ist oder Bundesrecht nicht mehr erlassen werden könnte, ersetzt ein Bundesgesetz nach Artikel 72 Abs. 4 oder nach Artikel 125a Abs. 2 Satz 2. Der Antrag nach Satz 1 ist nur zulässig, wenn eine Gesetzesvorlage nach Artikel 72 Abs. 4 oder nach Artikel 125a Abs. 2 Satz 2 im Bundestag abgelehnt oder über sie nicht innerhalb eines Jahres beraten und Beschluss gefasst oder wenn eine entsprechende Gesetzesvorlage im Bundesrat abgelehnt worden ist. (3) Das Bundesverfassungsgericht wird ferner in den ihm sonst durch Bundesgesetz zugewiesenen Fällen tätig."
+        },
+        {
+          "enbez": "Art 94",
+          "current_norm_sha256": "9c7243e60a0d787b4c07397712e7ea534635e21f2803740ee2fc360dad98c15e",
+          "previous_text": "(1) Das Bundesverfassungsgericht besteht aus Bundesrichtern und anderen Mitgliedern. Die Mitglieder des Bundesverfassungsgerichtes werden je zur Hälfte vom Bundestage und vom Bundesrate gewählt. Sie dürfen weder dem Bundestage, dem Bundesrate, der Bundesregierung noch entsprechenden Organen eines Landes angehören. (2) Ein Bundesgesetz regelt seine Verfassung und das Verfahren und bestimmt, in welchen Fällen seine Entscheidungen Gesetzeskraft haben. Es kann für Verfassungsbeschwerden die vorherige Erschöpfung des Rechtsweges zur Voraussetzung machen und ein besonderes Annahmeverfahren vorsehen."
+        }
+      ],
+      "printed_state_sha256": "1e88b447e3db46f099da85a322c89781eb4353f15aa1a71eb19689555008b7ed",
+      "printed_blocks": 203,
+      "state_sha256": "f217da855a7ca1b6611d5a7cc845603debfd14c2091f5ef998cc1f3160cf06d9"
+    },
+    {
+      "effective_from": "2025-03-25",
+      "published_at": "2025-03-24",
+      "gazette": "2025-94",
+      "document_id": "bgbl-1-2025-94",
+      "projection_stand": "Stand: Zuletzt geändert durch Art. 1 G v. 22.3.2025 I Nr. 94",
+      "projection_build": "20260506",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 109",
+          "current_norm_sha256": "ed7ed56169d088967c190ae4650d05c26fb39c75961c5661e9ccfdcd72168772",
+          "previous_text": "(1) Bund und Länder sind in ihrer Haushaltswirtschaft selbständig und voneinander unabhängig. (2) Bund und Länder erfüllen gemeinsam die Verpflichtungen der Bundesrepublik Deutschland aus Rechtsakten der Europäischen Gemeinschaft auf Grund des Artikels 104 des Vertrags zur Gründung der Europäischen Gemeinschaft zur Einhaltung der Haushaltsdisziplin und tragen in diesem Rahmen den Erfordernissen des gesamtwirtschaftlichen Gleichgewichts Rechnung. (3) Die Haushalte von Bund und Ländern sind grundsätzlich ohne Einnahmen aus Krediten auszugleichen. Bund und Länder können Regelungen zur im Auf- und Abschwung symmetrischen Berücksichtigung der Auswirkungen einer von der Normallage abweichenden konjunkturellen Entwicklung sowie eine Ausnahmeregelung für Naturkatastrophen oder außergewöhnliche Notsituationen, die sich der Kontrolle des Staates entziehen und die staatliche Finanzlage erheblich beeinträchtigen, vorsehen. Für die Ausnahmeregelung ist eine entsprechende Tilgungsregelung vorzusehen. Die nähere Ausgestaltung regelt für den Haushalt des Bundes Artikel 115 mit der Maßgabe, dass Satz 1 entsprochen ist, wenn die Einnahmen aus Krediten 0,35 vom Hundert im Verhältnis zum nominalen Bruttoinlandsprodukt nicht überschreiten. Die nähere Ausgestaltung für die Haushalte der Länder regeln diese im Rahmen ihrer verfassungsrechtlichen Kompetenzen mit der Maßgabe, dass Satz 1 nur dann entsprochen ist, wenn keine Einnahmen aus Krediten zugelassen werden. (4) Durch Bundesgesetz, das der Zustimmung des Bundesrates bedarf, können für Bund und Länder gemeinsam geltende Grundsätze für das Haushaltsrecht, für eine konjunkturgerechte Haushaltswirtschaft und für eine mehrjährige Finanzplanung aufgestellt werden. (5) Sanktionsmaßnahmen der Europäischen Gemeinschaft im Zusammenhang mit den Bestimmungen in Artikel 104 des Vertrags zur Gründung der Europäischen Gemeinschaft zur Einhaltung der Haushaltsdisziplin tragen Bund und Länder im Verhältnis 65 zu 35. Die Ländergesamtheit trägt solidarisch 35 vom Hundert der auf die Länder entfallenden Lasten entsprechend ihrer Einwohnerzahl; 65 vom Hundert der auf die Länder entfallenden Lasten tragen die Länder entsprechend ihrem Verursachungsbeitrag. Das Nähere regelt ein Bundesgesetz, das der Zustimmung des Bundesrates bedarf."
+        },
+        {
+          "enbez": "Art 115",
+          "current_norm_sha256": "9332165bd713742a78591a2ff86b4ac21ca2fc9e7df4648f924e4fac4f4f20be",
+          "previous_text": "(1) Die Aufnahme von Krediten sowie die Übernahme von Bürgschaften, Garantien oder sonstigen Gewährleistungen, die zu Ausgaben in künftigen Rechnungsjahren führen können, bedürfen einer der Höhe nach bestimmten oder bestimmbaren Ermächtigung durch Bundesgesetz. (2) Einnahmen und Ausgaben sind grundsätzlich ohne Einnahmen aus Krediten auszugleichen. Diesem Grundsatz ist entsprochen, wenn die Einnahmen aus Krediten 0,35 vom Hundert im Verhältnis zum nominalen Bruttoinlandsprodukt nicht überschreiten. Zusätzlich sind bei einer von der Normallage abweichenden konjunkturellen Entwicklung die Auswirkungen auf den Haushalt im Auf- und Abschwung symmetrisch zu berücksichtigen. Abweichungen der tatsächlichen Kreditaufnahme von der nach den Sätzen 1 bis 3 zulässigen Kreditobergrenze werden auf einem Kontrollkonto erfasst; Belastungen, die den Schwellenwert von 1,5 vom Hundert im Verhältnis zum nominalen Bruttoinlandsprodukt überschreiten, sind konjunkturgerecht zurückzuführen. Näheres, insbesondere die Bereinigung der Einnahmen und Ausgaben um finanzielle Transaktionen und das Verfahren zur Berechnung der Obergrenze der jährlichen Nettokreditaufnahme unter Berücksichtigung der konjunkturellen Entwicklung auf der Grundlage eines Konjunkturbereinigungsverfahrens sowie die Kontrolle und den Ausgleich von Abweichungen der tatsächlichen Kreditaufnahme von der Regelgrenze, regelt ein Bundesgesetz. Im Falle von Naturkatastrophen oder außergewöhnlichen Notsituationen, die sich der Kontrolle des Staates entziehen und die staatliche Finanzlage erheblich beeinträchtigen, können diese Kreditobergrenzen auf Grund eines Beschlusses der Mehrheit der Mitglieder des Bundestages überschritten werden. Der Beschluss ist mit einem Tilgungsplan zu verbinden. Die Rückführung der nach Satz 6 aufgenommenen Kredite hat binnen eines angemessenen Zeitraumes zu erfolgen."
+        },
+        {
+          "enbez": "Art 143h",
+          "current_norm_sha256": "ab75e2b9cc70bd86fc255dc80d60764704098e90f58e3ef607b1c82bafb7dbbd",
+          "previous_text": null,
+          "after": "Art 143g",
+          "before": "Art 144"
+        }
+      ],
+      "printed_state_sha256": "e613254511755e54001dec05752592d861ed2e04161b2f07b451b9c7bf255139",
+      "printed_blocks": 204,
+      "state_sha256": "877207743f28e62c0b05ada4b89988028f072ef8797ac31bdd5da50955b29f97"
+    }
+  ]
+}
