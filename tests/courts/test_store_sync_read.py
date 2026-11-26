@@ -874,6 +874,26 @@ def test_cited_form_disambiguates_only_the_named_document(conn):
     assert relink(conn) == 0  # two judgments on the same day and docket
 
 
+def test_short_court_forms_apply_only_to_the_immediately_named_decision():
+    from courts.casenumbers import case_key
+    from courts.store import _sole_target_agrees, _target_by_cited_form
+
+    day, docket = "1998-09-24", case_key("4 CN 2.98")
+    candidates = '[["judgment","Urteil"],["order","Beschluss"]]'
+    for prefix, family in (("BVerwG B. v.", "order"), ("BVerwG, U.v.", "judgment"),
+                           ("Bundesverwaltungsgericht, U. vom", "judgment")):
+        raw = f"{prefix} 24.09.1998 – 4 CN 2.98"
+        assert _target_by_cited_form(candidates, raw, day, docket) == family
+        assert _sole_target_agrees(raw, day, docket, "Urteil") == (family == "judgment")
+    for prefix in ("BVerwG, z.B. v.", "BVerwG, z. B. v.", "BVerwG, A. B. v.",
+                   "BVerwG, U. und B. v.", "BVerwG, unter B. v.", "BVerwG, B. oder Urteil vom",
+                   "BVerwG, B. ODER Urteil vom"):
+        assert _target_by_cited_form(candidates, f"{prefix} 24.09.1998 – 4 CN 2.98", day, docket) is None
+    raw = "BVerwG B. v. 24.09.1998 – 4 CN 2.98"
+    assert _target_by_cited_form(candidates, raw, "1998-09-25", docket) is None
+    assert _target_by_cited_form(candidates, raw, day, case_key("4 CN 3.98")) is None
+
+
 def test_sole_docket_match_respects_an_explicit_conflicting_form(conn):
     from courts.store import relink, store_decision
 
@@ -881,7 +901,7 @@ def test_sole_docket_match_respects_an_explicit_conflicting_form(conn):
     doc, _ = store_decision(conn, _bsg("rii", "judgment", ecli, ("1", "2")),
                             content_hash="a", capture_path="-", media_type="x")
     key = conn.execute("SELECT case_key FROM case_numbers WHERE decision_id=?", (doc,)).fetchone()[0]
-    words = ("Urteil", "Beschluss", "Urt. und Beschl.", "Entscheidung", "Urteile Urteil", "Senatsurteil Urteil", "Urteil, nicht Beschluss")
+    words = ("Urteil", "Beschluss", "Urt. und Beschl.", "Entscheidung", "Urteile Urteil", "Senatsurteil Urteil", "Urteil, nicht Beschluss", "B.", "U.")
     for word in words:
         conn.execute("""
             INSERT INTO relations(decision_id,relation,target_kind,target_id,target_court_id,
@@ -890,9 +910,9 @@ def test_sole_docket_match_respects_an_explicit_conflicting_form(conn):
             VALUES(?,'mentions','decision','court:bsg/example','bsg','2025-06-18',?,?,?,'context',
                    'decision_text','parser',0,1)
         """, (doc, key, doc, f"BSG, {word} vom 18.06.2025 – B 6 KA 4/24 R"))
-    assert relink(conn) == 1
+    assert relink(conn) == 2
     rows = list(conn.execute("SELECT target_raw,target_decision_id FROM relations ORDER BY id"))
-    assert [r[1] for r in rows] == [doc, None, doc, doc, doc, doc, doc]
+    assert [r[1] for r in rows] == [doc, None, doc, doc, doc, doc, doc, None, doc]
     assert all(word in row[0] for word, row in zip(words, rows))
     assert relink(conn) == 0
 

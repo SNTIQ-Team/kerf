@@ -18,7 +18,7 @@ from pathlib import Path
 
 from . import PARSER_VERSION, SCHEMA_VERSION
 from .casenumbers import case_key
-from .citations import DECISION_REF_RE, Relation, extract_all, parse_date, synthetic_decision_id
+from .citations import COURT_RE, DECISION_REF_RE, Relation, extract_all, parse_date, synthetic_decision_id
 from .config import data_home, db_path
 from .packs import CaptureIntegrityError, PackStore
 from .courtids import resolve as resolve_court
@@ -1220,11 +1220,24 @@ _CITED_FORM_WORD = re.compile(
 )
 
 
+_SHORT_FORM = re.compile(r"\s*,?\s*(?P<form>[BU])\.\s*")
+
+
 @lru_cache(maxsize=8192)
 def _cited_form(raw: str, day: str, docket: str) -> str | None:
     """Return the single legal form explicitly attached to this date and docket."""
     matches = [match for match in DECISION_REF_RE.finditer(raw)
                if match.group("dtype") and parse_date(match) == day and case_key(match.group("az")) == docket]
+    if not matches:
+        # A single letter denotes the form only directly after the court name.
+        # Elsewhere it can belong to ordinary prose ("z. B.") or an initial.
+        if "B." in raw or "U." in raw:
+            court = COURT_RE.match(raw)
+            short = _SHORT_FORM.match(raw, court.end()) if court else None
+            ref = DECISION_REF_RE.match(raw, short.end()) if short else None
+            if ref and not ref["dtype"] and parse_date(ref) == day and case_key(ref["az"]) == docket:
+                return "beschl." if short["form"] == "B" else "urt."
+        return None
     if len(matches) != 1:
         return None
     match = matches[0]
@@ -1233,6 +1246,11 @@ def _cited_form(raw: str, day: str, docket: str) -> str | None:
     if re.search(r"\b(?:nicht(?:\s+als)?|kein(?:e[snmr]?)?|(?:an)?statt(?:\s+des)?|anstelle(?:\s+des)?)\s*$",
                  prefix, re.IGNORECASE):
         return None
+    if "B." in prefix or "U." in prefix:
+        court = COURT_RE.match(prefix)
+        short = _SHORT_FORM.match(prefix, court.end()) if court else None
+        if short and re.fullmatch(r"(?:und|oder|sowie|bzw\.|/|&)\s*", prefix[short.end():], re.IGNORECASE):
+            return None
     previous_words = list(_CITED_FORM_WORD.finditer(prefix))
     if previous_words:
         between = prefix[previous_words[-1].end():]
