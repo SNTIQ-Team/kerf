@@ -30,7 +30,7 @@ Instrument list = regex over DIP vorgang titles
 GEAS/asylum core that is always included.
 
 Output (data/snapshots/eu_layer/<date>/):
-    instruments.jsonl    {celex, kind, year, number, title, pub_date?,
+    instruments.jsonl    {celex, kind, year, number, title, document_date?, pub_date?,
                           in_force?, dip_vorgang_ids[], in_geas_core}
     transpositions.jsonl {directive_celex, mne_celex, title, citation?}
     eu_events.jsonl      {kind:"published", jurisdiction:"EU", celex,
@@ -46,6 +46,7 @@ import sys
 from collections import defaultdict
 from datetime import date, timedelta
 
+from eu_dates import general_date
 from common import Http, latest_snapshot, read_jsonl, snapshot_dir, \
     write_jsonl
 
@@ -133,12 +134,14 @@ def dip_instruments() -> dict[str, set[str]]:
 
 
 def fetch_metadata(http: Http, celexes: list[str]) -> dict[str, dict]:
-    """CELEX -> {title, pub_date, in_force} from CELLAR (batched VALUES)."""
+    """Work dates and Official Journal publication dates come from separate CELLAR predicates."""
     meta: dict[str, dict] = {}
+    force_dates: dict[str, list[dict]] = defaultdict(list)
     for batch in batches(celexes, 15):
         values = " ".join(f"<{celex_uri(c)}>" for c in batch)
         q = PREFIXES + f"""\
-SELECT DISTINCT ?u ?lang ?title ?pub ?force ?inforce WHERE {{
+PREFIX ann: <http://publications.europa.eu/ontology/annotation#>
+SELECT DISTINCT ?u ?lang ?title ?documentDate ?pub ?force ?dateRole ?dateComment ?inforce WHERE {{
   VALUES ?u {{ {values} }}
   ?w owl:sameAs ?u .
   OPTIONAL {{
@@ -147,8 +150,18 @@ SELECT DISTINCT ?u ?lang ?title ?pub ?force ?inforce WHERE {{
        cdm:expression_title ?title .
     FILTER(?lang IN (<{LANG_DEU}>, <{LANG_ENG}>))
   }}
-  OPTIONAL {{ ?w cdm:work_date_document ?pub }}
-  OPTIONAL {{ ?w cdm:resource_legal_date_entry-into-force ?force }}
+  OPTIONAL {{ ?w cdm:work_date_document ?documentDate }}
+  OPTIONAL {{ ?w cdm:official-journal-act_date_publication ?actPublication }}
+  OPTIONAL {{ ?w cdm:resource_legal_published_in_official-journal/cdm:publication_general_date_publication ?issuePublication }}
+  BIND(COALESCE(?actPublication, ?issuePublication) AS ?pub)
+  OPTIONAL {{
+    ?w cdm:resource_legal_date_entry-into-force ?force .
+    OPTIONAL {{
+      ?assertion owl:annotatedSource ?w ; owl:annotatedProperty cdm:resource_legal_date_entry-into-force ; owl:annotatedTarget ?force .
+      OPTIONAL {{ ?assertion ann:type_of_date ?dateRole }}
+      OPTIONAL {{ ?assertion ann:comment_on_date ?dateComment }}
+    }}
+  }}
   OPTIONAL {{ ?w cdm:resource_legal_in-force ?inforce }}
 }}"""
         for row in sparql(http, q):
@@ -158,13 +171,17 @@ SELECT DISTINCT ?u ?lang ?title ?pub ?force ?inforce WHERE {{
             if "title" in row:
                 key = "title_de" if lang == LANG_DEU else "title_en"
                 m.setdefault(key, row["title"])
+            if row.get("documentDate"):
+                m["document_date"] = row["documentDate"]
             if row.get("pub"):
-                m.setdefault("pub_date", row["pub"])
+                m["pub_date"] = min(m.get("pub_date", row["pub"]), row["pub"])
             if row.get("force"):
-                if row["force"] >= "1900":   # 1001-01-01 = CELLAR n/a
-                    m.setdefault("in_force_date", row["force"])
+                force_dates[celex].append({"date": row["force"], "dateRole": row.get("dateRole", ""),
+                                           "dateComment": row.get("dateComment", "")})
             if row.get("inforce"):
-                m.setdefault("in_force", row["inforce"] == "1")
+                m.setdefault("in_force", row["inforce"].lower() in {"1", "true"})
+    for celex, rows in force_dates.items():
+        meta[celex]["in_force_date"] = general_date(rows, "EV")
     return meta
 
 
@@ -274,6 +291,7 @@ def main() -> int:
             "year": int(c[1:5]),
             "number": int(c[6:]),
             "title": m.get("title_de") or m.get("title_en") or "",
+            "document_date": m.get("document_date"),
             "pub_date": m.get("pub_date"),
             "in_force": m.get("in_force"),
             "in_force_date": m.get("in_force_date"),
