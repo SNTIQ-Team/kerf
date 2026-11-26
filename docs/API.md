@@ -1543,10 +1543,13 @@ a norm missing from the TOC has `norm_url: null`.
 included) plus the front matter as typed `provenance` and the limitations as
 `warnings`.
 
-Six editions of § 42 SGB VIII cover 1 July 1998 through the corpus checked on
-26 November 2026. Federal gazettes, 25 amending articles and dated publications
-from Deutsche Rentenversicherung document the wording. The section record
-includes its legal dates, knowledge date, text hash and the hash of each source.
+Eight editions of § 42 SGB VIII cover the nationwide wording from 1 January 1991
+through 26 November 2026. Four early federal gazette editions and eleven amending
+acts document the wording before July 1998. A sentence on maintenance and medical
+assistance took effect on 1 April 1993. The reference to the competent court
+changed on 1 July 1998. The earlier commencement in the accession territory was
+3 October 1990. Each edition records when Kerf verified its wording and includes
+the text hash and the hash of each source.
 For 1 January 2000, request
 `GET /acts/fed_sgb_8/markdown.json?norm=%C2%A7%2042&at=2000-01-01`
 or `GET /norms/de/bund/sgb_8/para/42/at?date=2000-01-01`.
