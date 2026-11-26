@@ -35,6 +35,8 @@ SERVICE_INDEX = {
         "/amending-acts/{document_id}",
         "/decisions", "/decisions/{id}", "/decision-passages", "/decisions/{id}/relations",
         "/decisions/{id}/passages/{passage_id}", "/decisions/{id}/source",
+        "/rii/decisions/{document}", "/rii/decisions/{document}/passages",
+        "/rii/decisions/{document}/passages/{anchor}", "/rii/decisions/{document}/source",
         "/git", "/graph", "/hierarchy", "/eu-index",
         "/procedures/watched", "/amendment-fates", "/federal-history",
         "/official-states", "/verified-reconstructions",
@@ -67,6 +69,7 @@ server.add_middleware(
     expose_headers=[
         "Content-Disposition",
         "X-Kerf-Snapshot",
+        "X-Kerf-RII-Revision",
         "X-Kerf-Ignored-Arguments",
         "X-Kerf-Source-Sha256",
         "X-Kerf-Requested-Date",

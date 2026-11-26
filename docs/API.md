@@ -1569,3 +1569,18 @@ is not an invented court paragraph. Metadata-only decisions return typed source
 gaps. Dates and unknown/repeated arguments are rejected; these are current
 retained representations, not historical publication-time retrieval. Existing
 `If-Kerf-Snapshot` checks bind related calls to one immutable generation.
+
+### Rechtsprechung im Internet
+
+Open a federal court decision by its RII document number. Both `JURE100056775` and `jb-JURE100056775` identify the same document. Each response carries the immutable dataset commit in `X-Kerf-RII-Revision`.
+
+| Request | Response |
+| --- | --- |
+| `GET /rii/decisions/{document}` | Court, date, docket, ECLI where published, passage counts and official source URLs. |
+| `GET /rii/decisions/{document}/passages` | Passages in source order. Filter by printed `rn` or case-insensitive text `q`. Use `limit` (1–250) and `offset` for pagination. |
+| `GET /rii/decisions/{document}/passages/{anchor}` | One passage with its exact text, printed number, section, authorship, XML locators and text SHA-256. A positional anchor such as `p-1` has a null `printed_number`. |
+| `GET /rii/decisions/{document}/source` | The publisher’s original ZIP for a decision containing one XML file. For a ZIP with attachments, this returns the exact XML. The metadata field `source_zip` links to the publisher’s full archive. |
+
+A verified catalogue or passage miss returns HTTP 404. If the upstream release is unavailable or a hash check fails, the service returns HTTP 503. The server pins the Hugging Face commit with `KERF_RII_REVISION` and the SHA-256 of `rii/manifest.json` with `KERF_RII_MANIFEST_SHA256`.
+
+The command-line reader uses the same settings. For example, `python3 tools/read_rii_archive.py JURE100056775 --anchor rn-1` prints the sourced passage. Use `--passages --rn 1` to list all occurrences of a printed number or `--source` to write the original bytes to stdout.
