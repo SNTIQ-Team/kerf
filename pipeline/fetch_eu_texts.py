@@ -386,7 +386,7 @@ def _formex_text(el: ET.Element, *, keep_markers: bool = False) -> str:
     parts: list[str] = []
 
     def walk(node: ET.Element, keep_markers: bool = False) -> None:
-        keep_markers = keep_markers or node.tag in {"ARTICLE", "LIST"}
+        keep_markers = keep_markers or node.tag in {"ARTICLE", "LIST", "QUOT.S"}
         if node.tag == "NOTE" or (not keep_markers and node.tag in {"NO.P", "NO.PARAG"}):
             return
         if node.tag in {"QUOT.START", "QUOT.END"}:
