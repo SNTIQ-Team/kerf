@@ -33,6 +33,9 @@ def source_type(blob,source,metadata):
   return (root.findtext('doktyp') or '').strip() or None
  # These profiles' identity, court/date/kind and structural checks are mandatory
  # at index build. BSG's heading says Beschluss, not the curated subtype.
+ if profile=='neuris-akn/1':
+  from tools.neuris_passages import document
+  return document(blob,metadata)[2]
  if profile=='bsg-html/1':return 'Beschluss'
  if profile=='sozialgerichtsbarkeit-json/1':
   record=json.loads(blob)
