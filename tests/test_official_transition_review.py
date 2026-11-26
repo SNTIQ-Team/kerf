@@ -94,6 +94,8 @@ def test_review_requires_all_three_official_gates() -> None:
             "article": "7", "heading": "Änderung des Asylgesetzes",
             "text": f"Artikel 7\n§ 29a Absatz 2a wird ersetzt: {new}"}],
     }
+    assert review_transitions(
+        [{**transition, "unordered_observation_dates": ["2026-07-10"]}], [document]) == []
     reviews = review_transitions([transition], [document])
     assert len(reviews) == 1
     review = reviews[0]

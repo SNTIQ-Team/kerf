@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 
 from api.markdown_layout import ParagraphLayouts, apply_paragraph_layout
 from api.norm_identity import reader_designator
+from api.official_state_store import single_state_observations, unordered_observation_days
 
 
 class ArchiveRequestError(ValueError):
@@ -106,10 +107,10 @@ def _official_observations(act: dict[str, Any],
         row["observed_at"] = observed_at
         row["state_sha256"] = digest
         rows.append(row)
-    # A cumulative store may record multiple source builds on one retrieval
-    # day.  Keep the last deterministic row for that date.
+    # Repeated copies of the same state can share a date. Distinct states on
+    # one day remain in the evidence ledger and cannot supply a date-only text.
     by_date = {row["observed_at"]: row for row in sorted(
-        rows, key=lambda item: (
+        single_state_observations(rows), key=lambda item: (
             item["observed_at"], str(item.get("builddate") or ""),
             item["state_sha256"]))}
     return list(by_date.values())
@@ -435,15 +436,18 @@ def build_archive_index(act: dict[str, Any], *, fallback_head: Any = None
             continue
         norms.append({"id": label, "enbez": label, "label": label,
                       "title": "historical designator"})
+    unordered = sorted({day for _, day in unordered_observation_days(act.get("official_states") or [])
+                        if day <= head_date})
     return {
         "act_id": act.get("id"),
         "jurabk": act.get("jurabk"),
         "title": act.get("title"),
         "head_date": head_date,
+        "unordered_observation_dates": unordered,
         "entries": sorted(dates.values(), key=lambda item: item["date"]),
         "norms": norms,
         "gaps": gaps,
-        "complete": not gaps and len(dates) == 1,
+        "complete": not gaps and not unordered and len(dates) == 1,
         "official_observations": len(observations),
         "official_archive_start": min(
             (row["observed_at"] for row in observations), default=None),
