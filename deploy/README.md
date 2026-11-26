@@ -117,3 +117,15 @@ deploy/history-bundle-push.sh --change-dates <dates> \
 ```
 
 If the bundle is absent or its signature fails verification, the builder still produces history from the official daily states alone. Amendment discovery for 2023 onward also reads the recht.bund.de issue index (`pipeline/index_bgbl_issues.py`, refresh step 7a, `data/bgbl_documents/index/`).
+
+### Compact court index
+
+The court API can keep full-text search, passage addresses, citations and public observations on the server and fetch original files from a published Hub revision. Build the four court files in a new directory:
+
+```sh
+python3 tools/compact_court_index.py /path/to/full/web-data /path/to/compact-court "$HUB_COMMIT"
+```
+
+Supply the 40-character commit of the Hugging Face dataset that mirrors this exact court database. The command checks the catalogue against every retained original. Assemble a new web-data generation with the remaining files from the same full release and the four generated files in place of its court database, court manifest and observation feed. The normal publisher can then check and switch generations. A full court database takes precedence when present.
+
+The November 2026 sample of 768 decisions used 40,177,664 bytes of search SQLite, down from 85,409,792. After loading the catalogue, the original-file endpoint reads one byte range and checks both SHA-256 digests. If Hugging Face is unavailable the original-file request returns HTTP 503. Search and passage lookups run on the local index.
