@@ -277,3 +277,35 @@ def test_prior_complete_federal_releases_remain_verifiable(tmp_path, start, coun
     artifact["reconstructions"][0]["evidence"].pop()
     with pytest.raises(ReconstructionError, match="source evidence"):
         validate_published_editions(tmp_path, manifest, artifact)
+
+
+def test_hf_export_replays_editions_before_replacing_public_files(tmp_path):
+    from export_hf import _export_verified_reconstructions
+    from official_states import load_manifest
+
+    artifact, source, states = _inputs()
+    store = tmp_path / "custom-store"
+    manifest = load_manifest(store)
+    anchor, metadata = store_state_object(store, next(iter(states.values())))
+    manifest["observations"] = source["observations"]
+    manifest["objects"][anchor] = metadata
+    (store / "manifest.json").write_text(json.dumps(manifest))
+    add_reviewed_editions(artifact, manifest, states)
+    artifact["state_identity"] = "sha256-canonical-uncompressed-json"
+    for key, state in artifact.pop("state_objects").items():
+        digest, metadata = store_state_object(store, state)
+        assert key == digest
+        artifact["object_metadata"][key].update(metadata)
+    path = tmp_path / "source.json"
+    path.write_text(json.dumps(artifact))
+    out = tmp_path / "export"
+    count = len(artifact["reconstructions"])
+    assert _export_verified_reconstructions(out, path, store) == (count, count)
+    published = out / "verified_reconstructions.json"
+    original = published.read_bytes()
+    assert original == path.read_bytes()
+    artifact["reconstructions"][0]["evidence"] = []
+    path.write_text(json.dumps(artifact))
+    with pytest.raises(ReconstructionError, match="source evidence"):
+        _export_verified_reconstructions(out, path, store)
+    assert published.read_bytes() == original
