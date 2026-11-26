@@ -11,6 +11,7 @@ from test_backfill_legacy_bgbl_history import pdf_bytes, selection
 
 
 def candidate(tmp_path, monkeypatch):
+    monkeypatch.setattr(legacy, "SNAPSHOT_ROOT", tmp_path / "snapshots")
     archive = legacy.LegacyArchive(tmp_path, max_bytes=1_000_000, min_free_bytes=0)
     document = legacy.capture_legacy_bytes(selection(), pdf_bytes(), archive,
                                           captured_at="2026-09-21T10:00:00+00:00")

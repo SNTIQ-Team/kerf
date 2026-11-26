@@ -189,6 +189,8 @@ def _receipted(offload_root: str, signers: str, _stamp: tuple
         try:
             payload = receipt_path.read_bytes()
             receipt = json.loads(payload)
+            if not isinstance(receipt, dict):
+                raise ArchiveReceiptError("invalid archive receipt")
             namespace = archive_namespace(receipt.get("schema"), RECEIPT_SCHEMA,
                                           RECEIPT_NAMESPACE)
             verify_signature(payload, Path(str(receipt_path) + ".sig"), namespace, Path(signers))
@@ -259,6 +261,8 @@ def verify_attestation(snapshot_dir: Path, signers: Path | None = None
     if payload is None:
         raise ArchiveReceiptError(f"no attestation in {snapshot_dir}")
     value = json.loads(payload)
+    if not isinstance(value, dict):
+        raise ArchiveReceiptError("invalid archive attestation")
     namespace = archive_namespace(value.get("schema"), ATTESTATION_SCHEMA, ATTESTATION_NAMESPACE)
     verify_signature(payload, Path(str(path) + ".sig"), namespace, signers)
     if value.get("snapshot") != snapshot_dir.name:
