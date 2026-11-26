@@ -840,19 +840,22 @@ def test_cited_form_disambiguates_only_the_named_document(conn):
         """, (judgment_id, docket, raw)).lastrowid
 
     ids = [add(f"BSG, {word} vom 18.06.2025 – B 6 KA 4/24 R")
-           for word in ("Urteil", "Beschluss", "Urt.", "Beschl.", "Entscheidung", "Teilurteil")]
+           for word in ("Urteil", "Beschluss", "Urt.", "Beschl.", "Entscheidung", "Teilurteil",
+                        "Urteil und Beschluss", "Beschluss/Urteil", "Urteile sowie Beschlüsse", "Urt. oder Beschl.")]
     ids += [add("BSG, Urteil vom 17.06.2025 – B 6 KA 4/24 R"),
             add("BSG, Urteil vom 18.06.2025 – B 6 KA 5/24 R")]
-    assert relink(conn) == 4
+    chain = add("BSG, Urteil vom 01.01.2020 – B 6 KA 2/19 R; Beschluss vom 18.06.2025 – B 6 KA 4/24 R")
+    assert relink(conn) == 5
+    assert conn.execute("SELECT target_decision_id FROM relations WHERE id=?", (chain,)).fetchone()[0] == order_id
 
     def targets():
         return [conn.execute("SELECT target_decision_id FROM relations WHERE id=?", (i,)).fetchone()[0]
                 for i in ids]
 
-    assert targets() == [judgment_id, order_id, judgment_id, order_id, None, None, None, None]
+    assert targets() == [judgment_id, order_id, judgment_id, order_id] + [None] * 8
     assert relink(conn) == 0
     conn.execute("UPDATE decisions SET decision_type='EuGH-Vorlage' WHERE id=?", (order_id,))
-    assert relink(conn) == 4
+    assert relink(conn) == 5
     assert targets() == [None] * len(ids)
     conn.execute("UPDATE decisions SET decision_type='Teilurteil' WHERE id=?", (order_id,))
     assert relink(conn) == 0  # two judgments on the same day and docket
