@@ -74,9 +74,10 @@ class RiiArchive:
 
     def _entry(self, document):
         bucket = sha256(document.encode()).hexdigest()[:2]
-        entry = self._bucket(bucket).get(document)
-        if entry is None:
+        table = self._bucket(bucket)
+        if document not in table:
             raise MissingRecord(document)
+        entry = table[document]
         if not isinstance(entry, dict):
             raise ValueError("Invalid RII catalogue entry")
         return entry
@@ -124,7 +125,10 @@ class RiiArchive:
                 if (len(members) != 1 or PurePosixPath(members[0].filename).name.casefold() != document.casefold()+".xml"
                         or members[0].file_size > MAX_FRAME):
                     raise ValueError("Unexpected files in the RII decision ZIP")
-                xml = archive.read(members[0])
+                try:
+                    xml = archive.read(members[0])
+                except RuntimeError as exc:
+                    raise ValueError("Unsupported RII ZIP compression or encryption") from exc
             payload, extension = raw, "zip"
         elif entry["pack_format"] == "gzip_xml" and entry["attachment_count"] > 0:
             xml = unpack(raw, MAX_FRAME)
