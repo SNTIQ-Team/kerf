@@ -192,3 +192,43 @@ def add_reviewed_editions(artifact: dict, manifest: dict, states: dict, *,
     artifact["state_objects"].update(pending_states)
     artifact["object_metadata"].update(pending_meta)
     artifact["reconstructions"].extend(reversed(pending_rows))
+
+
+def validate_published_editions(root: Path, manifest: dict, artifact: dict) -> set[str]:
+    """Replay each edition in the upload against the installed review and its GII anchor."""
+    from official_states import load_state_verified
+    metadata = artifact["object_metadata"]
+    supplied = {key for key, value in metadata.items() if isinstance(value, dict)
+                and value.get("origin") == "reviewed_federal_edition_replay"}
+    rows = [r for r in artifact["reconstructions"] if isinstance(r, dict)
+            and (r.get("state_sha256") in supplied or str(r.get("id") or "").startswith("federal-edition:"))]
+    if not supplied and not rows:
+        return set()
+    review = json.loads(GG_REVIEW.read_bytes())
+    anchor = review["anchor"]["state_sha256"]
+    if anchor not in manifest["objects"]:
+        raise ReconstructionError("federal edition anchor missing from the official ledger")
+    state = load_state_verified(root / "federal_states", anchor)
+    replay = {"built_at": artifact["built_at"], "state_objects": {},
+              "object_metadata": {}, "reconstructions": []}
+    add_reviewed_editions(replay, manifest, {anchor: state})
+    expected = {r["state_sha256"]: r for r in replay["reconstructions"]}
+    if supplied != set(expected):
+        # The initial published review covers two complete editions from 2022.
+        first_review = {key: r for key, r in expected.items()
+                        if r["effective_from"] in {"2022-12-24", "2024-12-28"}}
+        if len(first_review) != 2 or supplied != set(first_review):
+            raise ReconstructionError("incomplete or unknown federal edition chain")
+        expected = first_review
+        first_sources = {"2022-2478", "2024-439", "2025-94", "21843", "23183",
+                         "bundestag-amendments-since-1990"}
+        urls = {review["sources"][key]["url"] for key in first_sources}
+        for r in expected.values():
+            r["evidence"] = [s for s in r["evidence"] if s["source"] == "GII" or s["url"] in urls]
+    by_digest = {r.get("state_sha256"): r for r in rows}
+    if len(rows) != len(expected) or by_digest != expected:
+        raise ReconstructionError("federal edition dates, events or source evidence differ from replay")
+    for key in supplied:
+        if any(metadata[key].get(k) != v for k, v in replay["object_metadata"][key].items()):
+            raise ReconstructionError("federal edition object metadata differs from replay")
+    return supplied
