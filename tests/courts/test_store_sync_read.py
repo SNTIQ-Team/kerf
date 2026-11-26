@@ -792,3 +792,13 @@ def test_relink_rechecks_identity_when_a_second_document_arrives(conn):
     assert relink(conn) == 3
     assert links() == {dated:None, undated:None, printed:None, conflicting:None, reviewed:first_id}
     assert relink(conn) == 0
+
+    assert citing_decisions(conn, ecli)["status"] == "ambiguous_identity"
+    assert citing_decisions(conn, "rii:first")["total"] == 1  # the reviewed link
+    assert citing_decisions(conn, "rii:second")["total"] == 0
+    # A shared docket in the citation can have the same spelling as the
+    # synthetic ID of the second stored document.
+    conn.execute("UPDATE relations SET target_id=? WHERE id=?", (second_id, dated))
+    assert citing_decisions(conn, second_id)["total"] == 0
+    literal = citing_decisions(conn, "ECLI:DE:BSG:2025:UNKNOWN")
+    assert literal["total"] == 1 and literal["relations"][0]["target_decision_id"] is None
