@@ -11,7 +11,9 @@ import zipfile
 
 from tools.read_court_archive import BASE, fetch, unpack, verify
 
+CANONICAL_DOCUMENT = re.compile(r"jb-[A-Z0-9]{1,64}")
 DOCUMENT_ID = re.compile(r"(?:jb-)?([A-Z0-9]{1,64})", re.IGNORECASE | re.ASCII)
+ECLI = re.compile(r"ECLI:[A-Z]{2}:[A-Z0-9.]+:[0-9]{4}:[A-Z0-9.]+", re.IGNORECASE | re.ASCII)
 MAX_FRAME = 64 * 1024**2
 MAX_LOOKUP = 8 * 1024**2
 MAX_MANIFEST = 4 * 1024**2
@@ -19,6 +21,16 @@ MAX_MANIFEST = 4 * 1024**2
 
 class MissingRecord(LookupError):
     """The verified catalogue or decision has no such item."""
+
+
+class EcliIndexUnavailable(LookupError):
+    """This release predates the optional ECLI index."""
+
+
+def canonical_ecli(value):
+    if not isinstance(value, str) or len(value) > 200 or not ECLI.fullmatch(value):
+        raise ValueError("Expected a complete ECLI identifier")
+    return value.upper()
 
 
 def document_id(value):
@@ -48,6 +60,8 @@ class RiiArchive:
         if manifest["format"] != "kerf-rii-publications/1" or not isinstance(manifest["files"], dict):
             raise ValueError("Unsupported RII manifest")
         self.files = manifest["files"]
+        self.has_ecli_index = "ecli_index" in manifest
+        self.ecli_index = manifest.get("ecli_index")
         if not any(p.startswith("lookup/") for p in self.files):
             raise ValueError("RII lookup files missing from the manifest")
 
@@ -59,8 +73,8 @@ class RiiArchive:
         return self.files[path]
 
     @lru_cache(maxsize=12)
-    def _bucket(self, bucket):
-        path = f"lookup/{bucket}.json.gz"
+    def _bucket(self, bucket, directory="lookup"):
+        path = f"{directory}/{bucket}.json.gz"
         if path not in self.files:
             return {}
         entry = self._file(path)
@@ -113,6 +127,39 @@ class RiiArchive:
         if sum(p["printed_number"] is not None for p in passages) != meta["printed_numbers"]:
             raise ValueError("RII printed number count differs from the frame metadata")
         return result
+
+    @lru_cache(maxsize=256)
+    def metadata(self, document):
+        # Cache only verified metadata. Whole decisions can be many megabytes.
+        return self.decision(document)["metadata"]
+
+    def decisions_by_ecli(self, ecli):
+        identifier = canonical_ecli(ecli)
+        if not self.has_ecli_index:
+            raise EcliIndexUnavailable()
+        # The publisher writes every bucket, including empty ones. A missing
+        # file in an advertised index cannot establish that an ECLI is absent.
+        if not isinstance(self.ecli_index, dict) or self.ecli_index.get("buckets") != 256:
+            raise ValueError("Incomplete RII ECLI index")
+        bucket = sha256(identifier.encode("ascii")).hexdigest()[:2]
+        self._file(f"ecli/{bucket}.json.gz")
+        table = self._bucket(bucket, "ecli")
+        decisions = []
+        if identifier in table:
+            documents = table[identifier]
+            if not isinstance(documents, list) or not documents or documents != sorted(set(documents)):
+                raise ValueError("Invalid RII ECLI index entry")
+            for document in documents:
+                if not isinstance(document, str) or not CANONICAL_DOCUMENT.fullmatch(document):
+                    raise ValueError("Invalid document number in the RII ECLI index")
+                try:
+                    metadata = self.metadata(document)
+                except MissingRecord as exc:
+                    raise ValueError("RII ECLI index refers to an absent decision") from exc
+                if canonical_ecli(metadata["ecli"].strip()) != identifier:
+                    raise ValueError("RII ECLI differs from the decision metadata")
+                decisions.append(metadata)
+        return {"ecli": identifier, "total": len(decisions), "decisions": decisions}
 
     def source(self, document):
         document = document_id(document)

@@ -226,7 +226,7 @@ def capabilities():
                                         "mentions": "every other reference"}},
             "operations": ["search", "acts/{id}/markdown", "acts/{id}/markdown.json", "acts/{id}/history", "changes", "decisions",
                            "decision-passages", "decisions/{id}/passages/{passage_id}", "decisions/{id}/relations",
-                           "rii/decisions/{document}", "rii/decisions/{document}/passages",
+                           "rii/decisions", "rii/decisions/{document}", "rii/decisions/{document}/passages",
                            "rii/decisions/{document}/passages/{anchor}", "rii/decisions/{document}/source",
                            "norms/resolve", "norms/{id}/log", "norms/{id}/at", "norms/{id}/diff", "norms/{id}/blame",
                            "norms/{id}/materials", "materials"]}
