@@ -39,7 +39,7 @@ def configured(monkeypatch, tmp_path, package):
 def test_all_legal_boundaries_on_both_http_surfaces(configured, package):
     client, act = configured
     rows = package["norms"][ID]["editions"]
-    assert len(rows) == 6
+    assert len(rows) == 8
     for row in rows:
         dates = [row["valid_from"]]
         if row["valid_until_exclusive"]:
@@ -62,7 +62,7 @@ def test_wording_stays_within_scope_and_knowledge(configured, package):
     client, act = configured
     records = package["norms"]
     for query, day, as_of in [(None, "2000-01-01", None), ("§ 41", "2000-01-01", None),
-                               ("Art. 42", "2000-01-01", None), ("§ 42", "1998-06-30", None),
+                               ("Art. 42", "2000-01-01", None), ("§ 42", "1990-12-31", None),
                                ("§ 42", "2026-11-27", None),
                                ("§ 42", "2000-01-01", "2026-11-26T08:45:49Z")]:
         assert reviewed_section_markdown(act, query, day, as_of, records, "2026-11-30") is None
@@ -92,5 +92,25 @@ def test_missing_release_and_corrupt_data(configured, package, tmp_path):
     target.write_text(json.dumps(bad))
     assert client.get(f"/acts/{ACT}/markdown", params=params).status_code == 503
     with pytest.raises(ValueError, match="noncontiguous"):
-        package["norms"][ID]["editions"][1]["valid_from"] = "2005-10-02"
+        package["norms"][ID]["editions"][1]["valid_from"] = "1993-04-02"
         validate(package)
+
+
+def test_early_editions_have_independent_knowledge_dates(configured, package):
+    client, _ = configured
+    record = package["norms"][ID]
+    latest = record["editions"][0]["known_from"]
+    before = "2026-11-26T09:32:41Z"
+    for day in ("1991-01-01", "1993-04-01"):
+        params = {"norm": "§ 42", "at": day, "as_of": before}
+        old = client.get(f"/acts/{ACT}/markdown.json", params=params)
+        assert old.status_code == 503 and old.json()["detail"] == "retrospective history is not built"
+        native = client.get(f"/norms/{ID}/at", params={"date": day, "as_of": before}).json()
+        assert not any(x.get("source", {}).get("capture", {}).get("reviewed_norm_edition") for x in native.get("evidence", []))
+        params["as_of"] = latest
+        got = client.get(f"/acts/{ACT}/markdown.json", params=params).json()["provenance"]
+        assert got["effective_from"] == day and got["knowledge_from"] == latest
+    log = client.get(f"/norms/{ID}/log", params={"as_of": before}).json()
+    dates = {x["temporal"]["valid_from"] for x in log["evidence"]}
+    assert record["editions"][2]["valid_from"] in dates
+    assert not {row["valid_from"] for row in record["editions"][:2]} & dates
