@@ -195,7 +195,11 @@ def add_reviewed_editions(artifact: dict, manifest: dict, states: dict, *,
 
 
 def validate_published_editions(root: Path, manifest: dict, artifact: dict) -> set[str]:
-    """Replay each edition in the upload against the installed review and its GII anchor."""
+    return validate_stored_editions(root / "federal_states", manifest, artifact)
+
+
+def validate_stored_editions(store: Path, manifest: dict, artifact: dict) -> set[str]:
+    """Replay each edition against the installed review and its GII anchor."""
     from official_states import load_state_verified
     metadata = artifact["object_metadata"]
     supplied = {key for key, value in metadata.items() if isinstance(value, dict)
@@ -208,7 +212,7 @@ def validate_published_editions(root: Path, manifest: dict, artifact: dict) -> s
     anchor = review["anchor"]["state_sha256"]
     if anchor not in manifest["objects"]:
         raise ReconstructionError("federal edition anchor missing from the official ledger")
-    state = load_state_verified(root / "federal_states", anchor)
+    state = load_state_verified(store, anchor)
     replay = {"built_at": artifact["built_at"], "state_objects": {},
               "object_metadata": {}, "reconstructions": []}
     add_reviewed_editions(replay, manifest, {anchor: state})
