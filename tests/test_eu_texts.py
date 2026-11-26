@@ -466,3 +466,39 @@ def test_multipart_edition_cites_the_item_with_the_articles(monkeypatch):
     edition = eu.fetch_edition(CellarItems(), "02012R1215-20150226", {"fmx4": "manifestation"})
     assert [i["url"] for i in edition["items"]] == ["text", "annex"]
     assert edition["articles"]
+
+
+def test_per_article_treaty_source_survives_indexing_and_legacy_snapshots(monkeypatch):
+    base = "12016P"
+    urls = {base + "001": "https://example.org/one", base + "002": "https://example.org/two"}
+    xml = {url: (f"<ACT><ENACTING.TERMS><ARTICLE><TI.ART>Artikel {i}</TI.ART>"
+                 f"<ALINEA>Norm {i}.</ALINEA></ARTICLE></ENACTING.TERMS></ACT>").encode()
+           for i, url in enumerate(urls.values(), start=1)}
+
+    class CellarItems:
+        def get(self, url):
+            return {"url": url, "bytes": xml[url], "sha256": hashlib.sha256(xml[url]).hexdigest()}
+
+    monkeypatch.setattr(eu, "manifestations", lambda *args: {k: {"fmx4": v} for k, v in urls.items()})
+    monkeypatch.setattr(eu, "manifestation_items", lambda _cellar, url: [url])
+    ed = eu.fetch_article_works(CellarItems(), base, 2)
+    ed.update(kind="treaty_consolidated", date="2016-06-07", valid_from="2016-06-07")
+    row = {"act_id": "eu_12016p", "celex": base, "jurabk": "GRCh", "editions": [ed]}
+    ed["items"].reverse()  # The order of attachments cannot identify an article.
+    detail = eu_history.build(row)
+    for ver in detail["history"]["version"]:
+        number = int(ver["pinpoint"]["label"].split()[1])
+        url = urls[base + f"{number:03d}"]
+        sample = ver["attestations"][0]["samples"][0]
+        assert sample["url"] == url
+        assert sample["sha256"] == hashlib.sha256(xml[url]).hexdigest()
+    state = detail["history"]["states"][0]
+    assert state["url"].endswith("12016P/TXT") and not state.get("sha256")
+
+    for article in ed["articles"]:
+        article.pop("source_item_sha256")
+    legacy = eu_history.build(row)
+    for version in legacy["history"]["version"]:
+        label = int(version["pinpoint"]["label"].split()[1])
+        sample = version["attestations"][0]["samples"][0]
+        assert sample["url"].endswith(f"12016P{label:03d}") and "sha256" not in sample
