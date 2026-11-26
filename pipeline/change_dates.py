@@ -33,7 +33,7 @@ from promulgation_dates import extract_promulgation_dates
 
 SCHEMA = "kerf-change-dates/1"
 ROOT = Path(__file__).resolve().parents[1]
-LEGACY_ID_RE = re.compile(r"bgbl-1-\d{4}-s\d+")
+LEGACY_ID_RE = re.compile(r"bgbl-1-\d{4}-s\d+[a-z]?")
 
 
 class DocumentTextError(ValueError):
