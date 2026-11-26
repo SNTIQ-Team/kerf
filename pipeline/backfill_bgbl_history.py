@@ -132,6 +132,7 @@ EXACT_NAME_ALIASES: dict[str, tuple[str, ...]] = {
     "rbeg_2021": ("Regelbedarfsermittlungsgesetz",),
     "stag": ("Staatsangehörigkeitsgesetz",),
     "uhvorschg": ("Unterhaltsvorschussgesetz",),
+    "urhg": ("Urheberrechtsgesetz",),
 }
 
 SGB_NAMES: dict[int, tuple[str, str]] = {

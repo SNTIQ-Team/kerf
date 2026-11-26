@@ -72,6 +72,105 @@
           }
         ]
       }
+    },
+    {
+      "id": "fed-derived-review:urhg-2025-01-01",
+      "act_id": "fed_urhg",
+      "jurabk": "UrhG",
+      "anchor": {
+        "state_sha256": "60ede62599dda78bfd83a517c44e14346b48c1c82b5a8ce4954b28fccf201e67",
+        "observed_at": "2026-11-26",
+        "builddate": "20260529215505",
+        "source_url": "https://www.gesetze-im-internet.de/urhg/",
+        "state_build": "20260529",
+        "state_stand": "Stand: Zuletzt geändert durch Art. 2 G v. 26.5.2026 I Nr. 157"
+      },
+      "interval": {
+        "effective_from": "2025-01-01",
+        "effective_to": "2026-05-30"
+      },
+      "incoming": {
+        "document_id": "bgbl-1-2024-323",
+        "procedure_id": "309845",
+        "amending_article": "28",
+        "execution_date": "2024-10-23",
+        "publication_date": "2024-10-29",
+        "effective_at": "2025-01-01",
+        "effective_date_status": "resolved_remainder_clause",
+        "pdf_sha256": "dbfcf74401b5009b4346362971985eded52cfcab21ab04bdec2485e626aaa55a",
+        "pdf_md5": "37c91eba741f5c838fe8e1f958148c01",
+        "text_sha256": "b2106cb1de65dcd27094f504ef1d7672e5b73e319dbe8c70aec8364651c4e947",
+        "article_text_sha256": "06bdeb7180c8b04f1681b8957d9a5f91766b88f78c21477d86fd188222ddaff3",
+        "candidate_id": "fed-bgbl-candidate:a4e035acef0a101b41ab",
+        "expected_commands": [
+          {
+            "kind": "insert_sentence_after",
+            "norm": "§ 31a",
+            "absatz": "1",
+            "after_sentence": "2",
+            "text": "Schließt der Urheber einen Vertrag nach Satz 1 mit einer Verwertungsgesellschaft, so genügt die Textform."
+          },
+          {
+            "kind": "recast_paragraph",
+            "norm": "§ 40",
+            "absatz": "1",
+            "text": "(1) Ein Vertrag, durch den sich der Urheber zur Einräumung von Nutzungsrechten an künftigen Werken verpflichtet, die überhaupt nicht näher oder nur der Gattung nach bestimmt sind, bedarf der schriftlichen Form. Schließt der Urheber den Vertrag mit einer Verwertungsgesellschaft, so genügt die Textform. Der Vertrag kann von beiden Vertragsteilen nach Ablauf von fünf Jahren seit dem Abschluss des Vertrages gekündigt werden. Die Kündigungsfrist beträgt sechs Monate, wenn keine kürzere Frist vereinbart ist."
+          },
+          {
+            "kind": "replace_literal",
+            "norm": "§ 88",
+            "old": "§ 31a Abs. 1 Satz 3 und 4 und Abs.",
+            "new": "§ 31a Absatz 1 Satz 4 und 5 und Absatz",
+            "absatz": "1",
+            "satz": "2"
+          },
+          {
+            "kind": "replace_literal",
+            "norm": "§ 89",
+            "old": "§ 31a Abs. 1 Satz 3 und 4 und Abs.",
+            "new": "§ 31a Absatz 1 Satz 4 und 5 und Absatz",
+            "absatz": "1",
+            "satz": "2"
+          },
+          {
+            "kind": "replace_literal",
+            "norm": "§ 132",
+            "old": "§ 40 Abs. 1 Satz 2 und § 41 Abs.",
+            "new": "§ 40 Absatz 1 Satz 3 und § 41 Absatz",
+            "absatz": "1",
+            "satz": "3"
+          }
+        ]
+      },
+      "outgoing": {
+        "document_id": "bgbl-1-2026-157",
+        "procedure_id": "327975",
+        "amending_article": "2",
+        "execution_date": "2026-05-26",
+        "publication_date": "2026-05-29",
+        "effective_at": "2026-05-30",
+        "effective_date_status": "resolved_default_clause",
+        "pdf_sha256": "a0faceae54ed404d4b20ea2f75060aef4678718e59b7b94bb3dda1b83a76882a",
+        "pdf_md5": "13ca1ee0a968b22cdff585c423036254",
+        "text_sha256": "24c63ea6e7d4e59db6cc1bb5d946c70135d5e269699904edd5c5d17f6a948962",
+        "article_text_sha256": "8cda8355cf3419e7dced74028d1a2557f0081f809593eafa3d7db9b48a19cbe2",
+        "candidate_id": "fed-bgbl-candidate:84cced2cfcef1e8029a5",
+        "expected_commands": [
+          {
+            "kind": "replace_literal",
+            "norm": "§ 54d",
+            "old": "§ 14 Abs. 2 Satz 1 Nr. 2 Satz 2",
+            "new": "§ 14 Absatz 2 Satz 2 Nummer 1 und 2"
+          },
+          {
+            "kind": "insert_paragraph_after",
+            "norm": "§ 87b",
+            "after_absatz": "2",
+            "new_absatz": "3",
+            "text": "(3) Absatz 1 ist in den in Artikel 43 der Verordnung (EU) 2023/2854 genannten Fällen nicht anzuwenden."
+          }
+        ]
+      }
     }
   ]
 }
