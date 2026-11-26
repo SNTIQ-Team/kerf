@@ -37,3 +37,58 @@ def test_unchanged_checks_skip_rebuild_but_failed_publish_and_new_evidence_retry
     assert not record(tmp_path,checkpoint)
     state.write_text(json.dumps({'procedures':{'a':{'status':'adopted','last_checked':'2026-01-01'}}}))
     assert record(tmp_path,checkpoint)
+
+
+def test_promote_an_uploaded_sibling_without_a_second_copy(tmp_path, monkeypatch):
+    old = tmp_path / 'web-data.release-old'
+    upload = tmp_path / 'web-data.incoming-20261126T060255Z-1656314'
+    target = tmp_path / 'web-data.release-20261126T061255Z-410'
+    for directory in (old, upload, target):
+        directory.mkdir()
+    (old / 'law').write_text('previous law')
+    (upload / 'law').write_text('current law')
+    (old / 'shared').write_text('unchanged')
+    os.link(old / 'shared', upload / 'shared')
+    upload.chmod(0o700)
+    target.chmod(0o750)
+    inode = (upload / 'law').stat().st_ino
+    monkeypatch.setattr('tools.stage_release.shutil.disk_usage', lambda path: SimpleNamespace(free=100))
+    with pytest.raises(OSError):
+        stage(upload, target, old, 101, consume_upload=True)
+    assert (upload / 'law').exists() and not list(target.iterdir())
+    stage(upload, target, old, 100, consume_upload=True)
+    assert not upload.exists() and (target / 'law').stat().st_ino == inode
+    assert target.stat().st_mode & 0o777 == 0o750
+    assert (target / 'law').read_text() == 'current law' and (old / 'law').read_text() == 'previous law'
+    assert (target / 'shared').stat().st_ino == (old / 'shared').stat().st_ino
+
+
+def test_only_a_disposable_upload_can_be_promoted(tmp_path):
+    source = tmp_path / 'web-data.release-old'
+    source.mkdir()
+    target = tmp_path / 'web-data.release-20261126T061255Z-410'
+    target.mkdir()
+    with pytest.raises(ValueError):
+        stage(source, target, None, 0, consume_upload=True)
+    upload = tmp_path / 'web-data.incoming-20261126T060255Z-1656314'
+    upload.mkdir()
+    (upload / 'link').symlink_to(source)
+    with pytest.raises(ValueError):
+        stage(upload, target, None, 0, consume_upload=True)
+    (upload / 'link').unlink()
+    os.mkfifo(upload / 'pipe')
+    with pytest.raises(ValueError):
+        stage(upload, target, None, 0, consume_upload=True)
+    assert upload.is_dir() and not list(target.iterdir())
+
+
+def test_completed_upload_requires_a_new_release_in_the_same_parent(tmp_path):
+    parent = tmp_path / 'other'
+    parent.mkdir()
+    upload = tmp_path / 'web-data.incoming-20261126T060255Z-1656314'
+    upload.mkdir()
+    for target in (parent / 'web-data.release-20261126T061255Z-410', tmp_path / 'web-data'):
+        target.mkdir()
+        with pytest.raises(ValueError):
+            stage(upload, target, None, 0, consume_upload=True)
+        assert upload.is_dir() and not list(target.iterdir())
