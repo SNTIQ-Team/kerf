@@ -1273,7 +1273,11 @@ def build_public_manifest(
                 raise RetrospectiveHistoryError(
                     f"derived object metadata changed for {digest}")
             public_objects[digest] = copy.deepcopy(dict(metadata))
-        for row in verified_reconstructions.get("reconstructions") or []:
+        reviewed_rows = verified_reconstructions.get("reconstructions") or []
+        successors = {(r.get("act_id"), r.get("state_sha256"), r.get("effective_from"),
+                       r.get("anchor_state_sha256"))
+                      for r in reviewed_rows if isinstance(r, Mapping)}
+        for row in reviewed_rows:
             if not isinstance(row, Mapping):
                 raise RetrospectiveHistoryError(
                     "verified reconstruction row is invalid")
@@ -1333,10 +1337,17 @@ def build_public_manifest(
                         row.get("changes_reversed") or []),
                 },
             })
+            if row.get("successor_state_sha256") is not None:
+                successor = _valid_digest(row["successor_state_sha256"], "successor SHA-256")
+                if (act_id, successor, row.get("effective_to"), anchor) not in successors:
+                    raise RetrospectiveHistoryError(f"{act_id} lacks its reviewed consecutive edition")
+                # That row supplies the next interval and may itself be derived.
+                continue
             outgoing = row.get("outgoing_event") or {}
             reconstructed_by_act[act_id].append({
                 **common,
                 "segment_id": f"{row.get('id')}:anchor",
+                "verified_through_observed_at": row.get("anchor_verified_through", row.get("observed_at")),
                 "state_sha256": anchor,
                 "previous_state_sha256": digest,
                 "effective_from": row.get("effective_to"),
