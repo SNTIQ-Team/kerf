@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Replay the German Basic Law review offline from its six original public PDFs.
+"""Replay the German Basic Law review offline from the retained German editions and gazettes.
 
-Place the files named in data/gg_edition_review.json in a directory and run
+Place the PDFs and DRV HTML files named in data/gg_edition_review.json in a directory and run
 python tools/audit_gg_editions.py --sources DIR. Poppler supplies pdftotext.
 The publisher files, their links and their SHA-256 values are in the review.
 """
@@ -47,6 +47,8 @@ def federal_edition(text):
     text = re.sub(r"(?m)^[ \t]*- Seite \d+ von \d+ -[ \t]*$", "", text)
     text = re.sub(r"(?im)^[ \t]*Ein Service des Bundesministeriums[^\n]+\n"
                   r"[ \t]*[^\n]*www\.gesetze-im-internet\.de[ \t]*$", "", text)
+    text = re.sub(r"(?im)^[ \t]*Ein Service des Bundesministeriums[^\n]+\n"
+                  r"[ \t]*[^\n]*www\.juris\.de[ \t]*$", "", text)
     opening = list(re.finditer(r"(?m)^Eingangsformel\s*$", text))
     require(len(opening) == 1, "missing opening formula")
     text = text[opening[0].start():]
@@ -130,6 +132,12 @@ def audit(directory: Path, review_path: Path, anchor_path: Path):
     require("22. März 2025" in clean(texts["23183"][:1600]), "unexpected later federal edition")
     older = federal_edition(texts["21843"])
     newest = federal_edition(texts["23183"])
+    if "17609" in texts:
+        if __package__:
+            from .audit_gg_2017 import audit_early
+        else:
+            from audit_gg_2017 import audit_early
+        audit_early(directory, review, federal_edition(texts["17609"]), older, edition_digest)
     gazette24 = texts["2024-439"]
     require("19. Dezember 2022 (BGBl. I S. 2478)" in clean(gazette24[:2300]), "incorrect preceding amendment")
     require("20. Dezember 2024 (BGBl. 2024 I Nr. 439)" in clean(texts["2025-94"][:2300]),
@@ -147,7 +155,7 @@ def audit(directory: Path, review_path: Path, anchor_path: Path):
     canonical = json.dumps(anchor, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
     require(hashlib.sha256(canonical).hexdigest() == review["anchor"]["state_sha256"], "wrong GII state")
     current = {n["enbez"]: n["text"] for n in anchor["norms"]}
-    for version, data, number, title in zip(review["editions"], [older, intermediate, final], [67, 68, 69],
+    for version, data, number, title in zip(review["editions"][-3:], [older, intermediate, final], [67, 68, 69],
                                             ["Artikel 82", "Artikel 93 und 94", "Artikel 109, 115 und 143h"], strict=True):
         require(len(data) == version["printed_blocks"] and edition_digest(data) == version["printed_state_sha256"],
                 "reviewed complete printed text mismatch")
@@ -162,7 +170,7 @@ def audit(directory: Path, review_path: Path, anchor_path: Path):
         require(f"[{number}.] Gesetz zur Änderung des Grundgesetzes ({title})" in handbook
                 and f"Inkrafttreten am {effective.day}.{effective.month}.{effective.year}" in handbook,
                 "Bundestag amendment chronology mismatch")
-        for edit in version["changes_from_previous"]:
+        for edit in version["changes_from_previous"] if number > 67 else []:
             label = edit["enbez"].removeprefix("Art ")
             full_current = newest[label]
             if label == "115":
