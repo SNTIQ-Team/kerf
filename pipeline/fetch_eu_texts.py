@@ -370,7 +370,7 @@ def manifestation_items(cellar: Cellar, manifestation: str) -> list[str]:
 # ------------------------------------------------------------------ parsing
 
 _WS = re.compile(r"\s+")
-_ARTICLE_LABEL = re.compile(r"^Artikel\s+(\d+[a-z]?)\s*$")
+_ARTICLE_LABEL = re.compile(r"Artikel\s+(\d+\s*[a-z]{0,3})")
 
 
 def _clean(value: str) -> str:
@@ -567,7 +567,7 @@ def parse_formex(data: bytes) -> dict[str, Any]:
     articles, annexes = [], 0
     for article in _formex_articles(root):
         label = _clean("".join(article.find("TI.ART").itertext())) if article.find("TI.ART") is not None else ""
-        match = re.match(r"Artikel\s+(\d+\s*[a-z]?)", label)
+        match = _ARTICLE_LABEL.fullmatch(label)
         if not match:
             continue
         title_el = article.find("STI.ART")
@@ -697,9 +697,9 @@ def parse_html_articles(data: bytes) -> dict[str, Any]:
     for block in blocks:
         text, klass = block["text"], block.get("class", "")
         if block["kind"] == "p":
-            label = _ARTICLE_LABEL.match(text)
+            label = _ARTICLE_LABEL.fullmatch(text)
             if label and ("ti-art" in klass or not klass or klass == "normal"):
-                current = {"number": label.group(1), "title": "", "paragraphs": [], "expect_title": True}
+                current = {"number": label.group(1).replace(" ", ""), "title": "", "paragraphs": [], "expect_title": True}
                 articles.append(current)
                 skip_title = False
                 continue

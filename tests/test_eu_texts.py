@@ -432,3 +432,19 @@ def test_future_consolidation_enters_the_reader_on_its_edition_date(tmp_path):
         assert before["status"] == "not_in_corpus" and not before.get("evidence")
     after = client.get(path, params={"date": "2027-01-11"}).json()
     assert after["status"] == "ok" and after["evidence"][0]["text"] == "New article."
+
+
+def test_formex_and_html_keep_multi_letter_vat_article_numbers():
+    # German VAT Directive, including the articles introduced on 1 July 2021
+    # and Article 369aa in the published 1 January 2027 consolidation.
+    labels = ["369a", "369aa", "369z", "369za", "369zb", "369 zc"]
+    expected = [(f"Art. {label.replace(' ', '')}", f"Text {index}.")
+                for index, label in enumerate(labels)]
+    formex = "<ACT>" + "".join(
+        f"<ARTICLE><TI.ART>Artikel {label}</TI.ART><ALINEA>Text {index}.</ALINEA></ARTICLE>"
+        for index, label in enumerate(labels)) + "</ACT>"
+    html = "<body>" + "".join(
+        f"<p>Artikel {label}</p><p>Text {index}.</p>"
+        for index, label in enumerate(labels)) + "</body>"
+    for parsed in (eu.parse_formex(formex.encode()), eu.parse_html_articles(html.encode())):
+        assert [(a["enbez"], a["text"]) for a in parsed["articles"]] == expected
