@@ -44,6 +44,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from api.norm_identity import load_gii_toc  # noqa: E402
+from api.official_state_store import single_state_observations
 from api.source_freshness import build_freshness  # noqa: E402
 from tools.reader_blocks import refresh_cached_sidecars  # noqa: E402
 from tools.archived_reader_store import publish_archived_readers  # noqa: E402
@@ -1743,7 +1744,7 @@ def main() -> int:
         for digest in sorted(official_states.get("objects") or {})
     }
     internal_retrospective = materialize_history(
-        official_states.get("observations") or [],
+        single_state_observations(official_states.get("observations") or []),
         official_state_objects,
         transition_reviews,
         include_norm_intervals=False,

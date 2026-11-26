@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from api.evidence import EnvelopeError
+from api.official_state_store import single_state_observations
 from api.law_structure import (
     human_locator,
     normalize_sentence,
@@ -511,7 +512,7 @@ class NormHistoryStore:
 
         observations: dict[str, dict[str, Any]] = {}
         cutoff = as_of[:10] if as_of else None
-        for row in act.get("official_states") or []:
+        for row in single_state_observations(act.get("official_states") or []):
             digest = str(row.get("state_sha256") or "")
             observed = str(row.get("observed_at") or "")[:10]
             if not _DIGEST.fullmatch(digest) or not observed:
