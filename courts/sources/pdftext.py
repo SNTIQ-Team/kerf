@@ -18,6 +18,7 @@ import subprocess
 
 from ..errors import UpstreamFailure
 from ..model import Block
+from .base import iso_date
 
 RN_LINE = re.compile(r"^(\d{1,3})\s{2,}(\S.*)$")
 MARGIN_NUMBER = re.compile(r"^( *)(\d{1,3})( {2,})(?=\S)")
@@ -29,6 +30,79 @@ SENTENCE_END = re.compile(r"[.!?:;“”\"»)]$")
 OUTLINE = re.compile(r"^(?:[IVX]+\.|\d{1,2}\.|[a-z]{1,2}\)|\([a-z0-9]{1,3}\)|[A-Z]\.)(?:\s|$)")
 NO_JOIN = {"und", "oder", "bzw", "bzw.", "sowie"}
 COLONLESS_HEADINGS = {"tenor", "gründe", "tatbestand", "entscheidungsgründe", "leitsatz", "leitsätze"}
+
+
+_COVER_FORMS = {form.casefold(): form for form in (
+    "Beschluss", "Urteil", "Gerichtsbescheid", "Teilurteil", "Schlussurteil", "Zwischenurteil",
+    "Endurteil", "Anerkenntnisurteil", "Versäumnisurteil", "Verfügung",
+)}
+_COVER_END = re.compile(r"^(?:In der |In dem Verfahren|In Sachen|hat (?:der|das|die) )", re.I)
+_COVER_DATE = r"\d{1,2}\.\s*(?:\d{1,2}\.\s*|[A-Za-zÄÖÜäöü]+\s+)\d{4}"
+_PRONOUNCED = re.compile(r"\bverkündet\s+am\s*:?\s*(" + _COVER_DATE + r")", re.I)
+_DECIDED = re.compile(r"\bam\s+(" + _COVER_DATE + r")\s+(?:für\s+Recht\s+erkannt|beschlossen|entschieden|verfügt)\s*:", re.I)
+
+
+_HEARD_AND_DECIDED = re.compile(r"\baufgrund der mündlichen Verhandlung vom (" + _COVER_DATE +
+                                r") für Recht erkannt\s*:", re.I)
+
+
+def decision_form_from_cover(text: str, docket: str, day: str, listed: str | None,
+                             metadata: dict, *, court_abbr: str = "") -> str | None:
+    """Read a standalone cover heading once the source's date and docket are corroborated."""
+    pages = text.split("\f", 2)
+    labels = set()
+    for line in pages[0].splitlines()[:80]:
+        line = " ".join(line.split())
+        if _COVER_END.match(line):
+            break
+        form = _COVER_FORMS.get(re.sub(r"\s+", "", line).rstrip(":").casefold())
+        if form:
+            labels.add(form)
+    if len(labels) != 1:
+        return listed
+    form = labels.pop()
+    if form == listed:
+        return listed
+    # A generic cover can accompany a more specific catalogue label, for example Streitwertbeschluss.
+    if listed and listed.casefold().endswith(form.casefold()):
+        return listed
+
+    docket_pattern = r"\s*".join(re.escape(token) for token in docket.split())
+    prefixes = r"Az\.?|Aktenzeichen|Geschäftszeichen"
+    if court_abbr:
+        prefixes += "|" + re.escape(court_abbr) + r"\.?"
+    prefix = re.compile(r"^(?:" + prefixes + r")(?=[:\s])\s*:?\s*", re.I)
+    docket_on_cover = False
+    for line in pages[0].splitlines()[:25]:
+        line = line.strip()
+        if not re.search(r"\d\s*/\s*\d{2,4}\b", line):
+            continue
+        value = prefix.sub("", line, count=1)
+        if value != line or re.match(r"^(?:[A-Z]\s+)?\d+\s+[A-Z]", line):
+            primary = value.partition("=")[0].strip()
+            docket_on_cover = bool(docket_pattern and re.match(docket_pattern + r"(?![\w/])", primary, re.I))
+            break
+    lines = pages[0].splitlines()
+    if len(pages) > 1:
+        following = pages[1].splitlines()
+        lines += [line for i, line in enumerate(following) if i >= 4 or not EDGE_PAGE_MARKER.fullmatch(line)]
+    front = join_lines(lines)
+    dates = set()
+    patterns = (_PRONOUNCED, _DECIDED) if _PRONOUNCED.search(front) or _DECIDED.search(front) else (_HEARD_AND_DECIDED,)
+    for pattern in patterns:
+        for candidate in pattern.finditer(front):
+            try:
+                dates.add(iso_date(candidate.group(1)))
+            except UpstreamFailure:
+                continue
+    # A hearing date can differ from the date when the court pronounced its decision.
+    date_on_front = dates == {day}
+    metadata["decision_type_evidence"] = {"catalog": listed, "pdf_cover": form, "docket_on_cover": docket_on_cover,
+                                          "date_on_front": date_on_front, "operative_dates": sorted(dates)}
+    if docket_on_cover and len(dates) == 1 and day and day not in dates:
+        raise UpstreamFailure("identity_mismatch",
+                              f"catalogue {listed!r} dated {day} links to {form!r} dated {next(iter(dates))} for {docket}")
+    return form if docket_on_cover and date_on_front else listed
 
 
 def pdf_text(pdf: bytes, *, url: str | None = None) -> str:
