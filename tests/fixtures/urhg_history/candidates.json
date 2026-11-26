@@ -1,0 +1,172 @@
+[
+  {
+    "id": "fed-bgbl-candidate:84cced2cfcef1e8029a5",
+    "schema_version": 1,
+    "candidate_only": true,
+    "historical_text_reconstructed": false,
+    "act_id": "fed_urhg",
+    "slug": "urhg",
+    "jurabk": "UrhG",
+    "long_title": "Gesetz über Urheberrecht und verwandte Schutzrechte",
+    "document_id": "bgbl-1-2026-157",
+    "procedure_id": "327975",
+    "amending_article": "2",
+    "article_heading": "Änderung des Urheberrechtsgesetzes",
+    "command_scope_status": "whole_article",
+    "collective_subsection": null,
+    "match_basis": "exact_name_in_final_bgbl_article",
+    "matched_legal_name": "urheberrechtsgesetz",
+    "descriptor_aliases": [
+      "urheberrechtsgesetz"
+    ],
+    "execution_date": "2026-05-26",
+    "publication_date": "2026-05-29",
+    "effective_at": "2026-05-30",
+    "effective_date_status": "resolved_default_clause",
+    "official_html_url": "https://www.recht.bund.de/bgbl/1/2026/157/VO.html",
+    "official_pdf_url": "https://www.recht.bund.de/bgbl/1/2026/157/regelungstext.pdf?__blob=publicationFile&v=1",
+    "pdf_sha256": "a0faceae54ed404d4b20ea2f75060aef4678718e59b7b94bb3dda1b83a76882a",
+    "pdf_md5": "13ca1ee0a968b22cdff585c423036254",
+    "advertised_md5": "13ca1ee0a968b22cdff585c423036254",
+    "integrity_verified": true,
+    "text_sha256": "24c63ea6e7d4e59db6cc1bb5d946c70135d5e269699904edd5c5d17f6a948962",
+    "article_text_sha256": "8cda8355cf3419e7dced74028d1a2557f0081f809593eafa3d7db9b48a19cbe2",
+    "commands": [
+      {
+        "operation": "replace",
+        "ref": {
+          "para": "54d"
+        },
+        "old_text_constraint": "§ 14 Abs. 2 Satz 1 Nr. 2 Satz 2",
+        "new_text": "§ 14 Absatz 2 Satz 2 Nummer 1 und 2",
+        "raw": "In § 54d wird die Angabe „§ 14 Abs. 2 Satz 1 Nr. 2 Satz 2“ durch die Angabe „§ 14 Absatz 2 Satz 2 Nummer 1 \nund 2“ ersetzt.",
+        "raw_sha256": "3331fbbc7db13cb3b89844a87e2c70e6e6074ee72aa939dd85040b61f93c1f29",
+        "item": 1
+      },
+      {
+        "operation": "insert",
+        "ref": {
+          "para": "87b",
+          "absatz": "2"
+        },
+        "old_text_constraint": null,
+        "new_text": "(3) Absatz 1 ist in den in Artikel 43 der Verordnung (EU) 2023/2854 genannten Fällen nicht anzuwenden.",
+        "raw": "Nach § 87b Absatz 2 wird der folgende Absatz 3 eingefügt:\n„(3) Absatz 1 ist in den in Artikel 43 der Verordnung (EU) 2023/2854 genannten Fällen nicht anzuwenden.“",
+        "raw_sha256": "0d97af256b93f19532f58c58a462d6a062e1e6b34e8c31ceb44b096fb9172342",
+        "item": 2
+      }
+    ],
+    "command_count": 2,
+    "affected_norms": [
+      "§ 54d",
+      "§ 87b"
+    ]
+  },
+  {
+    "id": "fed-bgbl-candidate:a4e035acef0a101b41ab",
+    "schema_version": 1,
+    "candidate_only": true,
+    "historical_text_reconstructed": false,
+    "act_id": "fed_urhg",
+    "slug": "urhg",
+    "jurabk": "UrhG",
+    "long_title": "Gesetz über Urheberrecht und verwandte Schutzrechte",
+    "document_id": "bgbl-1-2024-323",
+    "procedure_id": "309845",
+    "amending_article": "28",
+    "article_heading": "Änderung des Urheberrechtsgesetzes",
+    "command_scope_status": "whole_article",
+    "collective_subsection": null,
+    "match_basis": "exact_name_in_final_bgbl_article",
+    "matched_legal_name": "urheberrechtsgesetz",
+    "descriptor_aliases": [
+      "urheberrechtsgesetz"
+    ],
+    "execution_date": "2024-10-23",
+    "publication_date": "2024-10-29",
+    "effective_at": "2025-01-01",
+    "effective_date_status": "resolved_remainder_clause",
+    "official_html_url": "https://www.recht.bund.de/bgbl/1/2024/323/VO.html",
+    "official_pdf_url": "https://www.recht.bund.de/bgbl/1/2024/323/regelungstext.pdf?__blob=publicationFile&v=1",
+    "pdf_sha256": "dbfcf74401b5009b4346362971985eded52cfcab21ab04bdec2485e626aaa55a",
+    "pdf_md5": "37c91eba741f5c838fe8e1f958148c01",
+    "advertised_md5": "37c91eba741f5c838fe8e1f958148c01",
+    "integrity_verified": true,
+    "text_sha256": "b2106cb1de65dcd27094f504ef1d7672e5b73e319dbe8c70aec8364651c4e947",
+    "article_text_sha256": "06bdeb7180c8b04f1681b8957d9a5f91766b88f78c21477d86fd188222ddaff3",
+    "commands": [
+      {
+        "operation": "insert",
+        "ref": {
+          "para": "31a",
+          "absatz": "1",
+          "satz": "2"
+        },
+        "old_text_constraint": null,
+        "new_text": "Schließt der Urheber einen Vertrag nach Satz 1 mit einer Verwertungsgesellschaft, so genügt die Textform.",
+        "raw": "Nach § 31a Absatz 1 Satz 2 wird folgender Satz eingefügt:\n„Schließt der Urheber einen Vertrag nach Satz 1 mit einer Verwertungsgesellschaft, so genügt die Textform.“",
+        "raw_sha256": "1c4beb9874b28e7aac111ae78d8f93fa57354cc3421e83a3f120ad2b41e04312",
+        "item": 1
+      },
+      {
+        "operation": "replace",
+        "ref": {
+          "para": "40",
+          "absatz": "1"
+        },
+        "old_text_constraint": null,
+        "new_text": "(1) Ein Vertrag, durch den sich der Urheber zur Einräumung von Nutzungsrechten an künftigen Werken \nverpflichtet, die überhaupt nicht näher oder nur der Gattung nach bestimmt sind, bedarf der schriftlichen Form. \nSchließt der Urheber den Vertrag mit einer Verwertungsgesellschaft, so genügt die Textform. Der Vertrag kann \nvon beiden Vertragsteilen nach Ablauf von fünf Jahren seit dem Abschluss des Vertrages gekündigt werden. Die \nKündigungsfrist beträgt sechs Monate, wenn keine kürzere Frist vereinbart ist.",
+        "raw": "§ 40 Absatz 1 wird wie folgt gefasst:\n„(1) Ein Vertrag, durch den sich der Urheber zur Einräumung von Nutzungsrechten an künftigen Werken \nverpflichtet, die überhaupt nicht näher oder nur der Gattung nach bestimmt sind, bedarf der schriftlichen Form. \nSchließt der Urheber den Vertrag mit einer Verwertungsgesellschaft, so genügt die Textform. Der Vertrag kann \nvon beiden Vertragsteilen nach Ablauf von fünf Jahren seit dem Abschluss des Vertrages gekündigt werden. Die \nKündigungsfrist beträgt sechs Monate, wenn keine kürzere Frist vereinbart ist.“",
+        "raw_sha256": "48058a7f924d39698980e9258cfa7b84f4c2bd1c5f79102ae31b33b3429bf7bd",
+        "item": 2
+      },
+      {
+        "operation": "replace",
+        "ref": {
+          "para": "88",
+          "absatz": "1",
+          "satz": "2"
+        },
+        "old_text_constraint": "§ 31a Abs. 1 Satz 3 und 4 und Abs.",
+        "new_text": "§ 31a Absatz 1 Satz 4 und 5 und Absatz",
+        "raw": "In § 88 Absatz 1 Satz 2 werden die Wörter „§ 31a Abs. 1 Satz 3 und 4 und Abs.“ durch die Wörter „§ 31a Absatz 1 \nSatz 4 und 5 und Absatz“ ersetzt.",
+        "raw_sha256": "9daf06898fd9e6e95ff04f6cda9b3d04c2f8e4d70d868387fc76bad1be89a3e5",
+        "item": 3
+      },
+      {
+        "operation": "replace",
+        "ref": {
+          "para": "89",
+          "absatz": "1",
+          "satz": "2"
+        },
+        "old_text_constraint": "§ 31a Abs. 1 Satz 3 und 4 und Abs.",
+        "new_text": "§ 31a Absatz 1 Satz 4 und 5 und Absatz",
+        "raw": "In § 89 Absatz 1 Satz 2 werden die Wörter „§ 31a Abs. 1 Satz 3 und 4 und Abs.“ durch die Wörter „§ 31a Absatz 1 \nSatz 4 und 5 und Absatz“ ersetzt.",
+        "raw_sha256": "698cc670c9025a449086c369fab5c36fa9577f7a5097ad55079ab2b143467099",
+        "item": 4
+      },
+      {
+        "operation": "replace",
+        "ref": {
+          "para": "132",
+          "absatz": "1",
+          "satz": "3"
+        },
+        "old_text_constraint": "§ 40 Abs. 1 Satz 2 und § 41 Abs.",
+        "new_text": "§ 40 Absatz 1 Satz 3 und § 41 Absatz",
+        "raw": "In § 132 Absatz 1 Satz 3 werden die Wörter „§ 40 Abs. 1 Satz 2 und § 41 Abs.“ durch die Wörter „§ 40 Absatz 1 \nSatz 3 und § 41 Absatz“ ersetzt.",
+        "raw_sha256": "750b85cebc31bc0ad4a373ce9a0abc8b83a50589642b7dfc205b99344955627c",
+        "item": 5
+      }
+    ],
+    "command_count": 5,
+    "affected_norms": [
+      "§ 31a",
+      "§ 40",
+      "§ 88",
+      "§ 89",
+      "§ 132"
+    ]
+  }
+]

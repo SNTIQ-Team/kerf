@@ -313,3 +313,48 @@ def test_checked_in_sgb8_review_is_strict_and_official_only() -> None:
     assert row["anchor"]["source_url"].startswith(
         "https://www.gesetze-im-internet.de/")
     assert row["incoming"]["pdf_sha256"] == row["outgoing"]["pdf_sha256"]
+
+
+def test_urhg_verified_history_from_official_anchor_and_two_gazettes() -> None:
+    import gzip
+
+    fixture = ROOT / "tests" / "fixtures" / "urhg_history"
+    candidates = json.loads((fixture / "candidates.json").read_bytes())
+    reviews = json.loads((ROOT / "data" / "verified_reconstruction_reviews.json").read_bytes())
+    review = next(row for row in reviews["reviews"] if row["act_id"] == "fed_urhg")
+    anchor = json.loads(gzip.decompress((fixture / "anchor.json.gz").read_bytes()))
+    digest = _sha(anchor)
+    assert digest == review["anchor"]["state_sha256"]
+    observation = {
+        **review["anchor"], "act_id": "fed_urhg", "jurabk": "UrhG", "norm_count": 255,
+        "verification": "exact", "date_basis": "retrieval_observation_not_effective_date",
+    }
+    kwargs = {"built_at": "2026-11-26T06:00:00Z"}
+    selected = {**reviews, "reviews": [review]}
+    result = build_reconstructions(selected, candidates, {"observations": [observation]},
+                                   {digest: anchor}, **kwargs)
+    row, = result["reconstructions"]
+    assert (row["effective_from"], row["effective_to"]) == ("2025-01-01", "2026-05-30")
+    assert row["state_sha256"] == "595054efe14431622f91db1e448b717e83b4f7a6f171b7936a39078d529da5cf"
+    assert {e.get("procedure") for e in row["evidence"] if e["source"] == "DIP"} == {"309845", "327975"}
+    assert {e.get("document") for e in row["evidence"] if e["source"] == "BGBl"} == {
+        "bgbl-1-2024-323", "bgbl-1-2026-157"}
+    # A stored generation that predates the new anchor still rebuilds.
+    old = build_reconstructions(selected, [], {"observations": []}, {},
+                                observed_through="2026-11-25", **kwargs)
+    assert old["reconstructions"] == []
+    # Once the observation belongs to the generation, all evidence is required.
+    with pytest.raises(ReconstructionError, match="candidate is absent"):
+        build_reconstructions(selected, candidates[:1], {"observations": [observation]},
+                              {digest: anchor}, observed_through="2026-11-26", **kwargs)
+
+
+def test_reverse_paragraph_replay_rejects_a_nonfinal_or_duplicated_target() -> None:
+    from verified_reconstruction import _inverse_command
+
+    command = {"kind": "insert_paragraph_after", "norm": "§ 2", "after_absatz": "2",
+               "new_absatz": "3", "text": "(3) Drei."}
+    for text in ("(2) Zwei.(3) Drei.(4) Vier.", "(2) Zwei.(3) Drei.(3) Drei."):
+        state = {"norms": [{"enbez": "§ 2", "text": text}]}
+        with pytest.raises(ReconstructionError):
+            _inverse_command(state, command)
