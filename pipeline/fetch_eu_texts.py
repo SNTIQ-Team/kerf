@@ -65,7 +65,7 @@ PREFIXES = """PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 """
 
-# Curated corpus (Bavarian migration, social and data-protection practice).  ``aliases``
+# Curated German-language corpus of EU legislation and treaties.  ``aliases``
 # are official or customary German short forms; the canonical EU_ACTS map in
 # api.norm_identity holds the ones courts use.
 CORPUS: list[dict[str, Any]] = [
@@ -110,6 +110,15 @@ CORPUS: list[dict[str, Any]] = [
      "aliases": ["Entsenderichtlinie"]},
     {"celex": "32011L0083", "jurabk": "RL 2011/83/EU", "family": "directive",
      "aliases": ["Verbraucherrechterichtlinie"]},
+    # The ten legislative acts in the 2024 Pact on Migration and Asylum.
+    {"celex": "32024L1346", "jurabk": "RL (EU) 2024/1346", "family": "directive"},
+    *[{"celex": f"32024R{number}", "jurabk": f"VO (EU) 2024/{number}", "family": "regulation"}
+      for number in (1347, 1348, 1349, 1350, 1351, 1352, 1356, 1358, 1359)],
+    {"celex": "32016L1919", "jurabk": "RL (EU) 2016/1919", "family": "directive"},
+    {"celex": "32022R1925", "jurabk": "VO (EU) 2022/1925", "family": "regulation",
+     "aliases": ["Digital Markets Act", "DMA", "Gesetz über digitale Märkte"]},
+    {"celex": "32024R1689", "jurabk": "VO (EU) 2024/1689", "family": "regulation",
+     "aliases": ["AI Act", "KI-Verordnung", "Verordnung über künstliche Intelligenz"]},
 ]
 # Treaty consolidations are dated by the Treaty of Lisbon's entry into force (Cellar
 # metadata of 12007L/TXT); the per-article works carry the original treaty's date.
