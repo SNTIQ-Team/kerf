@@ -717,31 +717,16 @@ tags:
   - eu-law
   - court-decisions
   - temporal-data
-pretty_name: Kerf — Laws as Git for German and EU law
+pretty_name: SNTIQ Kerf
 configs:
 {configs}
 ---
 
-# Kerf dataset
+# SNTIQ Kerf
 
-The data plane of **[Kerf](https://github.com/SNTIQ-Team/kerf)** —
-German legislation modelled as **Laws as Git**: a temporal, multi-authority
-event log with HEAD, commits, open/closed branches and evidence-bound merges
-(Bund / Bayern / EU; Länder records only after verification at the originating
-Landtag). Built **{today}**.
+Kerf records changes to German and European Union law. A provision can carry two dates. One records when Kerf observed its wording in an official source. The other records when it took legal effect, where the published evidence establishes that date.
 
-Git is a navigation metaphor, not a substitute for legal status. Every row's
-official source and status controls whether it is current law, a pending branch
-or a documented implementation/applicability link.
-
-Kerf is deliberately two-layered. The German migration, asylum, social-law
-and related practice corpus has current full text and change history where the
-official/retrieval sources support it. `federal_catalog.jsonl` provides every
-act listed in the official GII table of contents as discovery metadata only;
-`eu_index.jsonl` provides EU breadth: all
-in-force directives (including implementing/delegated directives) and basic
-regulations exposed by CELLAR, as metadata only. It is not presented as deep
-coverage of every EU instrument.
+This snapshot was built on **{today}**. The migration, asylum and social-law collections include current texts and change histories where the sources support them. The federal GII catalog and the EU index also list instruments for which this dataset provides metadata. Each record identifies its source and status. [Source code](https://github.com/SNTIQ-Team/kerf) · [Live API](https://api.sntiq.com/kerf/docs)
 
 The independent federal archive is split by claim strength. An
 `official_federal_state_observations.jsonl` row says only what complete GII
@@ -825,15 +810,11 @@ Kerf extraction, ranking, annotations and forecasts are transformations,
 not source statements. DIP makes its source data available free of charge at
 [dip.bundestag.de](https://dip.bundestag.de).
 
-Every source and file-level rights regime is documented in the repository's
-`docs/SOURCES.md` and `docs/RIGHTS.md`; reproduce
-the current outputs with `refresh.sh` and `tools/export_hf.py`. Statutory texts
-are official works under § 5 UrhG. The dataset is intentionally marked
-`license: other` because the files combine several sources. SNTIQ publishes its
-original annotations and database arrangement under CC BY 4.0 and its software
-under Apache-2.0. Source terms are listed in `RIGHTS.md`.
+## Reuse
 
-Built by **[SNTIQ](https://sntiq.com/)**.
+SNTIQ licenses its original annotations, selection and database rights under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Its software uses [Apache-2.0](https://github.com/SNTIQ-Team/kerf/blob/main/LICENSE). Both grants permit commercial use. Public-domain materials retain that status. Third-party material remains subject to the terms of each source. The dataset carries the mixed-license tag. [File and source rights](./RIGHTS.md)
+
+The release pipeline is available in the [Kerf repository](https://github.com/SNTIQ-Team/kerf).
 """
 
 
