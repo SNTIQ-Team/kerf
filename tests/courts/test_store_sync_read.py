@@ -910,3 +910,22 @@ def test_rekey_checks_each_paragraph_and_recomputes_the_document_signature(conn)
     with pytest.raises(ValueError, match="paragraph integrity"):
         rekey_decision(conn, new, old)
     assert conn.execute("SELECT text_hash FROM decisions WHERE id=?", (new,)).fetchone()[0] == signature
+
+
+def test_reader_withholds_the_wrong_attachment_until_its_capture_is_replaced(conn):
+    from courts.read import get_decision, get_paragraph, search
+    from courts.store import store_decision
+
+    parsed = _doc("he", "K2", ["Einmalige Stichprobe."], labels=["1"])
+    did, _ = store_decision(conn, parsed, content_hash="wrong-file", capture_path="-", media_type="x")
+    conn.execute("""INSERT INTO verification_findings
+        (run_id,decision_id,kind,severity,representation_a,representation_b,locator,detail,created_at)
+        VALUES(1,?,'representation_error','major','catalog','PDF','pdf:document-identity',
+               '{"capture_sha256":"wrong-file","pdf_day":"2019-02-22"}','2026-11-26')""",(did,))
+    for reply in (get_decision(conn,did), get_paragraph(conn,did+"#rn-1")):
+        assert reply["status"] == "integrity_check_failed"
+        assert reply["reason"] == "source_identity_mismatch" and reply["evidence"] == []
+    assert not search(conn,"Stichprobe")["evidence"]
+    conn.execute("UPDATE decisions SET content_hash='replacement' WHERE id=?", (did,))
+    assert get_paragraph(conn,did+"#rn-1")["status"] == "ok"
+    assert search(conn,"Stichprobe")["evidence"]
