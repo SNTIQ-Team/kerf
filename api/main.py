@@ -75,6 +75,7 @@ try:
 except ImportError:  # optional component; /capabilities still declares it
     materials_router = None
 from api.gii_catalog import GiiCatalogIndex
+from api.native_court_documents import PATH as native_document_path, PRIVATE as native_document_headers, router as native_document_router
 from api.rii_routes import router as rii_router
 from api.native_court_search import router as native_court_search_router
 from api.citation_store import CitationStoreError, query_citations
@@ -111,6 +112,7 @@ FRESHNESS_PATH = (Path(os.environ["KERF_FRESHNESS"])
 app = FastAPI(title="Kerf", version="1.5")
 app.include_router(decision_passages_router(lambda: DATA_DIR))
 app.include_router(rii_router)
+app.include_router(native_document_router)
 app.include_router(native_court_search_router)
 # Norm-level Git semantics (log/at/diff/blame) and role-typed legislative
 # materials.  Both validate their own query strings and answer with the typed
@@ -156,11 +158,12 @@ async def search_contract(request: Request, call_next):
     root_path = request.scope.get("root_path", "")
     if root_path and route_path.startswith(root_path + "/"):
         route_path = route_path[len(root_path):]
+    private_headers = native_document_headers if route_path.rstrip("/") == native_document_path else None
     params = request.query_params
     ignored: list[str] = []
     if params and not route_path.startswith(_SELF_VALIDATING_PREFIXES) and \
             not _SELF_VALIDATING_PATHS.fullmatch(route_path):
-        allowed = _declared_query_names(route_path, request.method)
+        allowed = {"identifier"} if private_headers else _declared_query_names(route_path, request.method)
         if allowed is not None:
             cache_keys = (_CACHE_KEYS | _ROUTE_CACHE_KEYS.get(route_path, set())) - allowed
             ignored = sorted(set(params) & cache_keys)
@@ -174,12 +177,14 @@ async def search_contract(request: Request, call_next):
                 if route_path == "/search":
                     payload["search_scope"] = "current_norms_and_recorded_history"
                     payload["historical_alternative"] = "/norms/{id}/at?date="
-                return JSONResponse(status_code=422, content=payload)
+                return JSONResponse(status_code=422, content=payload, headers=private_headers)
     snapshot = corpus_snapshot()
     requested = request.headers.get("if-kerf-snapshot")
     if requested and requested != snapshot:
-        return JSONResponse(status_code=409, content={"status": "stale_snapshot", "snapshot": snapshot})
+        return JSONResponse(status_code=409, content={"status": "stale_snapshot", "snapshot": snapshot}, headers=private_headers)
     response = await call_next(request)
+    if private_headers:
+        response.headers.update(private_headers)
     if snapshot:
         response.headers["X-Kerf-Snapshot"] = snapshot
     if ignored:
