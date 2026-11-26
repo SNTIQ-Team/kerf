@@ -747,12 +747,12 @@ def ecli_encoded_date(ecli: str) -> str | None:
         candidates = set()
         for year, month, day in ((digits[:4], digits[4:6], digits[6:]),
                                  (digits[4:], digits[2:4], digits[:2])):
+            if year != parts[3]:
+                continue
             try:
                 candidates.add(date(int(year), int(month), int(day)).isoformat())
             except ValueError:
                 continue
-        same_year = {value for value in candidates if value[:4] == parts[3]}
-        candidates = same_year or candidates
         return candidates.pop() if len(candidates) == 1 else None
     m = GERMAN_ECLI_DATE.match(parts[4])
     if not m:
