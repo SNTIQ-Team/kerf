@@ -122,6 +122,19 @@ def test_search_complete_scope_counts_and_evidence(conn, fixture):
     assert {s["source"]: s["count"] for s in env["searched"]} == {"nrw": 0, "rii": 1}
 
 
+def test_ecli_case_variants_retain_the_published_identity(conn, fixture):
+    seed(conn, fixture)
+    for ref in (ECLI.upper(), ECLI.lower()):
+        result = get_decision(conn, ref, with_paragraphs=False, with_relations=False)
+        assert result["status"] == "ok"
+        assert result["decision"]["ecli"] == ECLI
+        assert "identity_match" not in result["decision"]
+        assert search(conn, "Untätigkeitsklage Mitteilung", ecli=ref)["total"] == 1
+        passage = get_paragraph(conn, f"{ref}#rn-10")
+        assert passage["status"] == "ok"
+        assert passage["evidence"][0]["id"] == f"{ECLI}#rn-10"
+
+
 def test_search_zero_over_complete_scope_is_ok_zero(conn, fixture):
     seed(conn, fixture)
     env = search(open_db(), "Quantenchromodynamik")
@@ -580,6 +593,10 @@ def test_two_documents_of_one_portal_with_one_ecli_are_both_kept():
     assert conn.execute("SELECT count(*) FROM decisions WHERE ecli=?", (ecli,)).fetchone()[0] == 2
     status, ids = resolve_decision(conn, ecli)
     assert status == "ambiguous_identity" and set(ids) == {first, second}
+    assert resolve_decision(conn, ecli.lower()) == (status, ids)
+    qualified = get_paragraph(conn, ecli.lower() + "#rn-1")
+    assert qualified["status"] == "ambiguous_identity"
+    assert set(qualified["candidates"]) == {first, second}
     # Re-storing either keeps its id; an identical re-listing stays a duplicate.
     assert store_decision(conn, doc("NJRE001499463", "Das Ablehnungsgesuch ist unbegründet."), content_hash="b",
                           capture_path="-", media_type="x")[0] == second

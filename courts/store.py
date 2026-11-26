@@ -123,6 +123,7 @@ CREATE INDEX IF NOT EXISTS decisions_court_date ON decisions(court_id, decision_
 CREATE INDEX IF NOT EXISTS decisions_court_slug ON decisions(court_slug, decision_date);
 CREATE INDEX IF NOT EXISTS decisions_date ON decisions(decision_date);
 CREATE INDEX IF NOT EXISTS decisions_ecli ON decisions(ecli);
+CREATE INDEX IF NOT EXISTS decisions_ecli_nocase ON decisions(ecli COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS decisions_source ON decisions(source_id, decision_date);
 CREATE TABLE IF NOT EXISTS case_numbers(
   decision_id TEXT NOT NULL,
