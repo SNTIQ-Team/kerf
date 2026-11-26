@@ -43,7 +43,7 @@ rsync "${upload_args[@]}" web/data/ "sntiq:$remote_stage/"
 
 echo "==> acquire production lock + atomic publish"
 ssh sntiq "flock -w 1800 /run/lock/kerf-refresh.lock \
-  /srv/sntiq-kerf/deploy/publish-web-data.sh '$remote_stage'"
+  /srv/sntiq-kerf/deploy/publish-web-data.sh '$remote_stage' --consume-upload"
 cleanup_remote
 trap - EXIT
 
