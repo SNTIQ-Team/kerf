@@ -135,6 +135,23 @@ def test_ecli_case_variants_retain_the_published_identity(conn, fixture):
         assert passage["evidence"][0]["id"] == f"{ECLI}#rn-10"
 
 
+def test_stored_identity_lookup_avoids_scanning_all_decisions(conn, fixture):
+    from courts.read import resolve_decision
+
+    seed(conn, fixture)
+    queries = []
+    conn.set_trace_callback(queries.append)
+    try:
+        # The same row matches its internal id and published ECLI.
+        for ref in (ECLI, ECLI.lower()):
+            assert resolve_decision(conn, ref) == ("ok", [ECLI])
+    finally:
+        conn.set_trace_callback(None)
+    plans = [step["detail"] for sql in queries if sql.lstrip().upper().startswith("SELECT")
+             for step in conn.execute("EXPLAIN QUERY PLAN " + sql)]
+    assert plans and all("SCAN decisions" not in step for step in plans), plans
+
+
 def test_search_zero_over_complete_scope_is_ok_zero(conn, fixture):
     seed(conn, fixture)
     env = search(open_db(), "Quantenchromodynamik")
@@ -592,7 +609,7 @@ def test_two_documents_of_one_portal_with_one_ecli_are_both_kept():
     assert first == ecli and second == "court:verfgh-th/2022-04-06/112-20"
     assert conn.execute("SELECT count(*) FROM decisions WHERE ecli=?", (ecli,)).fetchone()[0] == 2
     status, ids = resolve_decision(conn, ecli)
-    assert status == "ambiguous_identity" and set(ids) == {first, second}
+    assert status == "ambiguous_identity" and ids == sorted((first, second))
     assert resolve_decision(conn, ecli.lower()) == (status, ids)
     qualified = get_paragraph(conn, ecli.lower() + "#rn-1")
     assert qualified["status"] == "ambiguous_identity"
