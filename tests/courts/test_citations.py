@@ -206,3 +206,19 @@ def test_check_norm_ids_flags_stale_ids(fixture):
                  "WHERE target_kind='norm')")
     report = check_norm_ids(conn)
     assert report["not_canonical"] == 1 and "de/bund/sgb14/para/37" in report["not_canonical_examples"]
+
+
+@pytest.mark.parametrize("written,expected", [
+    ("Art. 15 Abs. 1 EuGVVO", None),
+    ("Art. 15 der Verordnung (EG) Nr. 44/2001", "eu/32001R0044/art/15"),
+    ("Art. 17 der Verordnung (EU) Nr. 1215/2012", "eu/32012R1215/art/17"),
+    ("Art. 15 Brüssel-I-VO", "eu/32001R0044/art/15"),
+    ("Art. 17 Brüssel-Ia-VO", "eu/32012R1215/art/17"),
+    ("Art. 17 BrüIaVO", "eu/32012R1215/art/17"),
+])
+def test_brussels_i_instruments(written, expected):
+    [relation] = extract_norms(written)
+    assert relation.target_id == expected
+    if expected is None:
+        assert relation.detail["act_resolution"] == "ambiguous"
+        assert relation.target_raw == written
