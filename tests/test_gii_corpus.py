@@ -65,3 +65,63 @@ def test_default_refresh_rejects_a_shrunken_official_catalog() -> None:
         assert "bverfgg" in str(exc)
     else:
         raise AssertionError("a missing configured act must abort the refresh")
+
+
+def test_explicit_selection_cannot_replace_daily_data_and_keeps_its_own_cache(tmp_path, monkeypatch):
+    import io
+    import json
+    import zipfile
+    from datetime import date
+    from unittest.mock import Mock
+
+    import common
+    import fetch_gii
+    import requests
+
+    monkeypatch.setattr(common, "SNAPSHOTS", tmp_path / "data" / "snapshots")
+    monkeypatch.setattr(fetch_gii, "ROOT", tmp_path)
+    monkeypatch.setattr(fetch_gii, "CORPUS", {"hgb", "bgb"})
+    master = "<items>" + "".join(
+        f"<item><title>{slug}</title><link>https://www.gesetze-im-internet.de/{slug}/xml.zip</link></item>"
+        for slug in sorted(fetch_gii.CORPUS)) + "</items>"
+
+    def get(url, **_kwargs):
+        response = requests.Response()
+        response.status_code = 200
+        if url == fetch_gii.TOC_URL:
+            response._content = master.encode()
+        else:
+            slug = url.split("/")[-2]
+            xml = (f'<dokumente doknr="A-{slug}" builddate="20260101"><norm doknr="N-{slug}">'
+                   f'<metadaten><jurabk>{slug.upper()}</jurabk><enbez>§ 1</enbez></metadaten>'
+                   f'<textdaten><text><Content><P>{slug}</P></Content></text></textdaten></norm></dokumente>')
+            stream = io.BytesIO()
+            with zipfile.ZipFile(stream, "w") as package:
+                package.writestr(slug + ".xml", xml)
+            response._content = stream.getvalue()
+        response._content_consumed = True
+        return response
+
+    http = Mock()
+    http.get = get
+    monkeypatch.setattr(fetch_gii, "Http", lambda **_kwargs: http)
+    monkeypatch.setattr(sys, "argv", ["fetch_gii"])
+    assert fetch_gii.main() == 0
+    data = tmp_path / "data"
+    original = {path: path.read_bytes() for path in data.rglob("*") if path.is_file()}
+    today = date.today().isoformat()
+    for selection, expected in [("hgb", {"hgb"}), ("hgb, bgb", {"hgb", "bgb"}), ("bgb,hgb", {"hgb", "bgb"})]:
+        monkeypatch.setattr(sys, "argv", ["fetch_gii", "--slugs", selection])
+        assert fetch_gii.main() == 0
+        roots = list((data / "gii_probes").iterdir())
+        matching = [root for root in roots if {
+            json.loads(row)["slug"] for row in (root / "snapshots" / today / "acts.jsonl").read_text().splitlines()
+        } == expected]
+        assert len(matching) == 1
+        assert (matching[0] / "gii_import_cache" / "hgb.json.gz").is_file()
+        assert (matching[0] / "reader-source" / "fed_hgb.xml").is_file()
+    assert len(roots) == 2
+    monkeypatch.setattr(sys, "argv", ["fetch_gii", "--slugs", "bgb,unknown"])
+    assert fetch_gii.main() == 1
+    assert len(list((data / "gii_probes").iterdir())) == 2
+    assert all(p.read_bytes() == old for p, old in original.items())
