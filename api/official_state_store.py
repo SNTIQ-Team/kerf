@@ -25,13 +25,41 @@ class OfficialStateError(ValueError):
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 
 
+@lru_cache(maxsize=1)
+def _projection_review() -> tuple[frozenset[str], str, str]:
+    path = Path(__file__).parent / "data" / "gii_projection_review.json"
+    review = json.loads(path.read_bytes())
+    return (frozenset(row["sha256"] for row in review["legacy_projections"]),
+            review["preceding_projection_sha256"], review["corrected_projection_sha256"])
+
+
+def incomplete_projection(row: dict[str, Any]) -> bool:
+    """An immutable digest identifies both the act and its captured norm inventory."""
+    return (row.get("state_sha256") or row.get("state_digest")) in _projection_review()[0]
+
+
+def with_projection_coverage(row: dict[str, Any]) -> dict[str, Any]:
+    if incomplete_projection(row):
+        return {**row, "projection_status": "partial", "body_complete": False}
+    return row
+
+
+def _same_source_corrections(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """When both parses of the identical source were recorded the same day, select the complete one."""
+    _, earlier, corrected = _projection_review()
+    dates = {(r.get("act_id"), r.get("observed_at") or r.get("date"))
+             for r in rows if (r.get("state_sha256") or r.get("state_digest")) == corrected}
+    return [r for r in rows if (r.get("state_sha256") or r.get("state_digest")) != earlier
+            or (r.get("act_id"), r.get("observed_at") or r.get("date")) not in dates]
+
+
 def unordered_observation_days(
         observations: Iterable[dict[str, Any]]) -> set[tuple[str | None, str]]:
     """Identify act/date pairs with distinct complete source states and no retrieval order."""
     first = {}
     ambiguous = set()
-    for row in observations:
-        if not isinstance(row, dict) or row.get("source_store") == "bavarian_states":
+    for row in _same_source_corrections([r for r in observations if isinstance(r, dict)]):
+        if row.get("source_store") == "bavarian_states":
             continue
         day = str(row.get("observed_at") or row.get("date") or "")[:10]
         digest = str(row.get("state_sha256") or row.get("state_digest") or "")
@@ -44,11 +72,11 @@ def unordered_observation_days(
 
 
 def single_state_observations(
-        observations: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Select rows whose act and retrieval day identify one complete state."""
-    rows = list(observations)
+        observations: Iterable[dict[str, Any]], *, allow_partial: bool = False) -> list[dict[str, Any]]:
+    """Select unambiguous observations. A partial capture proves only its retained text."""
+    rows = _same_source_corrections([r for r in observations if isinstance(r, dict)])
     ambiguous = unordered_observation_days(rows)
-    return [row for row in rows if isinstance(row, dict) and
+    return [row for row in rows if (allow_partial or not incomplete_projection(row)) and
             (row.get("act_id"), str(row.get("observed_at") or row.get("date") or "")[:10]) not in ambiguous]
 
 
@@ -66,7 +94,8 @@ def observation_on(act: dict[str, Any], requested_at: str | None
         if observed == requested_at and _DIGEST.fullmatch(digest):
             matches.append({**row, "observed_at": observed,
                             "state_sha256": digest})
-    if not matches or unordered_observation_days(matches):
+    matches = single_state_observations(matches, allow_partial=True)
+    if not matches:
         return None
     return max(matches, key=lambda row: (
         str(row.get("builddate") or ""), row["state_sha256"]))
