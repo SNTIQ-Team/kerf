@@ -122,7 +122,7 @@ def create_router(data_dir: Callable[[], Path],
                 raise
             # A reviewed section can have an earlier legal date or a later knowledge
             # horizon than the optional full-act archive in this same generation.
-            versions = reviewed.merge_versions(resolved["norm_id"], record, [], selector)
+            versions = reviewed.merge_versions(resolved["norm_id"], record, [], selector, as_of)
             if not versions:
                 raise
             chain = ActChain(act=resolved["act"], prefix=resolved["norm_id"].rsplit("/", 2)[0],
@@ -130,7 +130,7 @@ def create_router(data_dir: Callable[[], Path],
                              history_start=record["editions"][0]["valid_from"], bavarian=False,
                              snapshot={"reviewed_norm_editions": True})
             return resolved, chain, versions
-        return resolved, chain, reviewed.merge_versions(resolved["norm_id"], record, versions, selector)
+        return resolved, chain, reviewed.merge_versions(resolved["norm_id"], record, versions, selector, as_of)
 
     def run(operation: str, request: Request, norm_id: str | None,
             handler: Callable[..., dict[str, Any]]):
