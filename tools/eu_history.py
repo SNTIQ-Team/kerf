@@ -133,14 +133,16 @@ def _attestation(interval: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build(row: dict[str, Any], *, juris: str = "EU",
+def build(row: dict[str, Any], *, juris: str = "EU", as_of: str | None = None,
           intervals: list[dict[str, Any]] | None = None,
           per_article_enactment: bool = True,
           version_change=None) -> dict[str, Any]:
     """The act detail (with ``history``) for one fetched act.
 
     ``intervals`` (default: the EU editions of ``row``) are the text sources in
-    chronological order; an edition may hold every article or a single one
+    chronological order. The reading view uses EU consolidations dated on or before
+    the build day (the snapshot day by default). The history keeps future editions.
+    An edition may hold every article or a single one
     (an archived per-article page).  ``version_change`` builds the change
     record between two versions (default: EU corrigenda/consolidations).
     """
@@ -179,8 +181,12 @@ def build(row: dict[str, Any], *, juris: str = "EU",
                 per_norm[norm_id] = []
                 order.append(norm_id)
             per_norm[norm_id].append((position, interval, article))
-    full_intervals = [i for i in intervals if not i.get("partial")]
-    last_interval = full_intervals[-1] if full_intervals else None
+    reader_day = as_of or str(row.get("fetched_at") or "")[:10] or date.today().isoformat()
+    reader_intervals = {pos: interval for pos, interval in enumerate(intervals)
+                        if juris != "EU" or interval["kind"] != "consolidated"
+                        or (interval["edition"].get("date") or "") <= reader_day}
+    last_interval = next((i for i in reversed(reader_intervals.values()) if not i.get("partial")), None)
+    latest_rows = {}
     corrigenda = sorted({(c.get("celex"), c.get("date"), c.get("oj_ref"))
                          for i in intervals for c in i["edition"].get("corrigenda") or []
                          if c.get("celex")}, key=lambda c: (c[1] or "", c[0]))
@@ -277,7 +283,10 @@ def build(row: dict[str, Any], *, juris: str = "EU",
                 "verification": {"cross_source": "single_source",
                                  "sources": sorted({g[0]["edition"].get("celex") or "" for g in group})},
             })
-        seen_full = [r[1] for r in rows if not r[1].get("partial")]
+        reader_rows = [r for r in rows if r[0] in reader_intervals]
+        if reader_rows:
+            latest_rows[norm_id] = reader_rows[-1]
+        seen_full = [r[1] for r in reader_rows if not r[1].get("partial")]
         if last_interval is not None and seen_full and seen_full[-1] is not last_interval:
             findings.append({"record_type": "finding", "kind": "article_absent_from_latest_edition",
                              "norm_id": norm_id,
@@ -303,16 +312,14 @@ def build(row: dict[str, Any], *, juris: str = "EU",
                                          "the Official Journal wording without this corrigendum"})
     for warning in row.get("warnings") or []:
         findings.append({"record_type": "finding", "kind": "fetch_warning", "detail": warning})
-    full = [i for i in intervals if not i.get("partial")]
-    latest_full = (full[-1]["edition"].get("articles") if full else []) or []
-    newest = {norm: per_norm[norm][-1][2] for norm in order}
+    latest_full = (last_interval["edition"].get("articles") if last_interval else []) or []
     head = []
     listed = set()
-    for norm_id, article in norm_rows_with_ids(act, latest_full):
-        head.append(newest.get(norm_id, article))
+    for norm_id, _article in norm_rows_with_ids(act, latest_full):
+        head.append(latest_rows[norm_id][2])
         listed.add(norm_id)
-    head.extend(newest[n] for n in order if n not in listed
-                and per_norm[n][-1][1].get("partial"))
+    head.extend(article for norm, (_, interval, article) in latest_rows.items()
+                if norm not in listed and interval.get("partial"))
     states = [{"source": i.get("source_key") or "cellar", "role": i["role"],
                **({"complete": False, "notes": {"capture_kind": "norm_html"}}
                   if i.get("partial") else {}),
@@ -342,7 +349,7 @@ def build(row: dict[str, Any], *, juris: str = "EU",
         "aliases": row.get("aliases") or [], "title": row.get("title") or row["jurabk"],
         "family": row.get("family"), "source_url": source_url, "eli": dates.get("eli"),
         "build": str(row.get("fetched_at") or "")[:10], "stand": (
-            intervals[-1]["edition"].get("celex") if intervals else None),
+            next(reversed(reader_intervals.values()))["edition"].get("celex") if reader_intervals else None),
         "dates": dates, "relations": row.get("relations") or {}, "extends": row.get("extends"),
         "source": row.get("source"), "norm_count": len(head),
         "norms": [{"enbez": a.get("enbez"), "titel": a.get("titel") or "",

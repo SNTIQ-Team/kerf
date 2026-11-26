@@ -1038,6 +1038,17 @@ def select_version(versions: list[NormVersion], on: str,
                     "consolidated_version_valid_until_exclusive": end,
                     "valid_from": version.first_state.valid_from,
                     "valid_until_exclusive": version.last_state.valid_until}
+    if chain.eu and versions:
+        # CELLAR can already serve a future consolidation. Downloading it
+        # today is no evidence for that wording on an earlier legal date.
+        eligible = [v for v in versions if any(
+            s.valid_from_status != "official_eu_consolidation" or not s.valid_from or s.valid_from <= on
+            for s in v.states)]
+        if not eligible:
+            return "not_in_corpus", None, {
+                "resolution": "before_text_history",
+                "text_history_start": min(s.valid_from for v in versions for s in v.states)}
+        versions = eligible
     # An EU act (or article) repealed before ``on``: the last wording with
     # its evidenced end, never as the text in force.
     last = versions[-1] if versions else None

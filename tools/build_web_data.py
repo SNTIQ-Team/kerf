@@ -703,7 +703,7 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     eu_history.link_extensions(eu_rows)
     for row in eu_rows:
         detail = eu_history.build(
-            row, juris="INT" if row["act_id"].startswith("int_") else "EU")
+            row, juris="INT" if row["act_id"].startswith("int_") else "EU", as_of=TODAY)
         idx.append(eu_history.index_row(detail))
         details[detail["id"]] = detail
 
