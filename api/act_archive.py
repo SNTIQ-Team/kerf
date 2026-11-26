@@ -36,7 +36,9 @@ from zoneinfo import ZoneInfo
 
 from api.markdown_layout import ParagraphLayouts, apply_paragraph_layout
 from api.norm_identity import reader_designator
-from api.official_state_store import single_state_observations, unordered_observation_days
+from api.official_state_store import (
+    incomplete_projection, observation_on, single_state_observations, unordered_observation_days,
+)
 
 
 class ArchiveRequestError(ValueError):
@@ -110,7 +112,7 @@ def _official_observations(act: dict[str, Any],
     # Repeated copies of the same state can share a date. Distinct states on
     # one day remain in the evidence ledger and cannot supply a date-only text.
     by_date = {row["observed_at"]: row for row in sorted(
-        single_state_observations(rows), key=lambda item: (
+        single_state_observations(rows, allow_partial=True), key=lambda item: (
             item["observed_at"], str(item.get("builddate") or ""),
             item["state_sha256"]))}
     return list(by_date.values())
@@ -408,16 +410,16 @@ def build_archive_index(act: dict[str, Any], *, fallback_head: Any = None
             "archive_timestamp": observation.get("archive_timestamp"),
             "builddate": observation.get("builddate"),
             "verification": observation.get("verification") or "exact",
-            "exact": True,
-            "partial": False,
+            "exact": not incomplete_projection(observation),
+            "partial": incomplete_projection(observation),
         })
 
     head_entry = dates.setdefault(head_date, {"date": head_date})
     head_entry.update({
         "label": "HEAD · consolidated source snapshot",
         "has_changes": bool(head_entry.get("has_changes")),
-        "exact": True,
-        "partial": False,
+        "exact": not bool(head_entry.get("partial")),
+        "partial": bool(head_entry.get("partial")),
     })
     gaps = _global_gaps(act, head_date)
     norms = [{
@@ -760,6 +762,9 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
                 label = (gap.get("label") or gap.get("reason")
                          if isinstance(gap, dict) else str(gap))
                 lines.append(f"> - {label}")
+    elif state_meta and incomplete_projection(state_meta):
+        lines.append(f"> This capture from **{target}** omits articles stored under structural "
+                     "headings in the official XML. The captured provisions remain readable.")
     elif state_meta:
         lines.append(
             f"> This complete parsed state was observed in the official {state_meta.get('source') or 'GII'} "
@@ -790,6 +795,9 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         selected = norms
     elif norm_ref.index >= 0:
         selected = [norms[norm_ref.index]]
+    elif state_meta and incomplete_projection(state_meta):
+        selected = []
+        lines.append(f"**{norm_ref.label}** was not captured for this date.")
     else:
         historical = [item for item in norms
                       if _same_norm(_norm_key(item.get("enbez")), norm_ref)]
@@ -876,6 +884,12 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         state_meta = dict(observed_state)
     else:
         current_norms = list(act.get("norms") or [])
+        if target == head_date and act.get("id") == "fed_bgbeg":
+            captured = observation_on(act, target)
+            if (captured and incomplete_projection(captured)
+                    and captured.get("norm_count") == len(current_norms)
+                    and not any(n.get("enbez", "").startswith(("Art ", "Art. ")) for n in current_norms)):
+                state_meta = dict(captured)
     legal_candidates = [
         row for row in act.get("versions") or []
         if isinstance(row, dict)
@@ -890,6 +904,9 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
     historical_labels = (_historical_designators(act)
                          if state_meta is None and retrospective_meta is None
                          else ())
+    if state_meta and incomplete_projection(state_meta):
+        historical_labels = [reader_designator(n["enbez"], n.get("glied") or "")
+                             for n in act.get("norms") or [] if n.get("enbez")]
     norm_ref = (_resolve_norm(current_norms, norm, historical_labels)
                 if norm is not None else None)
     if retrospective_meta is not None:
@@ -902,8 +919,10 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         )
     elif state_meta is not None:
         norms = copy.deepcopy(current_norms)
-        gaps = []
-        exact = True
+        exact = not incomplete_projection(state_meta) or (norm_ref is not None and norm_ref.index >= 0)
+        gaps = [] if exact else [_gap(
+            "incomplete_source_projection", "The extraction omitted whole articles in structural headings.",
+            from_=target, to=target)]
     elif target == head_date:
         norms = copy.deepcopy(current_norms)
         if norm_ref is not None and norm_ref.index < 0:
@@ -974,7 +993,7 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
             "observed_at": target,
             "date_basis": state_meta.get("date_basis")
             or "retrieval_observation_not_effective_date",
-            "verification": state_meta.get("verification") or "exact",
+            "verification": (state_meta.get("verification") or "exact") if complete else "partial_source_projection",
             "state_sha256": state_meta.get("state_sha256"),
             "source": state_meta.get("source") or "GII",
             "source_url": state_meta.get("source_url"),

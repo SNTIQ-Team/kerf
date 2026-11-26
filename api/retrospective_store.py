@@ -22,7 +22,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from api.official_state_store import OfficialStateError, load_state_digest
+from api.official_state_store import OfficialStateError, incomplete_projection, load_state_digest
 
 
 SCHEMA_VERSION = 1
@@ -478,7 +478,7 @@ def act_history(manifest: dict[str, Any], act_id: str,
     result = dict(raw)
     result["as_of"] = knowledge
     result["intervals"] = [row for row in raw.get("intervals") or []
-                           if _interval_contains(
+                           if not incomplete_projection(row) and _interval_contains(
                                row["knowledge_from"], row.get("knowledge_to"),
                                knowledge, dates=False)]
     result["events"] = [row for row in raw.get("events") or []
