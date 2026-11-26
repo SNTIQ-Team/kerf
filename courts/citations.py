@@ -421,13 +421,15 @@ MONTHS = {"januar": 1, "jan": 1, "februar": 2, "feb": 2, "febr": 2, "märz": 3, 
 DATE_RE = (r"(?P<d>\d{1,2})\.\s?(?:(?P<m>\d{1,2})\.|(?P<mn>Januar|Februar|März|April|Mai|Juni|Juli|August|"
            r"September|Oktober|November|Dezember|Jan\.|Febr?\.|Mär\.|Mrz\.|Apr\.|Jun\.|Jul\.|Aug\.|Sept?\.|"
            r"Okt\.|Nov\.|Dez\.))\s?(?P<y>\d{4}|\d{2})")
+# Bundespatentgericht register names include the literal parenthetical "(pat)".
+PATENT_DOCKET = r"\d{1,2}\s+(?:W|ZA)\s*\((?i:pat)\)\s*\d{1,4}\s*/\s*\d{2,4}"
 DECISION_REF_RE = re.compile(
     r"(?:(?P<dtype>Urteile?n?|Urt\.|Beschl(?:uss(?:es)?|üsse?n?)|Beschl\.|Gerichtsbescheide?s?|"
     r"Kammerbeschl(?:uss(?:es)?|üsse?n?)|Senatsurteile?n?|Senatsbeschl(?:uss(?:es)?|üsse?n?)|"
     r"Vorlagebeschlusse?s?|Teilurteile?s?|Entscheidung(?:en)?)"
     + S + r")?(?:vom|v\.)" + S + DATE_RE + S +
     r"(?:[-–—]|,)" + S + r"(?:Az\.?:?" + S + r"|Aktenzeichen:?" + S + r")?"
-    r"(?P<az>[A-ZÄÖÜ0-9IVX][^\n;()]{2,45}?)(?=" + S + r"(?:[-–—](?:\s|$)|[,;)]|\s(?:und|sowie|juris|BVerwGE|BSGE|BVerfGE|BGHZ|BFHE|BAGE|NJW|NVwZ)\b|\.\s|$))")
+    r"(?P<az>" + PATENT_DOCKET + r"|[A-ZÄÖÜ0-9IVX][^\n;()]{2,45}?)(?=" + S + r"(?:[-–—](?:\s|$)|[,;)]|\s(?:und|sowie|juris|BVerwGE|BSGE|BVerfGE|BGHZ|BFHE|BAGE|NJW|NVwZ)\b|\.\s|$))")
 AZ_SHAPE = re.compile(r"(?:\d\s?[/.]\s?\d{2,5}\b|\b[CTF]\s?[-‑–]\s?\d{1,4}/\d{2}\b|\d{1,4}/\d{2}\b)")
 COURT_NAMES = (
     r"BVerfG|BGH|BVerwG|BFH|BAG|BSG|BPatG|EuGH|EGMR|GmS-OGB|GemS-OGB|BayVGH|BayLSG|BayObLG|BayVerfGH|"
@@ -508,6 +510,10 @@ def extract_decisions(text: str, paragraph_id: str | None, *, own_court_id: str 
             court_id, court_label = _court_id_fixups(court_name, info.court_id), court_name
         if not court_id or court_id.startswith("court-"):
             continue
+        if "(pat)" in az.casefold():
+            # A patent register alone cannot assign a decision to a court mentioned in an earlier clause.
+            if court_id != "bpatg" or text[a_end:ref.start()].strip(" \t\r\n,(:–—-"):
+                continue
         target = synthetic_decision_id(court_id, iso, az)
         # Only the clause that introduces this citation counts: cut the prefix at
         # the last "(", ";" or sentence end so that an earlier sentence's
