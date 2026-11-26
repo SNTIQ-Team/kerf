@@ -13,12 +13,16 @@ Output (data/snapshots/gii/<date>/):
     norms.jsonl   one row per §    {slug, jurabk, enbez, titel, text,
                                     doknr, gliederung}
 
+Explicit --slugs selections keep their snapshots, import checkpoints and reader
+XML under data/gii_probes/<selection hash>/, outside the daily collection.
+
 Usage:
     python3 pipeline/fetch_gii.py [--slugs asylblg,aufenthg_2004]
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import re
 import sys
@@ -201,12 +205,10 @@ def parse_toc(xml_bytes: bytes) -> tuple[dict[str, str], list[dict]]:
 
 
 def require_complete_corpus(wanted: set[str], links: dict[str, str]) -> None:
-    """Refuse a default refresh if GII no longer exposes a configured act.
+    """Refuse a refresh missing any requested GII act.
 
     A transiently incomplete TOC or a renamed slug must not silently replace a
-    complete production generation with fewer laws.  Explicit ``--slugs``
-    probes remain intentionally partial and are handled separately in
-    :func:`main`.
+    complete production generation with fewer laws.
     """
     missing = sorted(wanted - links.keys())
     if missing:
@@ -234,30 +236,31 @@ def main() -> int:
     args = ap.parse_args()
     if args.budget_mib < 1 or args.min_free_mib < 0:
         ap.error("invalid import storage budget")
-    wanted = set(args.slugs.split(",")) if args.slugs else set(CORPUS)
+    if args.slugs is not None and not all(part.strip() for part in args.slugs.split(",")):
+        ap.error("--slugs requires comma-separated GII identifiers")
+    wanted = {part.strip() for part in args.slugs.split(",")} if args.slugs is not None else set(CORPUS)
     day = date.today().isoformat()
-    cache = GiiImportCache(ROOT / "data" / "gii_import_cache",
-                           max_bytes=args.budget_mib * 1024**2,
-                           min_free_bytes=args.min_free_mib * 1024**2)
-
     http = Http(delay=0.4)
     print("[toc] fetching index …")
     links, catalog = parse_toc(http.get(TOC_URL, timeout=60).content)
     print(f"[toc] {len(links)} laws in the federal index")
 
-    missing = sorted(wanted - links.keys())
-    if args.slugs:
-        if missing:
-            print(f"[warn] not in GII index: {missing}")
-    else:
-        try:
-            require_complete_corpus(wanted, links)
-        except RuntimeError as exc:
-            print(f"[error] {exc}", file=sys.stderr)
-            return 1
+    try:
+        require_complete_corpus(wanted, links)
+    except RuntimeError as exc:
+        print(f"[error] {exc}", file=sys.stderr)
+        return 1
+
+    data_root = ROOT / "data"
+    if args.slugs is not None:
+        selection = hashlib.sha256("\n".join(sorted(wanted)).encode("utf-8")).hexdigest()
+        data_root = data_root / "gii_probes" / selection
+    cache = GiiImportCache(data_root / "gii_import_cache",
+                           max_bytes=args.budget_mib * 1024**2,
+                           min_free_bytes=args.min_free_mib * 1024**2)
 
     acts, norms = [], []
-    for slug in sorted(wanted & links.keys()):
+    for slug in sorted(wanted):
         checkpoint = cache.get(slug, day)
         if checkpoint is None:
             # Keep transport and expansion bounded before materialising XML.
@@ -275,7 +278,7 @@ def main() -> int:
             except ImportBudgetExceeded as exc:
                 print(f"[paused] {exc}", file=sys.stderr)
                 return 2
-            save_reader_source(ROOT / "data" / "reader-source",
+            save_reader_source(data_root / "reader-source",
                                reader_act_id("fed", act["jurabk"]), xml_bytes)
         else:
             act, ns = checkpoint
@@ -284,7 +287,11 @@ def main() -> int:
         print(f"  {act['jurabk'] or slug:>16}  {act['norm_count']:4} §§  "
               f"build {act['builddate'][:8]}")
 
-    out = snapshot_dir("gii", day)
+    if args.slugs is None:
+        out = snapshot_dir("gii", day)
+    else:
+        out = data_root / "snapshots" / day
+        out.mkdir(parents=True, exist_ok=True)
     write_jsonl(out / "catalog.jsonl", catalog)
     write_jsonl(out / "acts.jsonl", acts)
     write_jsonl(out / "norms.jsonl", norms)
