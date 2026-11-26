@@ -1183,13 +1183,30 @@ def _decision_family(label: str) -> str | None:
     return None
 
 
+# A citation may name two forms before a shared date, e.g. "Urteil und
+# Beschluss vom …". The date parser captures only its immediately preceding
+# form. Check whether another form is joined to it before the shared date.
+_CITED_FORM_WORD = re.compile(
+    r"(?<!\w)(?:[\w-]*(?:urteil(?:s|es|e|en)?|beschl(?:uss(?:es)?|üsse?n?|uß)|gerichtsbescheid(?:s|es|e|en)?)|urt\.|beschl\.)(?!\w)",
+    re.IGNORECASE,
+)
+
+
 def _target_by_cited_form(candidates: str, raw: str, day: str, docket: str) -> str | None:
     """Disambiguate one dated citation with the form printed beside its date and docket."""
-    forms = {match.group("dtype").lower() for match in DECISION_REF_RE.finditer(raw)
-             if match.group("dtype") and parse_date(match) == day and case_key(match.group("az")) == docket}
-    if len(forms) != 1:
+    matches = [match for match in DECISION_REF_RE.finditer(raw)
+               if match.group("dtype") and parse_date(match) == day and case_key(match.group("az")) == docket]
+    if len(matches) != 1:
         return None
-    word = forms.pop()
+    match = matches[0]
+    prefix = raw[:match.start("dtype")]
+    previous_words = list(_CITED_FORM_WORD.finditer(prefix))
+    if previous_words:
+        between = prefix[previous_words[-1].end():]
+        if re.fullmatch(r"[\s,;/&+()-]*(?:(?:und|oder|sowie|bzw\.?|u\.|o\.|als\s+auch|wie\s+auch)[\s,;/&+()-]*)*",
+                        between, re.IGNORECASE):
+            return None
+    word = match.group("dtype").lower()
     wanted = _decision_family(word)
     if wanted is None:
         return None
