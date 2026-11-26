@@ -469,17 +469,47 @@ def _old_template(root: Tag) -> _Body:
     """1998-2010s template: ``div.entscheidung`` rows ``div.absatz`` = ``div.rechts`` (Rn) + ``div.links``."""
     body = _Body(template="entscheidung")
     rows = []
-    for index, row in enumerate(root.select("div.absatz"), 1):
-        rechts, links = row.find("div", class_="rechts"), row.find("div", class_="links")
-        if links is None:
-            continue
+    # Flat editions pair adjacent number and text columns. Keep their XPath tied to
+    # the actual sibling position, including blank columns beside unnumbered text.
+    flat = [column for column in root.select("div.text div.links, div.text div.rechts")
+            if column.find_parent("div", class_="absatz") is None]
+    flat_ids = {id(column) for column in flat}
+    for column in flat:
+        if "links" in (column.get("class") or ()):
+            previous = column.find_previous_sibling()
+            if previous is None or previous.name != "div" or "rechts" not in (previous.get("class") or ()):
+                raise UpstreamFailure("parse_error", "BVerfG text column without an adjacent number column")
+    markers = [row for row in root.select("div.absatz, div.text div.rechts")
+               if "absatz" in (row.get("class") or ()) or id(row) in flat_ids]
+    wrapped_index = 0
+    for row in markers:
+        if "absatz" in (row.get("class") or ()):
+            wrapped_index += 1
+            rechts, links = row.find("div", class_="rechts"), row.find("div", class_="links")
+            if links is None:
+                continue
+            locator = f"/div.entscheidung//div.absatz[{wrapped_index}]"
+        else:
+            # The official electronic edition can print alternating number and text columns without a row wrapper.
+            rechts, links = row, row.find_next_sibling()
+            if links is None or links.name != "div" or "links" not in (links.get("class") or ()):
+                raise UpstreamFailure("parse_error", "BVerfG number column without an adjacent text column")
+            current = links
+            steps = []
+            while current.parent is not None and current.name != "[document]":
+                position = 1 + len(current.find_previous_siblings(current.name))
+                steps.append(f"{current.name}[{position}]")
+                current = current.parent
+            locator = "/" + "/".join(reversed(steps))
+            if inline_text(rechts) and not text_of(links):
+                raise UpstreamFailure("parse_error", f"empty published BVerfG paragraph {inline_text(rechts)}")
         first = next((c for c in links.children if isinstance(c, Tag)), None)
         classes = set(first.get("class") or []) if first is not None else set()
         rows.append({"rn": inline_text(rechts) if rechts is not None else "", "links": links, "first": first,
-                     "classes": classes, "text": text_of(links), "locator": f"/div.entscheidung//div.absatz[{index}]",
+                     "classes": classes, "text": text_of(links), "locator": locator,
                      "heading": first is not None and first.name in HEADINGS})
     if not rows:
-        raise UpstreamFailure("parse_error", "div.entscheidung without div.absatz rows")
+        raise UpstreamFailure("parse_error", "div.entscheidung without paragraph rows")
     az1 = next((i for i, r in enumerate(rows) if "az1" in r["classes"]), None)
     gruende = next((i for i, r in enumerate(rows) if r["heading"] and is_gruende_heading(r["text"])), None)
     if gruende is None:
