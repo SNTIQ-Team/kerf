@@ -334,8 +334,9 @@ def legacy_source(promulgation: dict) -> dict:
     year = str(promulgation.get("jahrgang") or "")
     page = str(promulgation.get("seite") or "")
     issue = str(promulgation.get("heftnummer") or "")
+    page_match = re.fullmatch(r"([0-9]{1,4})([a-z]?)", page)
     if not (year.isdigit() and 1949 <= int(year) <= 2022 and
-            page.isdigit() and 0 < int(page) < 10000 and
+            page_match and int(page_match[1]) > 0 and
             issue.isdigit() and 0 < int(issue) < 1000):
         raise SourceIntegrityError("invalid legacy publication reference")
     url = str(promulgation.get("pdf_url") or "")
@@ -347,14 +348,18 @@ def legacy_source(promulgation: dict) -> dict:
     start = query.get("start") or []
     if len(start) != 1:
         raise SourceIntegrityError("ambiguous legacy document selector")
-    filename = f"bgbl1{int(year) % 100:02d}s{int(page):04d}.pdf"
+    printed_page = int(page_match[1])
+    suffix = page_match[2]
+    selector = f"{printed_page}{suffix}"
+    filename = f"bgbl1{int(year) % 100:02d}s{printed_page:04d}{suffix}.pdf"
     if not re.fullmatch(r"//\*\[@attr_id='" + re.escape(filename) + r"'\]", start[0]):
         raise SourceIntegrityError("DIP PDF identity disagrees with year/page citation")
     args = {"start": start[0], "startbk": "Bundesanzeiger_BGBl"}
     viewer_args = {"start": start[0], "bk": "Bundesanzeiger_BGBl", "skin": "pdf"}
     return {
-        "document_id": f"bgbl-1-{year}-s{int(page)}", "year": year,
-        "page": str(int(page)), "issue": str(int(issue)),
+        "document_id": f"bgbl-1-{year}-s{selector}", "year": year,
+        "page": selector, "issue": str(int(issue)),
+        **({"printed_page": str(printed_page)} if suffix else {}),
         "source_filename": filename, "dip_pdf_url": url,
         "official_html_url": "https://www.bgbl.de/xaver/bgbl/start.xav?" + urlencode(args),
         "official_pdf_url": "https://www.bgbl.de/xaver/bgbl/text.xav?" + urlencode(viewer_args),
@@ -399,14 +404,16 @@ def select_legacy_documents(procedures, acts, start: str, end: str, *,
                    "title": procedure.get("titel"),
                    "fundstelle": promulgation.get("fundstelle"),
                    "retrospective_procedures": [ref]}
+            if "printed_page" in identity:
+                row["publication_kind"] = promulgation.get("einleitungstext") or "unknown"
             key = identity["document_id"]
             if key in conflicted:
                 conflicted[key].append(row)
                 continue
             existing = selected.get(key)
             if existing:
-                if any(existing[key] != row[key] for key in
-                       ("publication_date", "execution_date", "issue")):
+                if any(existing.get(field) != row.get(field) for field in
+                       ("publication_date", "execution_date", "issue", "publication_kind")):
                     if conflicts is None:
                         raise SourceIntegrityError("conflicting legacy publication identity")
                     conflicted[key] = [selected.pop(key), row]
@@ -421,11 +428,12 @@ def select_legacy_documents(procedures, acts, start: str, end: str, *,
         for key, rows in sorted(conflicted.items()):
             variants = {}
             for row in rows:
-                identity = tuple(row[field] for field in
-                                 ("publication_date", "execution_date", "issue"))
+                identity = tuple(row.get(field) for field in
+                                 ("publication_date", "execution_date", "issue", "publication_kind"))
                 variant = variants.setdefault(identity, {
                     **{field: row[field] for field in
                        ("publication_date", "execution_date", "issue", "official_pdf_url")},
+                    **({"publication_kind": row["publication_kind"]} if "publication_kind" in row else {}),
                     "procedure_ids": [],
                 })
                 variant["procedure_ids"] = sorted(set(variant["procedure_ids"]) | {
@@ -439,7 +447,8 @@ def select_legacy_documents(procedures, acts, start: str, end: str, *,
         slugs = {act["slug"] for proc in row["retrospective_procedures"]
                  for act in proc["matched_acts"]}
         priority = any(s.startswith("sgb_") or s in PRIORITY_SLUGS for s in slugs)
-        return (not priority, row["publication_date"], int(row["page"]))
+        return (not priority, row["publication_date"],
+                int(row.get("printed_page", row["page"])), row["page"])
 
     return sorted(selected.values(), key=order)
 
@@ -451,7 +460,7 @@ def _verify_publication_header(candidate: dict, text: str) -> None:
         rf"Bundesgesetzblatt\s+Jahrgang\s+{candidate['year']}\s+T\s*eil\s+I\b",
         rf"\bNr\.\s*{candidate['issue']}\b",
         rf"\b{published.day}\.\s*{MONTHS[published.month]}\s+{published.year}\b",
-        rf"(?<!\d){candidate['page']}(?!\d)",
+        rf"(?<!\d){candidate.get('printed_page', candidate['page'])}(?!\d)",
     ]
     if not all(re.search(pattern, first, re.IGNORECASE) for pattern in patterns):
         raise SourceIntegrityError("legacy PDF publication header disagrees with DIP")
@@ -739,6 +748,10 @@ def build_legacy_inventory(documents: list[dict], archive: LegacyArchive,
     index = heading_act_index(corpus_acts)
     for document in documents:
         verified, _ = _verified_document(document, archive)
+        if "printed_page" in verified and verified.get("publication_kind") != "Gesetz":
+            # A shared printed page can contain a correction or notice about
+            # another act. Keep its source without treating it as an amendment.
+            continue
         scoped_documents = []
         for section in verified["articles"]:
             procedures = [{**proc, "matched_acts": [
@@ -885,7 +898,7 @@ def capture_selected(selected: list[dict], state: dict, archive: LegacyArchive,
             else:
                 _verified_document(previous, archive)
             if any(previous.get(field) != candidate.get(field) for field in
-                   ("publication_date", "execution_date", "official_pdf_url", "issue")):
+                   ("publication_date", "execution_date", "official_pdf_url", "issue", "publication_kind")):
                 raise SourceIntegrityError("resumed official document identity changed")
             if previous["retrospective_procedures"] != candidate["retrospective_procedures"]:
                 refreshed = {**previous, **candidate}
