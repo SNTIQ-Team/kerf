@@ -739,6 +739,9 @@ def ecli_date_conflict(ecli: str, decision_date: str) -> str | None:
         return f"ECLI year {year} != decision year {decision_date[:4]}"
     encoded = ecli_encoded_date(ecli)
     if encoded is None:
+        short = GERMAN_ECLI_DATE.match(parts[4])
+        if short and short.group("y") and short.group("y") != year[-2:]:
+            return f"ECLI ordinal year {short.group('y')} != ECLI year {year}"
         return None
     return None if encoded == decision_date else f"ECLI encodes {encoded}, decision dated {decision_date}"
 
@@ -768,7 +771,10 @@ def ecli_encoded_date(ecli: str) -> str | None:
     if m.group("y4"):
         return f"{m.group('y4')}-{m.group('m4')}-{m.group('d4')}"
     if m.group("d"):
-        return f"20{m.group('y')}-{m.group('m')}-{m.group('d')}"
+        # The header supplies the full year for historical decisions as well.
+        if not re.fullmatch(r"[0-9]{4}", parts[3]) or parts[3][-2:] != m.group("y"):
+            return None
+        return f"{parts[3]}-{m.group('m')}-{m.group('d')}"
     return f"{parts[3]}-{m.group('mm')}-{m.group('dd')}"
 
 
