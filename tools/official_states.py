@@ -32,7 +32,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
-from api.official_state_store import unordered_observation_days  # noqa: E402
+from api.official_state_store import (  # noqa: E402
+    incomplete_projection, single_state_observations, unordered_observation_days,
+)
 from snapshot_storage import SnapshotArchiveError, open_snapshot_text  # noqa: E402
 
 DEFAULT_SNAPSHOTS = ROOT / "data" / "snapshots" / "gii"
@@ -602,8 +604,7 @@ def transitions(manifest: dict[str, Any],
         observations.sort(key=lambda row: (
             row["observed_at"], row["state_sha256"], row["builddate"]))
         ambiguous_days = sorted(day for _, day in unordered_observation_days(observations))
-        if ambiguous_days:
-            observations = [r for r in observations if r["observed_at"] not in ambiguous_days]
+        observations = single_state_observations(observations, allow_partial=True)
 
         previous = observations[0] if observations else None
         for current in observations[1:]:
@@ -624,6 +625,14 @@ def transitions(manifest: dict[str, Any],
                 raise StateStoreError(
                     f"manifest observation does not match state {act_id}")
             changes = _state_changes(old_state, new_state)
+            # The historic EGBGB parser omitted whole structural articles. Captured
+            # sections can still document real changes across two such extractions.
+            old_partial = incomplete_projection(previous)
+            new_partial = incomplete_projection(current)
+            if old_partial != new_partial:
+                changes = [c for c in changes if not (
+                    c["para"].startswith(("Art ", "Art. ")) and
+                    c["operation"] == ("add" if old_partial else "delete"))]
             if not changes:
                 # Build/stand metadata is still preserved in both CAS states
                 # and observations, but is not a normative text transition.
@@ -641,7 +650,7 @@ def transitions(manifest: dict[str, Any],
                 "old_builddate": previous["builddate"],
                 "new_builddate": current["builddate"],
                 "changes": changes,
-                "full_state_pair": True,
+                "full_state_pair": not (old_partial or new_partial),
                 "date_basis": DATE_BASIS,
                 "verification": VERIFICATION,
                 "effective_at": None,

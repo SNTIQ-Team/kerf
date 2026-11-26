@@ -512,7 +512,7 @@ class NormHistoryStore:
 
         observations: dict[str, dict[str, Any]] = {}
         cutoff = as_of[:10] if as_of else None
-        for row in single_state_observations(act.get("official_states") or []):
+        for row in single_state_observations(act.get("official_states") or [], allow_partial=True):
             digest = str(row.get("state_sha256") or "")
             observed = str(row.get("observed_at") or "")[:10]
             if not _DIGEST.fullmatch(digest) or not observed:
