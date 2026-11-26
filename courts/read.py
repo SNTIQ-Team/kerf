@@ -289,9 +289,19 @@ def get_decision(conn: sqlite3.Connection, ref: str, *, with_paragraphs: bool = 
     status, ids = resolve_decision(conn, ref)
     if status != "ok":
         return {"status": status, "request": ref, "candidates": ids}
-    if failure := _source_identity_failure(conn, ids[0], ref):
+    return get_decision_by_id(conn, ids[0], request=ref, with_paragraphs=with_paragraphs,
+                              with_relations=with_relations)
+
+
+def get_decision_by_id(conn: sqlite3.Connection, identifier: str, *, request: str | None = None,
+                       with_paragraphs: bool = True, with_relations: bool = True) -> dict:
+    """Read an exact native primary key, including where two records share a printed ECLI."""
+    ref = request or identifier
+    if failure := _source_identity_failure(conn, identifier, ref):
         return failure
-    d = conn.execute("SELECT * FROM decisions WHERE id = ?", (ids[0],)).fetchone()
+    d = conn.execute("SELECT * FROM decisions WHERE id = ?", (identifier,)).fetchone()
+    if d is None:
+        return {"status": "not_in_corpus", "request": ref, "candidates": []}
     result = {k: d[k] for k in d.keys() if k not in ("metadata", "case_numbers")}
     result["case_numbers"] = json.loads(d["case_numbers"])
     result["metadata"] = json.loads(d["metadata"])

@@ -601,7 +601,7 @@ def test_reexamine_twins_keeps_the_first_of_two_numbered_copies(monkeypatch):
     assert item["state"] == "skipped" and item["failure_detail"].startswith("ECLI:DE:BSG:2025:180625UB6KA424R0 already")
 
 
-def test_two_documents_of_one_portal_with_one_ecli_are_both_kept():
+def test_two_documents_of_one_portal_with_one_ecli_are_both_kept(tmp_path):
     """ThürVerfGH 112/20, 06.04.2022: two Beschlüsse (Verfassungsbeschwerde; Befangenheit) with one ECLI."""
     from courts.model import Block, ParsedDecision, Section
     from courts.store import connect, init_db, store_decision
@@ -624,6 +624,26 @@ def test_two_documents_of_one_portal_with_one_ecli_are_both_kept():
     status, ids = resolve_decision(conn, ecli)
     assert status == "ambiguous_identity" and ids == sorted((first, second))
     assert resolve_decision(conn, ecli.lower()) == (status, ids)
+
+    # A pinned archive addresses native primary keys, including the first of two
+    # publications sharing one printed ECLI. Each range must open its own text.
+    from tools.export_native_court_documents import export
+    destination = tmp_path / "release"
+    conn.commit()
+    summary = export(db_path(), destination, workers=1)
+    assert summary["documents"] == 2
+    assert summary["paragraphs"] == 2
+    import sqlite3
+    from contextlib import closing
+    with closing(sqlite3.connect(destination / "locations.sqlite")) as index:
+        for did, shard, start, length in index.execute("SELECT id,shard,start,length FROM locations"):
+            with (destination / shard).open("rb") as part:
+                part.seek(start)
+                document = json.loads(gzip.decompress(part.read(length)))["decision"]
+            assert document["id"] == did
+            assert document["paragraphs"][0]["rn"] == "1"
+            assert document["source_doc_id"] == ("NJRE001499442" if did == first else "NJRE001499463")
+
     qualified = get_paragraph(conn, ecli.lower() + "#rn-1")
     assert qualified["status"] == "ambiguous_identity"
     assert set(qualified["candidates"]) == {first, second}
