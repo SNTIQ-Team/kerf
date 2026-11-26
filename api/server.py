@@ -143,8 +143,7 @@ INDEX_HTML = """<!doctype html>
     <img src="favicon.svg" width="40" height="40" alt="SNTIQ mark">
     <h1>Kerf API</h1>
   </div>
-  <p class="tagline">German &amp; EU law as a temporal, searchable legal graph —
-     current texts, amendment history and official procedure stages.</p>
+  <p class="tagline">Read German and EU law, compare available versions, and trace amendments and court citations to official sources.</p>
   <table>
     <tr><td class="ep"><a href="health">/health</a></td><td class="what">liveness + data-plane check</td></tr>
     <tr><td class="ep"><a href="version">/version</a></td><td class="what">dataset + build timestamp</td></tr>
