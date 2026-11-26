@@ -724,7 +724,9 @@ configs:
 
 # SNTIQ Kerf
 
-Kerf records changes to German and European Union law. A provision can carry two dates. One records when Kerf observed its wording in an official source. The other records when it took legal effect, where the published evidence establishes that date.
+[Kerf web reader](https://sntiq.com/dt/kerf) · Read German and EU law, compare available versions, and trace amendments and court citations to official sources.
+
+This dataset records changes to German and European Union law. A provision can carry two dates. One records when Kerf observed its wording in an official source. The other records when it took legal effect, where the published evidence establishes that date.
 
 This snapshot was built on **{today}**. The migration, asylum and social-law collections include current texts and change histories where the sources support them. The federal GII catalog and the EU index also list instruments for which this dataset provides metadata. Each record identifies its source and status. [Source code](https://github.com/SNTIQ-Team/kerf) · [Live API](https://api.sntiq.com/kerf/docs)
 
@@ -785,9 +787,8 @@ For Bavaria, official version rows are amendment metadata. Word-level history
 is exported only when archived official pages yield an unambiguous state
 transition, plus complete forward diffs between daily snapshots. Missing
 history is kept missing instead of reconstructed. In
-`bayern_word_diffs.jsonl`, `date` is the promulgation/event date while
-`effective_date` is the date on which the consolidated wording changes; data
-consumers doing time travel must prefer `effective_date`.
+`bayern_word_diffs.jsonl`, `date` records the promulgation or event date.
+Use `effective_date`, the date when the consolidated wording changes, for historical queries.
 
 The public API can serialize the current complete act or one provision as
 Markdown. It can also check out an exact archived GII observation when the

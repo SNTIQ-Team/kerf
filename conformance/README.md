@@ -39,7 +39,7 @@ Seven BAYERN.RECHT decision pages carry empty request-verification fields. Four 
 }
 ```
 
-- `status`: `active` cases must pass. An `open` case records a known unfixed error, typically from the corrections ledger. Runners report it as expected-to-fail until it passes, when its status becomes `active`.
+- `status`: `active` cases must pass. Use `open` for a known failure. After fixing it, set its status to `active` so the test suite checks the result.
 - `match`: `subset` (default) requires every key in `expected` to appear in the actual output with an equal value. Lists compare element by element, dictionaries compare recursively, and extra keys in the actual output are ignored. `exact` requires whole-value equality.
 - Operators on list values: `{"$contains": [..]}` requires the listed items to be present. `{"$excludes": [..]}` requires them to be absent for negative assertions, such as no `applies` proposal. On string values, both operators match a substring, as in `{"$contains": "1. des Schriftsatzes"}`.
 - Input paths resolve relative to the repository root. Paths ending in `.gz` are decompressed before use unless the kind expects compressed bytes.

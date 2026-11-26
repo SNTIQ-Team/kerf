@@ -1,6 +1,6 @@
 # Kerf
 
-Kerf tracks German federal law, Bavarian law and EU instruments. A reader can open a provision on a given date, compare its wording across editions and inspect the source for a change. Each record distinguishes the date of publication, the date a provision takes effect and the date Kerf observed it.
+Read German and EU law, compare available versions, and trace amendments and court citations to official sources. Each record distinguishes the date of publication, the date a provision takes effect and the date Kerf observed it.
 
 [Open the reader](https://sntiq.com/dt/kerf) · [Explore the API](https://api.sntiq.com/kerf/docs) · [Download the dataset](https://huggingface.co/datasets/SNTIQ-Team/kerf)
 
@@ -22,7 +22,7 @@ Kerf records each citation with its source passage, text hash, locator and chara
 
 ## Run locally
 
-Install the Python dependencies from `requirements.txt`. Run the build before starting the reader or the API. Start each long-running server in a separate terminal.
+Install the Python dependencies from `requirements.txt`. Run `./refresh.sh` to fetch the official sources and build `web/data`. Start the static reader and the Uvicorn API server in separate terminals.
 
 ```bash
 python3 -m venv .venv
