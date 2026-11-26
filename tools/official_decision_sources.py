@@ -93,6 +93,17 @@ def extract_official(blob:bytes,metadata:dict,profile:str):
      add(child,section,locator)
     else:raise ValueError('unsupported BSG block')
   visit(container,'#'+identity)
+  # The BSG publishes the decision's identifier alongside its download link.
+  # Identifiers in the judgment itself may belong to any cited court.
+  markers = soup.select('#supplement .box > div.ecli')
+  if len(markers) > 1:
+   raise ValueError('ambiguous official BSG ECLI field')
+  ecli = norm(markers[0].get_text(strip=True)) if markers else None
+  if ecli:
+   match = re.fullmatch(r'ECLI:DE:BSG:(\d{4}):(\d{6})[A-Za-z0-9.]+', ecli)
+   day = datetime.fromisoformat(metadata['date'])
+   if not match or match.groups() != (day.strftime('%Y'), day.strftime('%d%m%y')):
+    raise ValueError('official BSG ECLI differs from the decision identity')
   if not {'tenor','entscheidungsgruende'}<=set(counts):raise ValueError('incomplete court text')
  elif profile=='sozialgerichtsbarkeit-json/1':
   import html
@@ -137,6 +148,7 @@ def extract_official(blob:bytes,metadata:dict,profile:str):
   if not numbers or numbers!=list(range(1,len(numbers)+1)) or 'tenor' not in counts:raise ValueError('missing or duplicate source paragraph')
  else:raise ValueError('unsupported source profile')
  if len({r['passage_id'] for r in rows})!=len(rows):raise ValueError('duplicate passage identity')
- eclis=set(re.findall(r'ECLI:[A-Z]{2}:[A-Z]+:[0-9]{4}:[A-Za-z0-9.]+',raw))
- ecli=next(iter(eclis)) if len(eclis)==1 else None
+ if profile!='bsg-html/1':
+  eclis=set(re.findall(r'ECLI:[A-Z]{2}:[A-Z]+:[0-9]{4}:[A-Za-z0-9.]+',raw))
+  ecli=next(iter(eclis)) if len(eclis)==1 else None
  return rows,ecli
