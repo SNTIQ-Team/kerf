@@ -181,6 +181,9 @@ def test_empty_side_is_not_treated_as_a_whole_norm_lifecycle() -> None:
     # The known current text stays visible, explicitly marked partial; the API
     # does not delete § 24 based on a possibly paragraph-level empty side.
     assert "Neuer Text" in snapshot["markdown"]
+    body = snapshot["markdown"].split("---", 2)[2]
+    assert "consolidation retrieved on 2026-07-15" in body
+    assert "wording for 2024-12-31 remains unverified" in body
     assert snapshot["partial"] is True
     assert any(gap["reason"] == "empty_change_side"
                for gap in snapshot["gaps"])

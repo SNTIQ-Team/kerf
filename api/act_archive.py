@@ -773,7 +773,9 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
                 lines.append(f"> - {gap['label']}")
     elif gaps:
         lines.append(
-            "> This is a conservative reconstruction. Unproven transitions are not guessed:")
+            f"> The starting text comes from the consolidation retrieved on {head_date}. "
+            f"Kerf reverses documented changes where possible. The wording for {target} "
+            "remains unverified where the following gaps apply.")
         for gap in gaps:
             lines.append(f"> - {gap['label']}")
     else:
