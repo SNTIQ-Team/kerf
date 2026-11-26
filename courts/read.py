@@ -216,7 +216,8 @@ def search(conn: sqlite3.Connection, q: str | None = None, *, court: str | None 
 
 def _stored_decision_ids(conn: sqlite3.Connection, ref: str) -> list[str]:
     return [r["id"] for r in conn.execute(
-        "SELECT id FROM decisions WHERE id = ? OR ecli = ? COLLATE NOCASE ORDER BY id", (ref, ref))]
+        "SELECT id FROM decisions WHERE id = ? "
+        "UNION SELECT id FROM decisions WHERE ecli = ? COLLATE NOCASE ORDER BY id", (ref, ref))]
 
 
 def resolve_decision(conn: sqlite3.Connection, ref: str) -> tuple[str, list[str]]:
