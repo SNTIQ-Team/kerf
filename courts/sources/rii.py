@@ -19,6 +19,7 @@ from ..courtids import FEDERAL, priority
 from ..errors import UpstreamFailure
 from ..http import PoliteHttp
 from ..model import Block, ParsedDecision, Section
+from ..paragraphs import clean_label
 from ..hostgov import Concurrency
 from .base import OPERATOR_DECISION_BASIS, OPERATOR_DECISION_DATE, Adapter, Capture, Listing, iso_date, squash
 
@@ -84,9 +85,12 @@ def section_blocks(node: ET.Element, xml_path: str) -> list[Block]:
 
     def visit(el: ET.Element, path: str) -> None:
         counts: dict[str, int] = {}
+        pending: Block | None = None
         for child in el:
             counts[child.tag] = counts.get(child.tag, 0) + 1
             cpath = f"{path}/{child.tag}[{counts[child.tag]}]"
+            if child.tag != "dl" or child.get("class") != "RspDL":
+                pending = None
             if child.tag == "dl":
                 dt, dd = child.find("dt"), child.find("dd")
                 if dd is None:
@@ -97,12 +101,27 @@ def section_blocks(node: ET.Element, xml_path: str) -> list[Block]:
                 # RII also encodes standalone section labels as <dd><p>II</p>.
                 # Keep them separate, while ordinary empty-dt text still extends
                 # the previous Rn (including quoted multi-block questions).
-                outline = squash(text_content(dd))
+                content = text_content(dd)
+                outline = squash(content)
                 if not label and re.fullmatch(r"[IVXLCDM]{1,12}\.?", outline):
                     heading = True
-                blocks.append(Block(text=text_content(dd), label=label or None,
-                                    kind="heading" if heading else "text",
-                                    locator=cpath + "/dd[1]" + (f"#{anchors[0]}" if anchors else "")))
+                block = Block(text=content, label=label or None, kind="heading" if heading else "text",
+                              locator=cpath + "/dd[1]" + (f"#{anchors[0]}" if anchors else ""))
+                # An RII number can precede its first words in the next empty-dt
+                # row. Only blank formatting may intervene in this sibling list.
+                blank = not content and all(n.tag in {"dd", "p", "br"} for n in dd.iter())
+                if label:
+                    number = clean_label(label)
+                    pending = (block if child.get("class") == "RspDL" and blank and number
+                               and anchors == [f"rd_{number}"] else None)
+                elif dt is None or heading or anchors:
+                    pending = None
+                elif content and pending is not None:
+                    block.label, pending.label = pending.label, None
+                    pending = None
+                elif not blank:
+                    pending = None
+                blocks.append(block)
             elif child.tag in BLOCK_TAGS:
                 blocks.append(Block(text=text_content(child), locator=cpath,
                                     kind="heading" if child.tag in {"h1", "h2", "h3", "h4", "h5", "h6"} else "text"))
