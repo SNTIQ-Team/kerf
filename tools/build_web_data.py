@@ -2059,6 +2059,10 @@ def main() -> int:
         sizes["eu_index.json"] = dump("eu_index.json", eu_index)
     else:
         (WEB / "eu_index.json").unlink(missing_ok=True)
+    # The API reads per-norm official links from the same release as the acts.
+    # A data-only publication can precede deployment of a new API package.
+    captured_toc = json.loads((ROOT / "api" / "data" / "gii_toc.json").read_text(encoding="utf-8"))
+    sizes["gii_toc.json"] = dump("gii_toc.json", captured_toc)
     if gii_catalog:
         sizes["gii_catalog.json"] = dump("gii_catalog.json", gii_catalog)
     else:

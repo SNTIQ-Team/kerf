@@ -116,6 +116,7 @@ PRACTICE_EXPANSION_2026_11 = {
     "minuhv", "betrkv", "erbbauv", "bkleingg", "wof_g", "bausparkg",
     "bfsg", "bfsgv", "bgleisv", "bthg", "khv", "schwbav_1988", "schwbwv",
     "vbd", "wmvo", "finsv", "pbefg", "umwrg", "vdug", "vvg-infov", "zkg",
+    "urhg",  # Copyright Act, GII document BJNR012730965.
 }
 CORPUS |= PRACTICE_EXPANSION_2026_11
 
