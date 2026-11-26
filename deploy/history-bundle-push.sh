@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
-# Archive publisher → server: publish the compact law-history bundle.
-#
-# The heavy archive (Wayback/NeuRIS/BAYERN.RECHT raw bytes, legacy BGBl
-# texts) stays in ~/.local/share/sntiq-legal/kerf-archive.  This exports
-# only the parsed, de-duplicated captures, the date resolutions and the
-# Bavarian records into a signed bundle, uploads it and installs it as
-# /srv/sntiq-kerf/data/history_bundle/current (the daily refresh builds
-# law_history.sqlite from it).  --publish-now also rebuilds law_history.sqlite
-# into the VPS web/data and publishes a new API data generation immediately
-# (under the refresh lock).
-#
-#   deploy/history-bundle-push.sh [--change-dates F] [--bavarian F]
-#                                 [--publish-now] [--dry-run]
+# Publish a signed bundle of archived law texts, date resolutions and Bavarian
+# records. --dry-run builds it locally. --publish-now triggers a data release.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$PWD"

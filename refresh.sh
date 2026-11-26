@@ -47,10 +47,7 @@ INDEX_YEARS="$(date -u +%Y)"
 if [ "$(date -u +%m)" = "01" ]; then INDEX_YEARS="$(( $(date -u +%Y) - 1 )),$INDEX_YEARS"; fi
 step "7a/24" "recht.bund.de BGBl I issue index (FNA)"       python3 pipeline/index_bgbl_issues.py --years "$INDEX_YEARS" --max-requests 60
 step " 8/24" "2023+ official BGBl retrospective inventory" python3 pipeline/backfill_bgbl_history.py --max-new-index "${KERF_FNA_NEW_PER_RUN:-40}"
-# On the VPS (KERF_LEGACY_CAPTURE_ONLY=1, set by deploy/refresh-server.sh)
-# this only captures new sources: the archive worker archive holds every older
-# source byte, re-verifies all of them, rebuilds the candidates and pushes a
-# signed attestation (deploy/archive-pull.sh, deploy/legacy-rebuild-push.sh).
+# Capture-only mode reads signed attestations for independently rebuilt history.
 LEGACY_MODE_ARGS=()
 if [ "${KERF_LEGACY_CAPTURE_ONLY:-0}" = "1" ]; then
     LEGACY_MODE_ARGS+=(--capture-only)
@@ -144,7 +141,7 @@ if [ -n "${KERF_REFRESH_LOCK_FD:-}" ]; then
     COMPACT_LOCK_ARGS+=(--lock-file "$KERF_REFRESH_LOCK" --lock-fd "$KERF_REFRESH_LOCK_FD")
 fi
 # Archive-and-prune first (VPS: KERF_ARCHIVE_OFFLOAD=1): objects older
-# than the 14-day window whose exact bytes a signed archive worker receipt holds
+# than the 14-day window whose exact bytes a signed archive receipt holds
 # leave the VPS, so compaction has room.  Over its budget, compaction defers
 # the newest files instead of failing.
 if [ "${KERF_ARCHIVE_OFFLOAD:-0}" = "1" ]; then
@@ -163,7 +160,7 @@ VIS="${KERF_VISUALIZER_PUBLIC:-}"
 echo "==> [23/24] export web data (Wiki/Realtime/Hierarchie/Graph)"
 python3 tools/build_web_data.py
 # Multi-source norm versions + change history (law_history.sqlite).  The
-# archive worker bundle (archived captures, legacy date resolutions) is optional;
+# archive bundle (archived captures, legacy date resolutions) is optional;
 # without it the history is built from the daily official states.
 HISTORY_BUNDLE_ARGS=()
 if [ -f data/history_bundle/current/manifest.json ]; then

@@ -45,7 +45,7 @@ sys.path.insert(0, str(ROOT))
 
 from common import latest_snapshot, read_jsonl, snapshot_dir, write_jsonl  # noqa: E402
 import fetch_bayern_wayback as wayback  # noqa: E402
-from tools import bavarian_history  # noqa: E402  (the workstation Bavarian parsers)
+from tools import bavarian_history  # noqa: E402  (the Bavarian parsers)
 
 UA = "SNTIQ-kerf/0.1 (research; +https://sntiq.com/)"
 ZIP_URL = "https://www.gesetze-bayern.de/Content/Zip/{key}"

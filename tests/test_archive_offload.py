@@ -102,6 +102,10 @@ def _receipt(data: Path, laptop: Path, key: Path) -> str:
     target = data / "archive-offload" / "receipts"
     target.mkdir(parents=True, exist_ok=True)
     name = f"{manifest.stem}.receipt.json"
+    for payload in (manifest, out / name):
+        fields = json.loads(payload.read_bytes())
+        assert {"host", "workstation", "archive", "data_root"}.isdisjoint(fields)
+        assert str(data.parent).encode() not in payload.read_bytes()
     for suffix in ("", ".sig"):
         shutil.copy2(out / (name + suffix), target / (name + suffix))
     return name
@@ -303,7 +307,7 @@ def test_capture_only_accepts_receipted_absent_sources_only(
         legacy._verified_pinned(document, store)
 
 
-def test_uncapped_archive_is_workstation_only():
+def test_uncapped_archive_requires_archive_mode():
     with pytest.raises(ValueError, match="archive-only"):
         legacy.LegacyArchive(Path("/srv/x/legacy"), max_bytes=None)
 

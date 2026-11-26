@@ -1,4 +1,4 @@
-# Sourced by the archive worker archive jobs after they set REPO.
+# Sourced by the source archive jobs after they set REPO.
 KEY="${KERF_ARCHIVE_KEY:-}"
 if [[ -z "$KEY" ]]; then
     KEY=$(git -C "$REPO" config --path --get kerf.archiveSigningKey) || KEY=""

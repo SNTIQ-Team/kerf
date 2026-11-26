@@ -5,7 +5,7 @@ BAYERN.RECHT captures and GVBl documents, per-norm version chains, per-norm
 change records and cross-source findings, plus loaders for the JSONL outputs.
 Network capture lives in ``pipeline/fetch_bavarian_history.py``.
 
-Archive layout (archive worker only; see the phase-4 spec)::
+Archive layout::
 
     R = $KERF_HISTORY_ARCHIVE or ~/.local/share/sntiq-legal/kerf-archive/history
     R/raw/<source>/sha256/<xx>/<sha256>.<ext>.gz   gzip of the raw bytes

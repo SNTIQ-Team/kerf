@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-# Daily realtime retrieval: refresh the Kerf dataset from the live
-# sources, then push the web data plane to production (api.sntiq.com/kerf)
-# and restart the API (it caches the data in-process at startup).
-#
-# Runs on the archive worker via the kerf-refresh systemd USER timer
-# (~/.config/systemd/user/kerf-refresh.{service,timer}) — the 1 GB
-# production VPS cannot run the pipeline itself.
+# Run a full refresh and upload the validated generation for publication.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

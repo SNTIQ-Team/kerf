@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily archive worker pull of the Kerf source archives (user timer
+# Pull of the Kerf source archives (user timer
 # kerf-archive-pull.timer, Persistent=true: a missed day catches up).
 #
 #   1. the VPS lists every archived file not yet receipted, with SHA-256

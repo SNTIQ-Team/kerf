@@ -17,7 +17,7 @@ except ImportError:
     from snapshot_storage import open_snapshot_text
 
 ROOT = Path(__file__).resolve().parent.parent
-# KERF_SNAPSHOTS lets archive worker tools (deploy/legacy-rebuild-push.sh)
+# KERF_SNAPSHOTS lets archive tools (deploy/legacy-rebuild-push.sh)
 # read the pulled VPS snapshots instead of this checkout's own.
 SNAPSHOTS = Path(os.environ.get("KERF_SNAPSHOTS") or ROOT / "data" / "snapshots")
 

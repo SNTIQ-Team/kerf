@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Export the archive worker history archive into a compact, signed bundle.
+"""Export a signed history bundle from a directory of source captures.
 
-The raw Wayback/NeuRIS/BAYERN.RECHT bytes stay on the archive worker
-(``~/.local/share/sntiq-legal/kerf-archive/history``).  The VPS receives
-only this bundle:
+The bundle contains the following files.
 
 ``corpus.sqlite``
     one row per parsed capture (source, role, capture time, archive URL,

@@ -161,8 +161,8 @@ class LegacyArchive:
     def __init__(self, root: Path = ARCHIVE_ROOT, *,
                  max_bytes: int | None = ARCHIVE_LIMIT,
                  min_free_bytes: int = 128 * MIB, accounting_roots=()):
-        # ``max_bytes=None`` is the archive worker archive: the cumulative cap
-        # protects the serving host and has no meaning on the archive's home.
+        # ``max_bytes=None`` is the source archive: the cumulative cap
+        # protects the capture job and has no meaning on the archive's home.
         if max_bytes is not None and not 0 < max_bytes <= ARCHIVE_LIMIT or \
                 min_free_bytes < 0:
             raise ValueError("invalid archive limits")
@@ -238,7 +238,7 @@ class LegacyArchive:
                           immutable=True)
 
     def offloaded(self, relative: str, digest: str) -> bool:
-        """True when the file is absent here but a archive worker receipt holds
+        """True when the file is absent here but a archive receipt holds
         exactly these bytes (see pipeline/archive_receipts.py)."""
         if self.path(relative).exists():
             return False
@@ -549,10 +549,9 @@ def legacy_exact_target(section: dict, act: dict) -> bool:
 
 def _verified_pinned(document: dict, archive: LegacyArchive) -> dict:
     """Verify the pinned evidence and that each source object is either
-    present with its exact hash or receipted by the archive store.
+    present with its exact hash or receipted by the source archive.
 
-    Used by the VPS capture-only mode: full text verification and candidate
-    derivation happen by the archive worker, which holds every source byte.
+    Capture-only mode uses the signed result of full-text verification and candidate derivation.
     """
     evidence = archive.read(document["legacy_document_object"],
                             document["legacy_document_sha256"])
@@ -813,7 +812,7 @@ MIN_DIP_PROCEDURES = 100
 def usable_legacy_snapshot(path: Path) -> bool:
     """Whether a dated snapshot may be read as published legacy input.
 
-    A signed archive worker attestation admits the snapshot (its rows are
+    A signed archive attestation admits the snapshot (its rows are
     verified separately by ``attested_rows``); an unattested snapshot must
     come from a real discovery run."""
     if (Path(path) / "attestation.json").is_file():
@@ -849,15 +848,15 @@ def attestation_notice(root: Path | None = None) -> str | None:
     current = parser_identity(ROOT)["sha256"]
     attested = (summary.get("parser") or {}).get("sha256")
     if attested == current:
-        return (f"legacy candidates {latest.name}: archive worker attestation, "
+        return (f"legacy candidates {latest.name}: archive attestation, "
                 f"parser {current[:12]}")
     return (f"legacy candidates {latest.name}: attested by parser "
             f"{str(attested)[:12]}, deployed parser {current[:12]}; run "
-            "deploy/legacy-rebuild-push.sh on the archive worker to rebuild")
+            "deploy/legacy-rebuild-push.sh during archive verification to rebuild")
 
 
 def validate_legacy_candidate(candidate: dict, *, archive: LegacyArchive | None = None) -> None:
-    # Production path: the archive worker re-verified every source and signed
+    # Signed rebuild: the archive job re-verified every source and signed
     # the exact candidate rows of the latest snapshot (archive_receipts).
     latest = latest_legacy_snapshot()
     if latest is not None and (latest / "attestation.json").is_file():
@@ -869,7 +868,7 @@ def validate_legacy_candidate(candidate: dict, *, archive: LegacyArchive | None 
         if row_digest(candidate) in rows:
             return
         raise SourceIntegrityError(
-            "legacy candidate is not in the archive worker attestation")
+            "legacy candidate is not in the archive attestation")
     archive = archive or LegacyArchive()
     try:
         evidence = archive.read(candidate["legacy_document_object"],
@@ -1026,9 +1025,9 @@ def main() -> int:
     parser.add_argument("--capture-only", action="store_true",
                         help="VPS mode: discover and capture new sources, keep the "
                              "checkpoint, but do not publish candidates (the "
-                             "archive worker rebuilds and attests them)")
+                             "archive rebuilds and attests them)")
     parser.add_argument("--archive-root", type=Path, default=ARCHIVE_ROOT,
-                        help="legacy source store (archive worker: the pulled archive)")
+                        help="legacy source store (verified archive)")
     parser.add_argument("--snapshot-root", type=Path, default=SNAPSHOT_ROOT,
                         help="where the rebuilt candidate snapshot is written")
     args = parser.parse_args()
@@ -1089,7 +1088,7 @@ def main() -> int:
                           "stopped": stopped,
                           "captured_documents": len(state["documents"]),
                           "archive_bytes": archive.size_bytes(),
-                          "publication": "archive worker rebuild + attestation"},
+                          "publication": "archive rebuild + attestation"},
                          ensure_ascii=False, sort_keys=True))
         return 0
     summary = _publish(archive, state, start=args.start, end=args.end,

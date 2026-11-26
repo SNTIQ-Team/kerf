@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild the pre-2023 BGBl amendment candidates on the archive worker against
+# Rebuild the pre-2023 BGBl amendment candidates against
 # the complete archive, sign an attestation and install it on the VPS.
 #
 # After ANY change to the legacy parser (pipeline/backfill_legacy_bgbl_history.py,

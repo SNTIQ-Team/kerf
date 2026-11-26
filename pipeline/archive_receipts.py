@@ -1,24 +1,8 @@
-"""Archive worker archive receipts and legacy attestations.
+"""Sign receipts for verified source files and attestations for derived records.
 
-The production VPS keeps only recent data.  Older source bytes live in the
-archive worker archive (``~/.local/share/sntiq-legal/kerf-archive``), and
-two signed documents connect the two sides:
-
-receipt
-    Written by the archive worker after it pulled a VPS manifest and verified
-    every listed file's SHA-256 in its own copy.  The VPS may delete a file
-    only if a verified receipt lists that exact path *and* hash.
-attestation
-    Written by the archive worker after ``backfill_legacy_bgbl_history.py
-    --rebuild`` verified every pre-2023 BGBl source (PDF hash, publication
-    header, text) and derived the amendment candidates.  The VPS build then
-    admits exactly the attested candidate rows instead of re-reading source
-    PDFs it no longer stores.
-
-Both are signed with ``ssh-keygen -Y sign`` by a dedicated archive worker key
-and verified against ``/etc/sntiq/kerf-archive.allowed_signers``
-(override: ``KERF_ARCHIVE_SIGNERS``).  Namespaces keep a receipt from
-being replayed as an attestation and vice versa.
+A receipt binds relative paths to SHA-256 digests. An attestation binds the
+legacy amendment candidates to their verified source PDFs and parser.
+Each has its own SSH signing namespace and uses the configured allowed signers.
 """
 from __future__ import annotations
 
@@ -86,7 +70,7 @@ def signers_path() -> Path:
 
 
 def sign_file(path: Path, key: Path, namespace: str) -> Path:
-    """Create ``<path>.sig`` with the archive worker signing key."""
+    """Create ``<path>.sig`` with the archive signing key."""
     path, signature = Path(path), Path(str(path) + ".sig")
     signature.unlink(missing_ok=True)
     result = subprocess.run(
@@ -247,7 +231,7 @@ def build_attestation(snapshot_dir: Path, *, repo_root: Path,
         "rebuilt_at": rebuilt_at,
         "archive_receipt": receipt,
         "verification": ("every captured official PDF hash, publication "
-                         "header and text re-verified by the archive worker; "
+                         "header and text verified; "
                          "candidates re-derived from the verified text"),
     }
 

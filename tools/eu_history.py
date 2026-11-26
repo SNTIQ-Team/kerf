@@ -2,7 +2,7 @@
 
 Input: one row of ``data/snapshots/eu_texts/<date>/acts.jsonl`` (pipeline/fetch_eu_texts.py)
 or of the EMRK snapshot.  Output: the act detail written to ``web/data/acts/<id>.json``
-with a ``history`` block in the record shape of the Bavarian archive worker bundle
+with a ``history`` block in the record shape of the Bavarian archive bundle
 (``version``/``change``/``finding`` records, see tools/build_law_history.py
 ``build_records_act``), so log/at/diff/blame answer for EU articles exactly as for
 German norms.

@@ -22,8 +22,7 @@ if ! flock -n 9; then
 fi
 export KERF_REFRESH_LOCK="$LOCK_FILE"
 export KERF_REFRESH_LOCK_FD=9
-# Old source archives live on the archive worker (deploy/archive-pull.sh): the
-# VPS captures new pre-2023 sources only and offloads receipted bytes.
+# Capture new pre-2023 sources and use signed receipts for archive offload.
 export KERF_LEGACY_CAPTURE_ONLY=1
 export KERF_ARCHIVE_OFFLOAD=1
 

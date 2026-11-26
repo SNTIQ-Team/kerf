@@ -9,12 +9,12 @@ Inputs (all already in, or next to, one web-data generation):
 ``<data>/retrospective_history.sqlite``
     amendment events (BGBl articles + parsed commands) and verified legal
     intervals of GII states.
-``--bundle <dir>`` (optional, built on the archive worker)
+``--bundle <dir>`` (optional, built during archive verification)
     ``corpus.sqlite``   archived captures (Wayback/GII, NeuRIS …) as parsed
                         norm lists, de-duplicated by identity;
     ``change_dates.jsonl.gz``  per (document, article, item) date resolutions
                         from the promulgation documents and commencement
-                        clauses (legacy BGBl texts live only on the archive worker);
+                        clauses of the cited BGBl texts;
     ``bavarian.jsonl.gz``      Bavarian version/change records.
 ``--documents <snapshots dir>``
     BGBl document metadata (recht.bund.de official fields) for 2023+.
@@ -1605,7 +1605,7 @@ BAVARIAN_RECORDS: dict[str, dict[str, list[dict[str, Any]]]] = {}
 
 
 def load_bavarian_records(path: Path | None) -> int:
-    """Bavarian version/change/finding records from the archive worker bundle."""
+    """Bavarian version/change/finding records from the archive bundle."""
     BAVARIAN_RECORDS.clear()
     if path is None or not path.is_file():
         return 0
@@ -1630,7 +1630,7 @@ def build_bavarian_bundle_act(writer: "Writer", act: dict[str, Any],
                               *, states: list[dict[str, Any]] | None = None,
                               event_status: str = "gvbl_dated"
                               ) -> dict[str, Any]:
-    """Bavarian versions and GVBl-dated change records (archive worker build).
+    """Bavarian versions and GVBl-dated change records (archive build).
 
     tools/bavarian_history.py already chains archived BAYERN.RECHT captures
     and daily snapshots per norm and dates every change from the GVBl
@@ -1846,7 +1846,7 @@ def build_bavarian_archive_act(writer: Writer, act: dict[str, Any],
     Reuses the per-norm chain logic of ``api.norm_history`` (archived
     BAYERN.RECHT pages + daily snapshots, validity from the official
     "gültig ab" table) so an act keeps every version it had before; the
-    change history of Bavarian acts comes from the archive worker bundle.
+    change history of Bavarian acts comes from the archive bundle.
     """
     from api.norm_history import NormHistoryStore
     act_id = str(act["id"])

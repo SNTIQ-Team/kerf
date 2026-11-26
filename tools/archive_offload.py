@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Move old Kerf source archives to the archive worker; keep the VPS small.
+"""Archive source objects and verify receipts before applying retention.
 
 VPS side (``/srv/sntiq-kerf``)::
 
@@ -8,7 +8,7 @@ VPS side (``/srv/sntiq-kerf``)::
     archive_offload.py install-legacy DIR  # admit an attested legacy rebuild
     archive_offload.py status
 
-Archive worker side (``~/.local/share/sntiq-legal/kerf-archive``)::
+Archive commands::
 
     archive_offload.py receipt  --manifest M --archive A --key K --out DIR
     archive_offload.py attest   --snapshot-dir S --key K [--receipt R]
@@ -25,7 +25,6 @@ import fcntl
 import json
 import os
 import shutil
-import socket
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -47,7 +46,7 @@ from snapshot_storage import (  # noqa: E402
 
 DATA = ROOT / "data"
 OFFLOAD = Path(os.environ.get("KERF_OFFLOAD_ROOT", DATA / "archive-offload"))
-# What the archive worker archives: the pre-2023 BGBl capture store and every
+# What the source archives: the pre-2023 BGBl capture store and every
 # dated source snapshot (including the compaction archive).
 ARCHIVED_PREFIXES = ("legacy_bgbl_history", "snapshots")
 LEGACY_SOURCE_PREFIXES = ("legacy_bgbl_history/objects/",
@@ -144,7 +143,6 @@ def cmd_manifest(args) -> int:
         total += size
     cache.save(present)
     manifest = {"schema": MANIFEST_SCHEMA, "created_at": _now(),
-                "host": socket.gethostname(), "data_root": str(data),
                 "files": files}
     name = f"{_stamp()}.json"
     target = offload / "manifests" / name
@@ -154,7 +152,7 @@ def cmd_manifest(args) -> int:
     return 0
 
 
-# ------------------------------------------------------- archive worker: receipt
+# ------------------------------------------------------- archive: receipt
 
 def cmd_receipt(args) -> int:
     manifest_path = Path(args.manifest)
@@ -178,13 +176,11 @@ def cmd_receipt(args) -> int:
         "manifest": manifest_path.name,
         "manifest_sha256": sha256_file(manifest_path),
         "received_at": _now(),
-        "workstation": socket.gethostname(),
-        "archive": str(archive),
         "verified_files": len(manifest["files"]) - len(excluded),
         "verified_bytes": verified_bytes,
         "excluded": excluded,
         "statement": ("every listed file except 'excluded' was re-hashed in "
-                      "the archive store and matches the manifest"),
+                      "the source archive and matches the manifest"),
     }
     out = Path(args.out) / f"{manifest_path.stem}.receipt.json"
     write_json_atomic(out, receipt)
@@ -194,7 +190,7 @@ def cmd_receipt(args) -> int:
     return 0 if not excluded or args.allow_excluded else 3
 
 
-# ------------------------------------------------------- archive worker: attest
+# ------------------------------------------------------- archive: attest
 
 def cmd_attest(args) -> int:
     snapshot = Path(args.snapshot_dir)
@@ -283,7 +279,7 @@ def plan_prune(data: Path, offload: Path, *, window_days: int,
         return digest in receipted.get(relative, set())
 
     # 1. Pre-2023 BGBl source bytes: never read by the VPS once the latest
-    #    candidate snapshot carries a valid archive worker attestation.
+    #    candidate snapshot carries a valid archive attestation.
     snapshots = data / "snapshots"
     legacy_family = data / LEGACY_SNAPSHOTS
     days = sorted(p for p in legacy_family.iterdir()

@@ -309,7 +309,7 @@ def _object_present(root: Path, obj: dict) -> bool:
 
 
 def _is_offloaded(root: Path, obj: dict) -> bool:
-    """Bytes live only in the archive worker archive (a receipt proved it)."""
+    """Bytes live only in the source archive (a receipt proved it)."""
     return bool(obj.get("offloaded")) and not _object_present(root, obj)
 
 
@@ -613,7 +613,7 @@ def _compact(root: Path, keep: int, dry_run: bool, budget: int,
     existing_bytes = sum(info.st_size for _, info in _walk_files(object_dir)) \
         if object_dir.exists() else 0
     # Within the budgets, compact the oldest snapshots first and defer the
-    # rest: an archive at its cap is a scheduling state (the archive worker has
+    # rest: an archive at its cap is a scheduling state (the archive job has
     # not yet receipted older objects), not an error.  Deferred files simply
     # stay raw until a later run.
     new_bytes, deferred_digests = 0, set()
@@ -694,7 +694,7 @@ def offload_objects(root: Path, receipts: dict[str, str], *, at: str,
     """Mark receipted objects offloaded, then delete their local bytes.
 
     ``receipts`` maps object digest -> receipt id.  The caller has already
-    proven that the archive worker holds each compressed object with exactly
+    proven that the archive contains each compressed object with exactly
     the manifest's ``gzip_sha256``.  The manifest is written first, so an
     interrupted run leaves "offloaded but still present" objects, which
     remain fully readable.

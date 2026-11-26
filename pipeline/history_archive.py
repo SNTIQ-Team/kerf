@@ -1,4 +1,4 @@
-"""Archive worker-side archive of historical law captures (phase 4).
+"""Archive of historical law captures.
 
 Layout (root ``R`` = ``$KERF_HISTORY_ARCHIVE`` or
 ``~/.local/share/sntiq-legal/kerf-archive/history``)::
