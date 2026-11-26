@@ -214,15 +214,23 @@ def validate_published_editions(root: Path, manifest: dict, artifact: dict) -> s
     add_reviewed_editions(replay, manifest, {anchor: state})
     expected = {r["state_sha256"]: r for r in replay["reconstructions"]}
     if supplied != set(expected):
-        # The initial published review covers two complete editions from 2022.
-        first_review = {key: r for key, r in expected.items()
-                        if r["effective_from"] in {"2022-12-24", "2024-12-28"}}
-        if len(first_review) != 2 or supplied != set(first_review):
+        # Older complete review packages have their own fixed boundaries and
+        # evidence lists. An arbitrary suffix is insufficient for publication.
+        original = {"2022-2478", "2024-439", "2025-94", "21843", "23183",
+                    "bundestag-amendments-since-1990"}
+        extended = original | {"17609", "gazette-61", "gazette-62", "gazette-63",
+                               "gazette-64", "gazette-65", "gazette-66"}
+        for start, count, sources, expiry in [
+                ("2022-12-24", 2, original, False), ("2017-07-20", 8, extended, True)]:
+            older = {key: row for key, row in expected.items() if row["effective_from"] >= start}
+            if len(older) == count and supplied == set(older):
+                expected = older
+                urls = {review["sources"][key]["url"] for key in sources}
+                if expiry:
+                    urls.update(s["url"] for s in review["expiry_confirmations"].values())
+                break
+        else:
             raise ReconstructionError("incomplete or unknown federal edition chain")
-        expected = first_review
-        first_sources = {"2022-2478", "2024-439", "2025-94", "21843", "23183",
-                         "bundestag-amendments-since-1990"}
-        urls = {review["sources"][key]["url"] for key in first_sources}
         for r in expected.values():
             r["evidence"] = [s for s in r["evidence"] if s["source"] == "GII" or s["url"] in urls]
     by_digest = {r.get("state_sha256"): r for r in rows}

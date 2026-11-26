@@ -87,9 +87,105 @@
       "url": "https://www.wipo.int/wipolex/en/legislation/details/17609",
       "pdf_sha256": "7646119989c1a52d3cb6d21a27d731b98dab425ef8ff1d805fe8815e15db9b9c",
       "source_file": "17609.pdf"
+    },
+    "gazette-58": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl110s0944.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "91df3f950ff7ce3f13bb81273314b2fddfdb64b317c3dabb4133c8fcd43a249f",
+      "source_file": "bgbl110s0944.pdf"
+    },
+    "gazette-59": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl112s1478.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "ed46a585c653d2d166c20598870b3cdb654bb42c6430c44c1f3693489e56c8f2",
+      "source_file": "bgbl112s1478.pdf"
+    },
+    "gazette-60": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl114s2438.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "f19a892c7a16aeee001571c32b2c144c97722205662aab35dbafdce8439769b2",
+      "source_file": "bgbl114s2438.pdf"
+    },
+    "9482": {
+      "source": "German federal edition archived by WIPO Lex",
+      "url": "https://www.wipo.int/wipolex/en/legislation/details/9482",
+      "pdf_sha256": "0866f94cf69e175aa62adee27a2cc5dfe85478c102022c114d43d964a0e15476",
+      "source_file": "9482.pdf"
+    },
+    "14373": {
+      "source": "German federal edition archived by WIPO Lex",
+      "url": "https://www.wipo.int/wipolex/en/legislation/details/14373",
+      "pdf_sha256": "cc781926fdd71e5f99a2658cfd29b1163d34fd550bd3e88e8ffb35ebd435d6c9",
+      "source_file": "14373.pdf"
+    },
+    "17608": {
+      "source": "Deutscher Bundestag, edition archived by WIPO Lex",
+      "url": "https://www.wipo.int/wipolex/en/legislation/details/17608",
+      "pdf_sha256": "e4b93eb50f1500442e9114e7b41f4ca2a43c6dc41eddf0dfe29361252f1a2c0c",
+      "source_file": "17608.pdf"
+    },
+    "gg-gazette-1949": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl149001.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "31be75e3f9e7d7ccc123de67fd3c742c5de4b711517d1323f09ae9a20c64f909",
+      "source_file": "bgbl149001.pdf"
+    },
+    "gg-gazette-1992": {
+      "source": "Bundesgesetzblatt",
+      "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl192s2086.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+      "pdf_sha256": "29976967dc9121fefa27249c3b0c491b8eb649551577774782307a9e5b4106c3",
+      "source_file": "bgbl192s2086.pdf"
     }
   },
   "editions": [
+    {
+      "effective_from": "2010-07-27",
+      "published_at": "2010-07-26",
+      "gazette": "gazette-58",
+      "document_id": "bgbl-1-2010-s944",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2010 I S. 944",
+      "changes_from_previous": [],
+      "printed_state_sha256": "90d6037ea075008567bb40741832298b11b5c1283810b1ac10dd7942df115822",
+      "printed_blocks": 198,
+      "state_sha256": "27b795ac7b7c38e005b8a26884790f717b6f479fd90783ff44b28a23d227e9de"
+    },
+    {
+      "effective_from": "2012-07-17",
+      "published_at": "2012-07-16",
+      "gazette": "gazette-59",
+      "document_id": "bgbl-1-2012-s1478",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2012 I S. 1478",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 93",
+          "current_norm_sha256": "efbdb6296cdae96fd83ae0d676293bb53b178807c4a6d932860d5b167bcb672e",
+          "previous_text": "(1) Das Bundesverfassungsgericht entscheidet: 1. über die Auslegung dieses Grundgesetzes aus Anlaß von Streitigkeiten über den Umfang der Rechte und Pflichten eines obersten Bundesorgans oder anderer Beteiligter, die durch dieses Grundgesetz oder in der Geschäftsordnung eines obersten Bundesorgans mit eigenen Rechten ausgestattet sind; 2. bei Meinungsverschiedenheiten oder Zweifeln über die förmliche und sachliche Vereinbarkeit von Bundesrecht oder Landesrecht mit diesem Grundgesetze oder die Vereinbarkeit von Landesrecht mit sonstigem Bundesrechte auf Antrag der Bundesregierung, einer Landesregierung oder eines Viertels der Mitglieder des Bundestages; 2a. bei Meinungsverschiedenheiten, ob ein Gesetz den Voraussetzungen des Artikels 72 Abs. 2 entspricht, auf Antrag des Bundesrates, einer Landesregierung oder der Volksvertretung eines Landes; 3. bei Meinungsverschiedenheiten über Rechte und Pflichten des Bundes und der Länder, insbesondere bei der Ausführung von Bundesrecht durch die Länder und bei der Ausübung der Bundesaufsicht; 4. in anderen öffentlich-rechtlichen Streitigkeiten zwischen dem Bunde und den Ländern, zwischen verschiedenen Ländern oder innerhalb eines Landes, soweit nicht ein anderer Rechtsweg gegeben ist; 4a. über Verfassungsbeschwerden, die von jedermann mit der Behauptung erhoben werden können, durch die öffentliche Gewalt in einem seiner Grundrechte oder in einem seiner in Artikel 20 Abs. 4, 33, 38, 101, 103 und 104 enthaltenen Rechte verletzt zu sein; 4b. über Verfassungsbeschwerden von Gemeinden und Gemeindeverbänden wegen Verletzung des Rechts auf Selbstverwaltung nach Artikel 28 durch ein Gesetz, bei Landesgesetzen jedoch nur, soweit nicht Beschwerde beim Landesverfassungsgericht erhoben werden kann; 5. in den übrigen in diesem Grundgesetze vorgesehenen Fällen. (2) Das Bundesverfassungsgericht entscheidet außerdem auf Antrag des Bundesrates, einer Landesregierung oder der Volksvertretung eines Landes, ob im Falle des Artikels 72 Abs. 4 die Erforderlichkeit für eine bundesgesetzliche Regelung nach Artikel 72 Abs. 2 nicht mehr besteht oder Bundesrecht in den Fällen des Artikels 125a Abs. 2 Satz 1 nicht mehr erlassen werden könnte. Die Feststellung, dass die Erforderlichkeit entfallen ist oder Bundesrecht nicht mehr erlassen werden könnte, ersetzt ein Bundesgesetz nach Artikel 72 Abs. 4 oder nach Artikel 125a Abs. 2 Satz 2. Der Antrag nach Satz 1 ist nur zulässig, wenn eine Gesetzesvorlage nach Artikel 72 Abs. 4 oder nach Artikel 125a Abs. 2 Satz 2 im Bundestag abgelehnt oder über sie nicht innerhalb eines Jahres beraten und Beschluss gefasst oder wenn eine entsprechende Gesetzesvorlage im Bundesrat abgelehnt worden ist. (3) Das Bundesverfassungsgericht wird ferner in den ihm sonst durch Bundesgesetz zugewiesenen Fällen tätig."
+        }
+      ],
+      "printed_state_sha256": "fadd4025b4f5a541e2c1f07360d36705b404c056e10c46133c46cf8087ffd094",
+      "printed_blocks": 198,
+      "state_sha256": "a62bae926405d1506e2d1624f0fa8aafce215a77f97c725a778f0a1700057e58"
+    },
+    {
+      "effective_from": "2015-01-01",
+      "published_at": "2014-12-31",
+      "gazette": "gazette-60",
+      "document_id": "bgbl-1-2014-s2438",
+      "projection_build": "",
+      "projection_stand": "BGBl. 2014 I S. 2438",
+      "changes_from_previous": [
+        {
+          "enbez": "Art 91b",
+          "current_norm_sha256": "65efc0abb94c852976c1014566fb1f738f4c992f2107dccac81829a2cabbcde1",
+          "previous_text": "(1) Bund und Länder können auf Grund von Vereinbarungen in Fällen überregionaler Bedeutung zusammenwirken bei der Förderung von: 1. Einrichtungen und Vorhaben der wissenschaftlichen Forschung außerhalb von Hochschulen; 2. Vorhaben der Wissenschaft und Forschung an Hochschulen; 3. Forschungsbauten an Hochschulen einschließlich Großgeräten. Vereinbarungen nach Satz 1 Nr. 2 bedürfen der Zustimmung aller Länder. (2) Bund und Länder können auf Grund von Vereinbarungen zur Feststellung der Leistungsfähigkeit des Bildungswesens im internationalen Vergleich und bei diesbezüglichen Berichten und Empfehlungen zusammenwirken. (3) Die Kostentragung wird in der Vereinbarung geregelt."
+        }
+      ],
+      "printed_state_sha256": "e1bcaf21a29b935e1fed65b017611cdc9f6e2a7eaa2e382ceb792dad1750d609",
+      "printed_blocks": 198,
+      "state_sha256": "9cf656b0a5b08c1af9c9dcbc78a5de0d3af7e717be55750bf35dc85c151c4537"
+    },
     {
       "effective_from": "2017-07-20",
       "published_at": "2017-07-19",
@@ -97,7 +193,86 @@
       "document_id": "bgbl-1-2017-s2347",
       "projection_build": "",
       "projection_stand": "BGBl. 2017 I S. 2347",
-      "changes_from_previous": [],
+      "changes_from_previous": [
+        {
+          "enbez": "Art 21",
+          "current_norm_sha256": "9432f5990bb34e7fea5f040ab5d2f39488233306f119b59d54b221666214399d",
+          "previous_text": "(1) Die Parteien wirken bei der politischen Willensbildung des Volkes mit. Ihre Gründung ist frei. Ihre innere Ordnung muß demokratischen Grundsätzen entsprechen. Sie müssen über die Herkunft und Verwendung ihrer Mittel sowie über ihr Vermögen öffentlich Rechenschaft geben. (2) Parteien, die nach ihren Zielen oder nach dem Verhalten ihrer Anhänger darauf ausgehen, die freiheitliche demokratische Grundordnung zu beeinträchtigen oder zu beseitigen oder den Bestand der Bundesrepublik Deutschland zu gefährden, sind verfassungswidrig. Über die Frage der Verfassungswidrigkeit entscheidet das Bundesverfassungsgericht. (3) Das Nähere regeln Bundesgesetze."
+        },
+        {
+          "enbez": "Art 90",
+          "current_norm_sha256": "e9c9afa08002171194be29cf35ca6ddf7ed33c64d4b006ef2db8295796a046bf",
+          "previous_text": "(1) Der Bund ist Eigentümer der bisherigen Reichsautobahnen und Reichsstraßen. (2) Die Länder oder die nach Landesrecht zuständigen Selbstverwaltungskörperschaften verwalten die Bundesautobahnen und sonstigen Bundesstraßen des Fernverkehrs im Auftrage des Bundes. (3) Auf Antrag eines Landes kann der Bund Bundesautobahnen und sonstige Bundesstraßen des Fernverkehrs, soweit sie im Gebiet dieses Landes liegen, in bundeseigene Verwaltung übernehmen."
+        },
+        {
+          "enbez": "Art 91c",
+          "current_norm_sha256": "87ca286f4ae90731d1515b384fd564e0b53627bb0b186948a1134a8b95055bac",
+          "previous_text": "(1) Bund und Länder können bei der Planung, der Errichtung und dem Betrieb der für ihre Aufgabenerfüllung benötigten informationstechnischen Systeme zusammenwirken. (2) Bund und Länder können auf Grund von Vereinbarungen die für die Kommunikation zwischen ihren informationstechnischen Systemen notwendigen Standards und Sicherheitsanforderungen festlegen. Vereinbarungen über die Grundlagen der Zusammenarbeit nach Satz 1 können für einzelne nach Inhalt und Ausmaß bestimmte Aufgaben vorsehen, dass nähere Regelungen bei Zustimmung einer in der Vereinbarung zu bestimmenden qualifizierten Mehrheit für Bund und Länder in Kraft treten. Sie bedürfen der Zustimmung des Bundestages und der Volksvertretungen der beteiligten Länder; das Recht zur Kündigung dieser Vereinbarungen kann nicht ausgeschlossen werden. Die Vereinbarungen regeln auch die Kostentragung. (3) Die Länder können darüber hinaus den gemeinschaftlichen Betrieb informationstechnischer Systeme sowie die Errichtung von dazu bestimmten Einrichtungen vereinbaren. (4) Der Bund errichtet zur Verbindung der informationstechnischen Netze des Bundes und der Länder ein Verbindungsnetz. Das Nähere zur Errichtung und zum Betrieb des Verbindungsnetzes regelt ein Bundesgesetz mit Zustimmung des Bundesrates."
+        },
+        {
+          "enbez": "Art 104b",
+          "current_norm_sha256": "71751130a3f6bef42b92e3d3209ddfb2dfa576bcfbd1f4ea1a4d21f4fad41873",
+          "previous_text": "(1) Der Bund kann, soweit dieses Grundgesetz ihm Gesetzgebungsbefugnisse verleiht, den Ländern Finanzhilfen für besonders bedeutsame Investitionen der Länder und der Gemeinden (Gemeindeverbände) gewähren, die 1. zur Abwehr einer Störung des gesamtwirtschaftlichen Gleichgewichts oder 2. zum Ausgleich unterschiedlicher Wirtschaftskraft im Bundesgebiet oder 3. zur Förderung des wirtschaftlichen Wachstums erforderlich sind. Abweichend von Satz 1 kann der Bund im Falle von Naturkatastrophen oder außergewöhnlichen Notsituationen, die sich der Kontrolle des Staates entziehen und die staatliche Finanzlage erheblich beeinträchtigen, auch ohne Gesetzgebungsbefugnisse Finanzhilfen gewähren. (2) Das Nähere, insbesondere die Arten der zu fördernden Investitionen, wird durch Bundesgesetz, das der Zustimmung des Bundesrates bedarf, oder auf Grund des Bundeshaushaltsgesetzes durch Verwaltungsvereinbarung geregelt. Die Mittel sind befristet zu gewähren und hinsichtlich ihrer Verwendung in regelmäßigen Zeitabständen zu überprüfen. Die Finanzhilfen sind im Zeitablauf mit fallenden Jahresbeträgen zu gestalten. (3) Bundestag, Bundesregierung und Bundesrat sind auf Verlangen über die Durchführung der Maßnahmen und die erzielten Verbesserungen zu unterrichten."
+        },
+        {
+          "enbez": "Art 107",
+          "current_norm_sha256": "e760763c7d3b414a6af41d1a1cbd39ebc2394371912da571374829488324bbde",
+          "previous_text": "(1) Das Aufkommen der Landessteuern und der Länderanteil am Aufkommen der Einkommensteuer und der Körperschaftsteuer stehen den einzelnen Ländern insoweit zu, als die Steuern von den Finanzbehörden in ihrem Gebiet vereinnahmt werden (örtliches Aufkommen). Durch Bundesgesetz, das der Zustimmung des Bundesrates bedarf, sind für die Körperschaftsteuer und die Lohnsteuer nähere Bestimmungen über die Abgrenzung sowie über Art und Umfang der Zerlegung des örtlichen Aufkommens zu treffen. Das Gesetz kann auch Bestimmungen über die Abgrenzung und Zerlegung des örtlichen Aufkommens anderer Steuern treffen. Der Länderanteil am Aufkommen der Umsatzsteuer steht den einzelnen Ländern nach Maßgabe ihrer Einwohnerzahl zu; für einen Teil, höchstens jedoch für ein Viertel dieses Länderanteils, können durch Bundesgesetz, das der Zustimmung des Bundesrates bedarf, Ergänzungsanteile für die Länder vorgesehen werden, deren Einnahmen aus den Landessteuern, aus der Einkommensteuer und der Körperschaftsteuer und nach Artikel 106b je Einwohner unter dem Durchschnitt der Länder liegen; bei der Grunderwerbsteuer ist die Steuerkraft einzubeziehen. (2) Durch das Gesetz ist sicherzustellen, daß die unterschiedliche Finanzkraft der Länder angemessen ausgeglichen wird; hierbei sind die Finanzkraft und der Finanzbedarf der Gemeinden (Gemeindeverbände) zu berücksichtigen. Die Voraussetzungen für die Ausgleichsansprüche der ausgleichsberechtigten Länder und für die Ausgleichsverbindlichkeiten der ausgleichspflichtigen Länder sowie die Maßstäbe für die Höhe der Ausgleichsleistungen sind in dem Gesetz zu bestimmen. Es kann auch bestimmen, daß der Bund aus seinen Mitteln leistungsschwachen Ländern Zuweisungen zur ergänzenden Deckung ihres allgemeinen Finanzbedarfs (Ergänzungszuweisungen) gewährt."
+        },
+        {
+          "enbez": "Art 108",
+          "current_norm_sha256": "001d2cd29cf419638c51bbb15ebd73572563c1734b530576a399c858a690dcbe",
+          "previous_text": "(1) Zölle, Finanzmonopole, die bundesgesetzlich geregelten Verbrauchsteuern einschließlich der Einfuhrumsatzsteuer, die Kraftfahrzeugsteuer und sonstige auf motorisierte Verkehrsmittel bezogene Verkehrsteuern ab dem 1. Juli 2009 sowie die Abgaben im Rahmen der Europäischen Gemeinschaften werden durch Bundesfinanzbehörden verwaltet. Der Aufbau dieser Behörden wird durch Bundesgesetz geregelt. Soweit Mittelbehörden eingerichtet sind, werden deren Leiter im Benehmen mit den Landesregierungen bestellt. (2) Die übrigen Steuern werden durch Landesfinanzbehörden verwaltet. Der Aufbau dieser Behörden und die einheitliche Ausbildung der Beamten können durch Bundesgesetz mit Zustimmung des Bundesrates geregelt werden. Soweit Mittelbehörden eingerichtet sind, werden deren Leiter im Einvernehmen mit der Bundesregierung bestellt. (3) Verwalten die Landesfinanzbehörden Steuern, die ganz oder zum Teil dem Bund zufließen, so werden sie im Auftrage des Bundes tätig. Artikel 85 Abs. 3 und 4 gilt mit der Maßgabe, daß an die Stelle der Bundesregierung der Bundesminister der Finanzen tritt. (4) Durch Bundesgesetz, das der Zustimmung des Bundesrates bedarf, kann bei der Verwaltung von Steuern ein Zusammenwirken von Bundes- und Landesfinanzbehörden sowie für Steuern, die unter Absatz 1 fallen, die Verwaltung durch Landesfinanzbehörden und für andere Steuern die Verwaltung durch Bundesfinanzbehörden vorgesehen werden, wenn und soweit dadurch der Vollzug der Steuergesetze erheblich verbessert oder erleichtert wird. Für die den Gemeinden (Gemeindeverbänden) allein zufließenden Steuern kann die den Landesfinanzbehörden zustehende Verwaltung durch die Länder ganz oder zum Teil den Gemeinden (Gemeindeverbänden) übertragen werden. (5) Das von den Bundesfinanzbehörden anzuwendende Verfahren wird durch Bundesgesetz geregelt. Das von den Landesfinanzbehörden und in den Fällen des Absatzes 4 Satz 2 von den Gemeinden (Gemeindeverbänden) anzuwendende Verfahren kann durch Bundesgesetz mit Zustimmung des Bundesrates geregelt werden. (6) Die Finanzgerichtsbarkeit wird durch Bundesgesetz einheitlich geregelt. (7) Die Bundesregierung kann allgemeine Verwaltungsvorschriften erlassen, und zwar mit Zustimmung des Bundesrates, soweit die Verwaltung den Landesfinanzbehörden oder Gemeinden (Gemeindeverbänden) obliegt."
+        },
+        {
+          "enbez": "Art 109a",
+          "current_norm_sha256": "905b44e40ce96dcf1d881777528db69ae59d9ef6ead0dc2c841d449b2901e20c",
+          "previous_text": "Zur Vermeidung von Haushaltsnotlagen regelt ein Bundesgesetz, das der Zustimmung des Bundesrates bedarf, 1. die fortlaufende Überwachung der Haushaltswirtschaft von Bund und Ländern durch ein gemeinsames Gremium (Stabilitätsrat), 2. die Voraussetzungen und das Verfahren zur Feststellung einer drohenden Haushaltsnotlage, 3. die Grundsätze zur Aufstellung und Durchführung von Sanierungsprogrammen zur Vermeidung von Haushaltsnotlagen. Die Beschlüsse des Stabilitätsrats und die zugrunde liegenden Beratungsunterlagen sind zu veröffentlichen."
+        },
+        {
+          "enbez": "Art 114",
+          "current_norm_sha256": "794f8d9360720d6a60ba228a842f7c4acaa516741f49fe5a84f9ccc1b0caf396",
+          "previous_text": "(1) Der Bundesminister der Finanzen hat dem Bundestage und dem Bundesrate über alle Einnahmen und Ausgaben sowie über das Vermögen und die Schulden im Laufe des nächsten Rechnungsjahres zur Entlastung der Bundesregierung Rechnung zu legen. (2) Der Bundesrechnungshof, dessen Mitglieder richterliche Unabhängigkeit besitzen, prüft die Rechnung sowie die Wirtschaftlichkeit und Ordnungsmäßigkeit der Haushalts- und Wirtschaftsführung. Er hat außer der Bundesregierung unmittelbar dem Bundestage und dem Bundesrate jährlich zu berichten. Im übrigen werden die Befugnisse des Bundesrechnungshofes durch Bundesgesetz geregelt."
+        },
+        {
+          "enbez": "Art 125c",
+          "current_norm_sha256": "bfdd7777e9d9161af19df1deefb74d3ad48b20190170f4c90c0f3f5c83dfe4da",
+          "previous_text": "(1) Recht, das auf Grund des Artikels 91a Abs. 2 in Verbindung mit Abs. 1 Nr. 1 in der bis zum 1. September 2006 geltenden Fassung erlassen worden ist, gilt bis zum 31. Dezember 2006 fort. (2) Die nach Artikel 104a Abs. 4 in der bis zum 1. September 2006 geltenden Fassung in den Bereichen der Gemeindeverkehrsfinanzierung und der sozialen Wohnraumförderung geschaffenen Regelungen gelten bis zum 31. Dezember 2006 fort. Die im Bereich der Gemeindeverkehrsfinanzierung für die besonderen Programme nach § 6 Abs. 1 des Gemeindeverkehrsfinanzierungsgesetzes sowie die sonstigen nach Artikel 104a Abs. 4 in der bis zum 1. September 2006 geltenden Fassung geschaffenen Regelungen gelten bis zum 31. Dezember 2019 fort, soweit nicht ein früherer Zeitpunkt für das Außerkrafttreten bestimmt ist oder wird."
+        },
+        {
+          "enbez": "Art 143d",
+          "current_norm_sha256": "266c4884fe4ca8c0fad289238f866b1cc3a838dfd315836ff9771603000dee07",
+          "previous_text": "(1) Artikel 109 und 115 in der bis zum 31. Juli 2009 geltenden Fassung sind letztmals auf das Haushaltsjahr 2010 anzuwenden. Artikel 109 und 115 in der ab dem 1. August 2009 geltenden Fassung sind erstmals für das Haushaltsjahr 2011 anzuwenden; am 31. Dezember 2010 bestehende Kreditermächtigungen für bereits eingerichtete Sondervermögen bleiben unberührt. Die Länder dürfen im Zeitraum vom 1. Januar 2011 bis zum 31. Dezember 2019 nach Maßgabe der geltenden landesrechtlichen Regelungen von den Vorgaben des Artikels 109 Absatz 3 abweichen. Die Haushalte der Länder sind so aufzustellen, dass im Haushaltsjahr 2020 die Vorgabe aus Artikel 109 Absatz 3 Satz 5 erfüllt wird. Der Bund kann im Zeitraum vom 1. Januar 2011 bis zum 31. Dezember 2015 von der Vorgabe des Artikels 115 Absatz 2 Satz 2 abweichen. Mit dem Abbau des bestehenden Defizits soll im Haushaltsjahr 2011 begonnen werden. Die jährlichen Haushalte sind so aufzustellen, dass im Haushaltsjahr 2016 die Vorgabe aus Artikel 115 Absatz 2 Satz 2 erfüllt wird; das Nähere regelt ein Bundesgesetz. (2) Als Hilfe zur Einhaltung der Vorgaben des Artikels 109 Absatz 3 ab dem 1. Januar 2020 können den Ländern Berlin, Bremen, Saarland, Sachsen-Anhalt und Schleswig-Holstein für den Zeitraum 2011 bis 2019 Konsolidierungshilfen aus dem Haushalt des Bundes in Höhe von insgesamt 800 Millionen Euro jährlich gewährt werden. Davon entfallen auf Bremen 300 Millionen Euro, auf das Saarland 260 Millionen Euro und auf Berlin, Sachsen-Anhalt und Schleswig-Holstein jeweils 80 Millionen Euro. Die Hilfen werden auf der Grundlage einer Verwaltungsvereinbarung nach Maßgabe eines Bundesgesetzes mit Zustimmung des Bundesrates geleistet. Die Gewährung der Hilfen setzt einen vollständigen Abbau der Finanzierungsdefizite bis zum Jahresende 2020 voraus. Das Nähere, insbesondere die jährlichen Abbauschritte der Finanzierungsdefizite, die Überwachung des Abbaus der Finanzierungsdefizite durch den Stabilitätsrat sowie die Konsequenzen im Falle der Nichteinhaltung der Abbauschritte, wird durch Bundesgesetz mit Zustimmung des Bundesrates und durch Verwaltungsvereinbarung geregelt. Die gleichzeitige Gewährung der Konsolidierungshilfen und Sanierungshilfen auf Grund einer extremen Haushaltsnotlage ist ausgeschlossen. (3) Die sich aus der Gewährung der Konsolidierungshilfen ergebende Finanzierungslast wird hälftig von Bund und Ländern, von letzteren aus ihrem Umsatzsteueranteil, getragen. Das Nähere wird durch Bundesgesetz mit Zustimmung des Bundesrates geregelt."
+        },
+        {
+          "enbez": "Art 104c",
+          "current_norm_sha256": "d7477030b8e9d487fe5a1939e1116fa76337cbba84354a22ef9df5de28d3a9bf",
+          "previous_text": null,
+          "after": "Art 104b",
+          "before": "Art 105"
+        },
+        {
+          "enbez": "Art 143e",
+          "current_norm_sha256": "5ebe8600df75e379ede9a84df8da66a96b9efb701eb2ea7b5711a90c63742362",
+          "previous_text": null,
+          "after": "Art 143d",
+          "before": "Art 143f"
+        },
+        {
+          "enbez": "Art 143f",
+          "current_norm_sha256": "6700e6290975cce11a5f4e1e281b812dcc87c72eb890e87fb2c4aee7c7256039",
+          "previous_text": null,
+          "after": "Art 143d",
+          "before": "Art 143g"
+        },
+        {
+          "enbez": "Art 143g",
+          "current_norm_sha256": "ffd4f88a3b9fcec6b51d96a1d7a74bfc5459858c571fccd039e15b68d20c0a59",
+          "previous_text": null,
+          "after": "Art 143d",
+          "before": "Art 144"
+        }
+      ],
       "printed_state_sha256": "f99d0722958263c61bcb8486ef4644854530280ec6cee8ec037c37cdc461318b",
       "printed_blocks": 202,
       "companion_gazettes": [

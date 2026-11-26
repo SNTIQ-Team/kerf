@@ -132,6 +132,12 @@ def audit(directory: Path, review_path: Path, anchor_path: Path):
     require("22. März 2025" in clean(texts["23183"][:1600]), "unexpected later federal edition")
     older = federal_edition(texts["21843"])
     newest = federal_edition(texts["23183"])
+    if "9482" in texts:
+        if __package__:
+            from .audit_gg_2010 import audit_2010
+        else:
+            from audit_gg_2010 import audit_2010
+        audit_2010(directory, review, texts)
     if "17609" in texts:
         if __package__:
             from .audit_gg_2017 import audit_early
