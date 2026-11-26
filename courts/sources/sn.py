@@ -76,7 +76,7 @@ from .base import (OPERATOR_DECISION_BASIS, OPERATOR_DECISION_DATE, Adapter, Cap
                    squash)
 from .htmlblocks import (checked_ecli, clean_line, ensure_document, german_date, incremental_since,
                          is_outline_marker, item_extra)
-from .pdftext import MARGIN_NUMBER, align_margin_numbers, join_lines, layout_blocks, pdf_text
+from .pdftext import MARGIN_NUMBER, align_margin_numbers, decision_form_from_cover, join_lines, layout_blocks, pdf_text
 
 BASE = "https://www.justiz.sachsen.de"
 OVG_BASE = BASE + "/ovgentschweb/"
@@ -546,10 +546,12 @@ def parse_ovg_decision(capture_body: bytes, item, url: str) -> ParsedDecision:
         "rn": f"explicit margin Randnummern in the PDF ({len(labels)})" if labels else "none in the PDF",
         "rn_rejected": body_info["rn_rejected"] or None, "tenor_found": body_info["tenor_found"],
         "listed_decision_type": extra.get("decision_type")})
+    decision_type = decision_form_from_cover(text, raw_az, decision_date,
+                                             page["decision_type"] or extra.get("decision_type"), metadata)
     return ParsedDecision(
         source_id="sn", source_doc_id=item["source_doc_id"], source_url=url, court_name=OVG_COURT
         if info.court_id == "ovg-sn" else page["court"], decision_date=decision_date, case_numbers_raw=raw_az,
-        case_numbers=split_case_numbers(raw_az), decision_type=page["decision_type"] or extra.get("decision_type"),
+        case_numbers=split_case_numbers(raw_az), decision_type=decision_type,
         sections=sections, ecli=ecli, court_id=info.court_id, court_type=info.court_type,
         jurisdiction=info.jurisdiction, land=info.land or "sn", chamber=facts["chamber"], title=None,
         metadata=metadata, procedural=procedural)

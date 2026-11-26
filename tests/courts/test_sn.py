@@ -427,3 +427,15 @@ def test_html_instead_of_ovg_capture_is_typed(ovg_item):
         SachsenAdapter().parse(Capture(b"<html><body>Fehler</body></html>", DOC_URL, "text/html", "html"),
                                ovg_item)
     assert err.value.kind == "unexpected_representation"
+
+
+@needs_pdftotext
+def test_ovg_form_uses_matched_pdf_and_keeps_the_catalogue_label(fixture, ovg_item):
+    page = fixture("sn/ovg-doc-8012.html").replace(b"<BR />Beschluss<BR />", b"<BR />Urteil<BR />")
+    capture = ovg_capture(page, DOC_URL, fixture("sn/ovg-26B264.B01.pdf"), PDF_URL, "documents/26B264.B01.pdf")
+    parsed = parse_ovg(capture, ovg_item)
+    assert parsed.decision_type == "Beschluss"
+    assert parsed.metadata["decision_type_evidence"] == {
+        "catalog": "Urteil", "pdf_cover": "Beschluss", "docket_on_cover": True, "date_on_front": True,
+        "operative_dates": ["2026-09-21"],
+    }

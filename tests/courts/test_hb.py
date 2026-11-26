@@ -183,3 +183,33 @@ def test_challenge_instead_of_pdf_is_typed(vg_item):
     with pytest.raises(UpstreamFailure) as err:
         BremenAdapter().fetch(http, vg_item)
     assert err.value.kind == "challenge"
+
+
+def test_bremen_pdf_form_keeps_a_conflicting_listing_for_inspection(fixture, vg_item):
+    item = {**vg_item, "extra": {**vg_item["extra"], "decision_type": "Beschluss"}}
+    parsed = parse_pdf(fixture, "vg-2_K_1343-24.pdf", item)
+    assert parsed.decision_type == "Urteil"
+    assert parsed.metadata["decision_type_evidence"]["catalog"] == "Beschluss"
+
+
+def test_cover_form_requires_a_date_and_docket_and_keeps_specific_catalogue_terms():
+    from courts.sources.pdftext import decision_form_from_cover
+
+    cover = "Verwaltungsgericht Bremen\nAz. 5 K 123/20\nB e s c h l u s s\nIn der Verwaltungsrechtssache\nam 21. März 2021 beschlossen:\nUrteil\n"
+    assert decision_form_from_cover(cover, "5 K 123/20", "2021-03-21", "Urteil", {}) == "Beschluss"
+    with pytest.raises(UpstreamFailure, match="2021-03-21"):
+        decision_form_from_cover(cover, "5 K 123/20", "2020-03-21", "Urteil", {})
+    assert decision_form_from_cover(cover, "5 K 321/20", "2021-03-21", "Urteil", {}) == "Urteil"
+    assert decision_form_from_cover(cover.replace("5 K", "15 K"), "5 K 123/20", "2021-03-21", "Urteil", {}) == "Urteil"
+    assert decision_form_from_cover(cover, "5 K 123/20", "2021-03-21", "Streitwertbeschluss", {}) == "Streitwertbeschluss"
+
+
+def test_cover_form_uses_the_pronouncement_and_the_primary_docket():
+    from courts.sources.pdftext import decision_form_from_cover
+
+    cover = ("Geschäftszeichen: 3 U 35/13 = 6 O 1985/12 Landgericht Bremen\nVerkündet am: 6. Februar 2014\n"
+             "Urteil\nIn dem Rechtsstreit\naufgrund der mündlichen Verhandlung vom 15. Januar 2014\n")
+    assert decision_form_from_cover(cover, "6 O 1985/12", "2014-02-06", "Beschluss", {}) == "Beschluss"
+    with pytest.raises(UpstreamFailure, match="2014-02-06"):
+        decision_form_from_cover(cover, "3 U 35/13", "2014-01-15", "Beschluss", {})
+    assert decision_form_from_cover(cover, "3 U 35/13", "2014-02-06", "Beschluss", {}) == "Urteil"

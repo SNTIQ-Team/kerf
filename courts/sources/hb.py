@@ -28,7 +28,7 @@ from ..http import PoliteHttp
 from ..model import Block, ParsedDecision, Section
 from .base import Adapter, Capture, Listing, iso_date
 from .htmlblocks import clean_line, ensure_document, incremental_since, is_outline_marker, item_extra
-from .pdftext import join_lines, pdf_text
+from .pdftext import decision_form_from_cover, join_lines, pdf_text
 
 INCREMENTAL_OVERLAP_DAYS = 365
 
@@ -353,10 +353,12 @@ def parse_pdf_decision(body: bytes, item, url: str) -> ParsedDecision:
         "identity": {"az_in_pdf": True, "date_in_rubrum": date_in_text},
         "rn": "none published (PDF without Randnummern)",
         "leitsatz": "published only on the court's detail page (not part of the PDF capture)"}
+    decision_type = decision_form_from_cover(text, raw_az, listed_date or date_in_text or "",
+                                             extra.get("decision_type"), metadata, court_abbr=court.key)
     return ParsedDecision(
         source_id="hb", source_doc_id=item["source_doc_id"], source_url=url, court_name=court.name,
         decision_date=listed_date or date_in_text or "", case_numbers_raw=raw_az,
-        case_numbers=split_case_numbers(raw_az), decision_type=extra.get("decision_type"), sections=sections,
+        case_numbers=split_case_numbers(raw_az), decision_type=decision_type, sections=sections,
         ecli=None, court_id=info_court.court_id, court_type=info_court.court_type,
         jurisdiction=info_court.jurisdiction, land="hb", chamber=None, title=extra.get("title"),
         metadata=metadata, procedural=procedural)
