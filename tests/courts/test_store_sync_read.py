@@ -690,6 +690,31 @@ def test_a_shared_ecli_belongs_to_the_document_whose_date_it_encodes():
     assert resolve_decision(conn, ARBG_ECLI) == ("ok", [ARBG_ECLI])
 
 
+def test_reviewed_targets_follow_the_document_that_releases_its_ecli(conn):
+    from courts.store import store_decision
+
+    reviewed = _doc("he", "LARE909", ["Das Urteil."], date="2017-11-08", dtype="Urteil", ecli=ARBG_ECLI)
+    old, _ = store_decision(conn, reviewed, content_hash="a", capture_path="-", media_type="x")
+    citing, _ = store_decision(conn, _doc("he", "citation", ["Zitiert das Urteil."], az="9 Ca 11/18"),
+                               content_hash="b", capture_path="-", media_type="x")
+    assert old == ARBG_ECLI
+    conn.executemany("""
+        INSERT INTO relations(decision_id,relation,target_kind,target_id,target_decision_id,target_raw,
+                              quoted_context,origin,derived_by,legal_effect_verified,confidence)
+        VALUES(?,'mentions','decision',?,?,'Urteil vom 08.11.2017','Urteil','decision_text',?,?,1)
+    """, [(citing, old, old, "user", 1), (citing, old, old, "model", 0)])
+
+    owner = _doc("he", "LARE914", ["Der Beschluss."], ecli=ARBG_ECLI)
+    new, _ = store_decision(conn, owner, content_hash="c", capture_path="-", media_type="x")
+    assert new == old
+    targets = conn.execute("""
+        SELECT r.derived_by, r.legal_effect_verified, r.target_id, d.source_doc_id
+        FROM relations r JOIN decisions d ON d.id=r.target_decision_id
+        WHERE r.decision_id=? ORDER BY r.derived_by
+    """, (citing,)).fetchall()
+    assert [tuple(row) for row in targets] == [("model", 0, old, "LARE909"), ("user", 1, old, "LARE909")]
+
+
 def test_dedupe_repairs_duplicates_stored_under_the_old_rules(monkeypatch):
     import courts.store as store_module
     from courts.dedupe import dedupe
@@ -727,3 +752,53 @@ def test_dedupe_repairs_duplicates_stored_under_the_old_rules(monkeypatch):
     assert resolve_decision(conn, ARBG_ECLI) == ("ok", [ARBG_ECLI])
     assert conn.execute("SELECT source_doc_id FROM decisions WHERE id=?", (ARBG_ECLI,)).fetchone()[0] == "LARE914"
     assert dedupe(conn)["summary"] == {"republications": {}, "shared_eclis": {}}
+
+
+def test_relink_rechecks_identity_when_a_second_document_arrives(conn):
+    from courts.model import Block, Section
+    from courts.store import relink, store_decision
+
+    ecli = "ECLI:DE:BSG:2025:180625UB6KA424R0"
+    first = _bsg("rii", "first", ecli, ("1", "2"))
+    first_id, _ = store_decision(conn, first, content_hash="a", capture_path="-", media_type="x")
+    d = conn.execute("SELECT * FROM decisions WHERE id=?", (first_id,)).fetchone()
+    case_key = conn.execute("SELECT case_key FROM case_numbers WHERE decision_id=?", (first_id,)).fetchone()[0]
+
+    def cite(target, court, day, docket, author="parser", linked=None):
+        return conn.execute("""
+            INSERT INTO relations(decision_id,relation,target_kind,target_id,target_court_id,
+              target_date,target_case_key,target_decision_id,target_raw,quoted_context,origin,
+              derived_by,legal_effect_verified,confidence,detail)
+            VALUES(?,'mentions','decision',?,?,?,?,?,'citation','context','decision_text',?,0,1,'{}')
+        """, (first_id,target,court,day,docket,linked,author)).lastrowid
+
+    dated = cite("court:bsg/test", d["court_slug"], d["decision_date"], case_key)
+    undated = cite("court:bsg/test", d["court_id"], None, case_key)
+    printed = cite(ecli.lower(), None, None, None)
+    conflicting = cite("ECLI:DE:BSG:2025:UNKNOWN", d["court_slug"], d["decision_date"], case_key)
+    reviewed = cite(ecli, None, None, None, author="user", linked=first_id)
+
+    def links():
+        return dict(conn.execute("SELECT id,target_decision_id FROM relations"))
+
+    assert relink(conn) == 3
+    assert links() == {dated:first_id, undated:first_id, printed:first_id, conflicting:None, reviewed:first_id}
+    assert relink(conn) == 0
+
+    second = _bsg("rii", "second", ecli, ("1", "2"), dtype="Beschluss")
+    second.sections = [Section("gruende", "court", "t", [Block("Anderer Beschluss.", "1")])]
+    second_id, _ = store_decision(conn, second, content_hash="b", capture_path="-", media_type="x")
+    assert second_id != first_id
+    assert relink(conn) == 3
+    assert links() == {dated:None, undated:None, printed:None, conflicting:None, reviewed:first_id}
+    assert relink(conn) == 0
+
+    assert citing_decisions(conn, ecli)["status"] == "ambiguous_identity"
+    assert citing_decisions(conn, "rii:first")["total"] == 1  # the reviewed link
+    assert citing_decisions(conn, "rii:second")["total"] == 0
+    # A shared docket in the citation can have the same spelling as the
+    # synthetic ID of the second stored document.
+    conn.execute("UPDATE relations SET target_id=? WHERE id=?", (second_id, dated))
+    assert citing_decisions(conn, second_id)["total"] == 0
+    literal = citing_decisions(conn, "ECLI:DE:BSG:2025:UNKNOWN")
+    assert literal["total"] == 1 and literal["relations"][0]["target_decision_id"] is None

@@ -892,9 +892,14 @@ DECISION_ID_COLUMNS = (("paragraphs", "decision_id"), ("sections", "decision_id"
 
 
 def rekey_decision(conn: sqlite3.Connection, old_id: str, new_id: str) -> None:
-    """Move one stored decision to another id (inside the caller's transaction).  Citations resolved to the old
-    id (relations.target_decision_id) are left alone: they were resolved by the ECLI or court+date+Az the
-    id stood for.  The append-only corrections ledger cannot follow; callers refuse ids it names."""
+    """Move the document and its reviewed citation targets in the caller's transaction.
+
+    The recorded citation and parser links retain their original ECLI or docket.
+    Callers protect document IDs referenced by the append-only corrections ledger.
+    """
+    conn.execute("""UPDATE relations SET target_decision_id=?
+                    WHERE target_decision_id=? AND target_kind='decision' AND derived_by IN ('user', 'model')""",
+                 (new_id, old_id))
     for table, column in DECISION_ID_COLUMNS:
         conn.execute(f"UPDATE {table} SET {column}=? WHERE {column}=?", (new_id, old_id))
     conn.execute("UPDATE decisions SET id=? WHERE id=?", (new_id, old_id))
@@ -1167,24 +1172,50 @@ def _mark_item(conn: sqlite3.Connection, parsed: ParsedDecision, decision_id: st
 
 
 def relink(conn: sqlite3.Connection) -> int:
-    """Resolve decision citations to corpus decisions (by ECLI or court+date+Az)."""
-    cur = conn.execute("""
-      UPDATE relations SET target_decision_id = (
-        SELECT d.id FROM decisions d JOIN case_numbers c ON c.decision_id = d.id
-        WHERE d.court_slug = relations.target_court_id AND d.decision_date = relations.target_date
-          AND c.case_key = relations.target_case_key LIMIT 1)
-      WHERE target_kind = 'decision' AND target_decision_id IS NULL AND target_case_key IS NOT NULL""")
-    changed = cur.rowcount
-    cur = conn.execute("""
-      UPDATE relations SET target_decision_id = (
-        SELECT min(d.id) FROM decisions d JOIN case_numbers c ON c.decision_id = d.id
-        WHERE d.court_id = relations.target_court_id AND c.case_key = relations.target_case_key
-        HAVING count(DISTINCT d.id) = 1)
-      WHERE target_kind = 'decision' AND target_decision_id IS NULL AND target_date IS NULL
-        AND target_case_key IS NOT NULL AND target_case_key <> ''""")
-    changed += cur.rowcount
-    cur = conn.execute("""
-      UPDATE relations SET target_decision_id = (SELECT d.id FROM decisions d WHERE d.ecli = relations.target_id)
-      WHERE target_kind = 'decision' AND target_decision_id IS NULL AND target_id LIKE 'ECLI:%'""")
+    """Refresh inferred citation targets and return the number of changed links.
+
+    A docket can cover several documents issued by the same court on the same
+    day. Arrival of a second document can therefore invalidate an earlier link.
+    Published ECLIs take precedence over docket matching. Existing links set
+    by users or models keep their recorded target.
+    """
+    conn.execute("""
+        WITH
+        dated AS MATERIALIZED (
+            SELECT d.court_slug AS court, d.decision_date AS day, n.case_key AS docket,
+                   CASE WHEN count(DISTINCT d.id) = 1 THEN min(d.id) END AS candidate
+            FROM decisions d JOIN case_numbers n ON n.decision_id = d.id
+            GROUP BY d.court_slug, d.decision_date, n.case_key
+        ),
+        undated AS MATERIALIZED (
+            SELECT d.court_id AS court, n.case_key AS docket,
+                   CASE WHEN count(DISTINCT d.id) = 1 THEN min(d.id) END AS candidate
+            FROM decisions d JOIN case_numbers n ON n.decision_id = d.id
+            GROUP BY d.court_id, n.case_key
+        ),
+        published AS MATERIALIZED (
+            SELECT ecli COLLATE NOCASE AS ecli,
+                   CASE WHEN count(*) = 1 THEN min(id) END AS candidate
+            FROM decisions WHERE ecli IS NOT NULL AND ecli <> '' GROUP BY ecli COLLATE NOCASE
+        ),
+        resolved AS (
+            SELECT r.id, r.target_decision_id AS previous,
+                   CASE WHEN r.target_id LIKE 'ECLI:%' THEN published.candidate
+                        WHEN r.target_date IS NULL THEN undated.candidate
+                        ELSE dated.candidate END AS candidate
+            FROM relations r
+            LEFT JOIN published ON published.ecli = r.target_id COLLATE NOCASE
+            LEFT JOIN dated ON dated.court = r.target_court_id AND dated.day = r.target_date
+                            AND dated.docket = r.target_case_key
+            LEFT JOIN undated ON r.target_date IS NULL AND undated.court = r.target_court_id
+                              AND undated.docket = r.target_case_key
+            WHERE r.target_kind = 'decision'
+              AND (r.derived_by = 'parser' OR r.target_decision_id IS NULL)
+              AND (r.target_id LIKE 'ECLI:%' OR (r.target_case_key IS NOT NULL AND r.target_case_key <> ''))
+        )
+        UPDATE relations SET target_decision_id = resolved.candidate
+        FROM resolved WHERE relations.id = resolved.id AND resolved.previous IS NOT resolved.candidate
+    """)
+    changed = conn.execute("SELECT changes()").fetchone()[0]
     conn.commit()
-    return changed + cur.rowcount
+    return changed

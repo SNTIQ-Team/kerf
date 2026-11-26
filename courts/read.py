@@ -383,8 +383,18 @@ def citing_decisions(conn: sqlite3.Connection, target: str, *, relation: str | N
         cond, params = "(r.target_id = ? OR (r.target_id >= ? AND r.target_id < ?))", [target, target + "/", target + "0"]
     else:
         status, ids = resolve_decision(conn, target)
-        cond = "(r.target_id = ? OR r.target_decision_id = ?)"
-        params = [target, ids[0] if status == "ok" else target]
+        if status == "ambiguous_identity":
+            return {"status": status, "target": target, "candidates": ids, "total": None, "relations": []}
+        if status == "ok":
+            cond, params = "r.target_decision_id = ?", [ids[0]]
+            if target.upper().startswith("ECLI:"):
+                # A printed ECLI may be cited before the next linking pass.
+                # A generated court/docket key alone cannot identify one document.
+                cond = "(r.target_decision_id = ? OR (r.target_decision_id IS NULL AND r.target_id = ?))"
+                params.append(target)
+        else:
+            # A literal citation can exist before its target enters the corpus.
+            cond, params = "r.target_id = ?", [target]
     if relation:
         cond += " AND r.relation = ?"
         params.append(relation)
