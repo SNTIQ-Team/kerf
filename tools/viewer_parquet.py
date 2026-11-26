@@ -25,10 +25,11 @@ def convert(source: Path, target: Path, cache: Path, previous_features: list | N
         try:
             ds = load_dataset("json", **kwargs)
         except DatasetGenerationError as exc:
-            if not isinstance(exc.__cause__, CastError):
+            if not isinstance(exc.__cause__, (CastError, TypeError)):
                 raise
-            # Optional keys can first appear after the JSON reader's initial
-            # chunk. Infer one schema from this complete release table.
+            # A late top-level column raises CastError. A late nested field
+            # raises TypeError when Arrow casts its struct to the first chunk's
+            # schema. Infer both from the complete release table.
             ds = load_dataset("json", chunksize=source.stat().st_size + 1, **kwargs)
         table, features = ds.data.table, ds.features
     else:
