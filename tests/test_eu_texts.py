@@ -55,6 +55,24 @@ LEGACY_HTML = """<html><body><p>HAT FOLGENDE RICHTLINIE ERLASSEN:</p><p>KAPITEL 
 <p>Geschehen zu Brüssel am 20. Juli 2001.</p></body></html>"""
 
 
+def test_quoted_formex_articles_belong_to_the_amending_article():
+    # Regulation 2024/1352 uses this shape to insert Art. 7c into Regulation 2019/816.
+    xml = """<ACT><ENACTING.TERMS><DIVISION><ARTICLE><TI.ART>Artikel 1</TI.ART><ALINEA>
+    <P>Folgender Artikel wird eingefügt:</P><QUOT.S><ARTICLE>
+    <TI.ART><QUOT.START CODE="201E"/>Artikel 7c</TI.ART><STI.ART><P>Überschrift</P></STI.ART>
+    <PARAG><NO.PARAG>(1)</NO.PARAG><ALINEA>Erster Satz.</ALINEA></PARAG>
+    <PARAG><NO.PARAG>(2)</NO.PARAG><ALINEA>Zweiter Satz.<QUOT.END CODE="201C"/></ALINEA></PARAG>
+    </ARTICLE></QUOT.S></ALINEA></ARTICLE>
+    <ARTICLE><TI.ART>Artikel 7c</TI.ART><ALINEA>Eigener Artikel.</ALINEA></ARTICLE>
+    </DIVISION></ENACTING.TERMS><ANNEX><ARTICLE><TI.ART>Artikel 99</TI.ART>
+    <ALINEA>Mustereintrag.</ALINEA></ARTICLE></ANNEX></ACT>"""
+    parsed = eu.parse_formex(xml.encode())
+    assert [a["enbez"] for a in parsed["articles"]] == ["Art. 1", "Art. 7c"]
+    assert "„Artikel 7c Überschrift (1) Erster Satz. (2) Zweiter Satz.“" in parsed["articles"][0]["text"]
+    assert parsed["articles"][1]["text"] == "Eigener Artikel."
+    assert parsed["annexes_skipped"] == 1
+
+
 def test_formex_article_renders_absatz_unterabsatz_and_points():
     parsed = eu.parse_formex(FORMEX_OJ.encode())
     art1, art2 = parsed["articles"]
