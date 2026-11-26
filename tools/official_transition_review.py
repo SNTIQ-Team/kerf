@@ -191,7 +191,8 @@ def review_transitions(transitions: Iterable[dict],
     reviews = []
     for transition in transitions:
         changes = list(transition.get("changes") or [])
-        if not changes or not transition.get("full_state_pair"):
+        if (not changes or not transition.get("full_state_pair") or
+                transition.get("unordered_observation_dates")):
             continue
         candidates = []
         for document, reference in by_act.get(

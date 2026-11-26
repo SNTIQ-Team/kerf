@@ -30,7 +30,9 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
+from api.official_state_store import unordered_observation_days  # noqa: E402
 from snapshot_storage import SnapshotArchiveError, open_snapshot_text  # noqa: E402
 
 DEFAULT_SNAPSHOTS = ROOT / "data" / "snapshots" / "gii"
@@ -587,8 +589,8 @@ def transitions(manifest: dict[str, Any],
 
     Repeated observations of the same state are retained in the manifest but
     collapsed here.  The last repeated observation is the lower boundary for
-    the next change.  Two different states on the same retrieval date are
-    rejected because their order cannot be proven.
+    the next change. Unordered days remain in the source manifest. A net change
+    across one of those dates names both unambiguous endpoints and the gap.
     """
     manifest = _validate_manifest(copy.deepcopy(manifest))
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -599,15 +601,9 @@ def transitions(manifest: dict[str, Any],
     for act_id, observations in grouped.items():
         observations.sort(key=lambda row: (
             row["observed_at"], row["state_sha256"], row["builddate"]))
-        per_day: dict[str, set[str]] = defaultdict(set)
-        for row in observations:
-            per_day[row["observed_at"]].add(row["state_sha256"])
-        ambiguous = [day for day, hashes in per_day.items()
-                     if len(hashes) > 1]
-        if ambiguous:
-            raise StateStoreError(
-                f"{act_id} has unordered distinct states on "
-                + ", ".join(sorted(ambiguous)))
+        ambiguous_days = sorted(day for _, day in unordered_observation_days(observations))
+        if ambiguous_days:
+            observations = [r for r in observations if r["observed_at"] not in ambiguous_days]
 
         previous = observations[0] if observations else None
         for current in observations[1:]:
@@ -651,6 +647,10 @@ def transitions(manifest: dict[str, Any],
                 "effective_at": None,
                 "source_url": current["source_url"],
             })
+            gaps = [day for day in ambiguous_days
+                    if previous["observed_at"] < day < current["observed_at"]]
+            if gaps:
+                output[-1]["unordered_observation_dates"] = gaps
             previous = current
     output.sort(key=lambda row: (
         row["observed_at"], row["act_id"], row["state_sha256"]))
