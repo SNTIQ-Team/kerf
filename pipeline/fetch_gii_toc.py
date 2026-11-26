@@ -29,11 +29,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from api.norm_identity import act_slug, designator_unit  # noqa: E402
+from api.norm_identity import act_slug, designator_unit, gii_norm_href  # noqa: E402
 
 USER_AGENT = ("SNTIQ-Kerf/1.5 (+https://sntiq.com/dt/kerf; "
               "table-of-contents capture, 1 request/s)")
-_LINK = re.compile(r'<a\s+href="([A-Za-z0-9_.-]+\.html)"[^>]*>(.*?)</a>',
+_LINK = re.compile(r'<a\s+href="([A-Za-z0-9_.-]+\.html(?:#[A-Za-z0-9_-]+)?)"[^>]*>(.*?)</a>',
                    re.I | re.S)
 _DESIGNATOR = re.compile(
     r"^(§+\s*\d+\s*[a-z]{0,3}|Art(?:ikel)?\.?\s*\d+\s*[a-z]{0,3}|"
@@ -46,11 +46,11 @@ def parse_toc(raw: bytes) -> dict[str, str]:
     text = raw.decode("iso-8859-1")
     norms: dict[str, str] = {}
     for href, label_html in _LINK.findall(text):
-        if href.startswith("BJNR") or href in {"index.html"}:
+        if href == "index.html" or not gii_norm_href(href):
             continue
         label = " ".join(html.unescape(re.sub(r"<[^>]+>", " ",
                                               label_html)).split())
-        if not label:
+        if not label or ("#" in href and not _DESIGNATOR.fullmatch(label)):
             continue
         match = _DESIGNATOR.match(label)
         designator = match.group(1) if match else label

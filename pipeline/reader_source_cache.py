@@ -8,6 +8,18 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
+def gii_designator(norm: ET.Element) -> str:
+    """Use an article's structural label only when its own XML record has a body."""
+    explicit = (norm.findtext("metadaten/enbez") or "").strip()
+    if explicit:
+        return explicit
+    label = (norm.findtext("metadaten/gliederungseinheit/gliederungsbez") or "").strip()
+    if not re.fullmatch(r"(?:Art(?:ikel)?\.?|§)\s*\d+[a-z]{0,3}", label, re.I):
+        return ""
+    content = norm.find("textdaten/text/Content")
+    return label if content is not None and any(t.strip() for t in content.itertext()) else ""
+
+
 def reader_act_id(family: str, jurabk: str) -> str:
     """Use the same public identity normalization as build_web_data.slug."""
     if family not in {"fed", "by"} or not isinstance(jurabk, str):

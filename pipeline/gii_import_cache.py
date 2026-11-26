@@ -12,6 +12,9 @@ from datetime import date
 from pathlib import Path
 
 
+PARSER_VERSION = "gii-xml/2"
+
+
 class ImportBudgetExceeded(RuntimeError):
     pass
 
@@ -69,14 +72,14 @@ class GiiImportCache:
             self._validate(slug, raw["day"], raw["act"], raw["norms"])
         except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
             raise ValueError(f"invalid import checkpoint: {slug}") from exc
-        if raw["day"] != day:
+        if raw["day"] != day or raw.get("parser") != PARSER_VERSION:
             return None
         return raw["act"], raw["norms"]
 
     def put(self, slug: str, day: str, act: dict, norms: list) -> None:
         path = self._path(slug)
         self._validate(slug, day, act, norms)
-        value = {"day": day, "act": act, "norms": norms}
+        value = {"day": day, "parser": PARSER_VERSION, "act": act, "norms": norms}
         value["sha256"] = hashlib.sha256(_encode(value)).hexdigest()
         packed = gzip.compress(_encode(value), compresslevel=9, mtime=0)
         previous_size = path.stat().st_size if path.exists() else 0

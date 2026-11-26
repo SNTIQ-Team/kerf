@@ -258,7 +258,7 @@ def _annotation_fields(norm: dict) -> dict:
     return {key: norm[key] for key in fields}
 
 
-def _gii_annotations(norm: ET.Element) -> dict:
+def _gii_annotations(norm: ET.Element, designator: str) -> dict:
     """Keep both GII note representations without changing the norm's Content."""
     blocks, expected = [], []
     for note in norm.findall("textdaten/text/Footnotes/Footnote"):
@@ -276,7 +276,7 @@ def _gii_annotations(norm: ET.Element) -> dict:
     # GII keeps application and constitutional notes separately from Footnotes.
     # Only a labelled source record may carry these norm-specific notes; act
     # and section header metadata must not migrate onto a neighbouring norm.
-    if (norm.findtext("metadaten/enbez") or "").strip():
+    if designator:
         for content in norm.findall("textdaten/fussnoten/Content"):
             text = "".join(content.itertext())
             if not text.strip():
@@ -291,6 +291,8 @@ def _gii_annotations(norm: ET.Element) -> dict:
 
 
 def build_sidecar(xml_bytes: bytes, act: dict, *, retrieved_at: str) -> dict:
+    from pipeline.reader_source_cache import gii_designator
+
     current = _current_norms(act)
     if len(xml_bytes) > MAX_BYTES or b"<!ENTITY" in xml_bytes.upper():
         raise ReaderBlocksError("unsupported XML document")
@@ -302,7 +304,7 @@ def build_sidecar(xml_bytes: bytes, act: dict, *, retrieved_at: str) -> dict:
         raise ReaderBlocksError("unexpected GII document root")
     norms, seen, indexed, seen_indices = {}, set(), {}, set()
     for norm in root.findall("norm"):
-        name = (norm.findtext("metadaten/enbez") or "").strip()
+        name = gii_designator(norm)
         if name in seen:
             norms.pop(name, None)
         duplicate = name in seen
@@ -318,7 +320,7 @@ def build_sidecar(xml_bytes: bytes, act: dict, *, retrieved_at: str) -> dict:
         nodes = _children(content)
         if _canonical_text(flatten_nodes(nodes)) != original:
             continue
-        value = {"text_sha256": text_hash(original), "blocks": nodes, **_gii_annotations(norm)}
+        value = {"text_sha256": text_hash(original), "blocks": nodes, **_gii_annotations(norm, name)}
         if unique_match:
             norms[name] = value
         if indexed_target is not None:
