@@ -1599,6 +1599,8 @@ An exact ECLI lookup with no matches returns HTTP 200 with an empty `decisions` 
 
 The command-line reader uses the same settings. Use `python3 tools/read_rii_archive.py --ecli <ECLI>` to list all matching decisions. For example, `python3 tools/read_rii_archive.py JURE100056775 --anchor rn-1` prints the sourced passage. Use `--passages --rn 1` to list all occurrences of a printed number or `--source` to write the original bytes to stdout.
 
+A serving host can keep the pinned `manifest.json`, `lookup` and `ecli` files in a revision subdirectory under `KERF_RII_INDEX_DIR`. Kerf checks their hashes and retrieves missing or damaged files from the published release.
+
 ### Full-text search of court decisions
 
 `GET /courts/decisions/search?q=Kindeswohl&limit=20` searches the complete wording of decisions whose source file matches a publication in the pinned RII release. Each result includes the court, decision date, docket, ECLI where available, official source URL and Kerf document path.
@@ -1606,3 +1608,5 @@ The command-line reader uses the same settings. Use `python3 tools/read_rii_arch
 All terms must match. The service returns the newest decisions first and orders decisions from the same day by native identifier. A page contains up to 100 decisions. Pass the returned `next` value as `after` to read the next page. A change of index revision returns HTTP 409 for an earlier cursor.
 
 `GET /courts/decisions/search/operator` accepts the same parameters and searches the full native ledger. It requires a Bearer credential and returns `Cache-Control: private, no-store`. Deployment sets `KERF_NATIVE_COURT_INDEX` to the release directory and `KERF_NATIVE_COURT_TOKEN_FILE` to a credential readable by the service. The public and operator indexes are separate SQLite files.
+
+Each operator search result includes a relative `document_path`. Use the same Bearer credential to request `GET /courts/decisions/document?identifier=…`. The response includes the native decision ID, its paragraphs and the numbering available in the source. A decision on hold returns `integrity_check_failed` and omits the text. The endpoint sets `Cache-Control: private, no-store` and `Vary: Authorization`.
