@@ -22,6 +22,7 @@ class Block:
     label: str | None = None
     kind: str = "text"          # text | heading | pagebreak
     locator: str = ""
+    unnumbered: bool = False    # this block lies outside explicitly numbered source markup
 
 
 @dataclass
