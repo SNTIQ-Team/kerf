@@ -32,10 +32,9 @@ def clean_label(label: str | None) -> str | None:
 
 def assemble(decision_id: str, sections: list[Section]) -> tuple[list[Paragraph], str]:
     """Return (paragraphs, numbering) where numbering is 'rn' or 'none'."""
-    has_rn = any(
+    has_source_marker = any(
         clean_label(b.label) for s in sections if s.name not in HEADNOTE_SECTIONS
         for b in s.blocks if b.kind != "pagebreak")
-    numbering = "rn" if has_rn else "none"
     paragraphs: list[Paragraph] = []
     used: set[str] = set()
     body_counter = 0
@@ -60,14 +59,14 @@ def assemble(decision_id: str, sections: list[Section]) -> tuple[list[Paragraph]
             continue
         numbered = section.name not in HEADNOTE_SECTIONS and any(clean_label(b.label) for b in blocks)
         positional_ids = section.name in HEADNOTE_SECTIONS or (
-            not numbered and (numbering == "rn" or section.name in ("tenor", "rechtsmittelbelehrung")))
+            not numbered and (has_source_marker or section.name in ("tenor", "rechtsmittelbelehrung")))
         if positional_ids:
             # Positional ids; labels here are list markers, not Randnummern.
             for block in blocks:
                 positional[section.name] = positional.get(section.name, 0) + 1
                 add(f"{decision_id}#{section.name}-{positional[section.name]}", section, None, block)
             continue
-        if numbering == "none":
+        if not has_source_marker:
             for block in blocks:
                 body_counter += 1
                 add(f"{decision_id}#p-{body_counter}", section, None, block)
@@ -94,7 +93,9 @@ def assemble(decision_id: str, sections: list[Section]) -> tuple[list[Paragraph]
             else:
                 leading[section.name] = leading.get(section.name, 0) + 1
                 add(f"{decision_id}#{section.name}-u{leading[section.name]}", section, None, block)
-    return paragraphs, numbering
+    # A published marker on a blank block can determine the existing positional
+    # anchors. Only emitted, numbered text can support a Randnummer citation.
+    return paragraphs, "rn" if any(p.rn is not None for p in paragraphs) else "none"
 
 
 # --- quote location --------------------------------------------------------
