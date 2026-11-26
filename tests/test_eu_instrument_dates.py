@@ -62,3 +62,22 @@ def test_untyped_and_ambiguous_dates():
     assert general_date([{"date": "2026-06-11"}], None) == "2026-06-11"
     assert general_date([{"date": "2010-01-01"}, {"date": "2010-12-01"}], "EV") is None
     assert general_date([{"date": "2025-01-01", "dateRole": "{MA/PART|u}"}], "MA") is None
+
+
+def test_cellar_corrigenda_have_encoded_aliases_and_keep_the_language_scope():
+    import fetch_eu_texts as texts
+
+    german = "32003L0008R(01)"
+    dutch = "32003L0008R(02)"
+    encoded = texts.CELEX_URI + "32003L0008R%2801%29"
+
+    class OfficialAliases:
+        def sparql(self, query):
+            assert encoded in query
+            assert (texts.CELEX_URI + "32003L0008R%2802%29") in query
+            return [{"s": encoded, "m": "http://example.org/german", "t": "pdf"}]
+
+    assert texts.celex_uri(german) == "<" + encoded + ">"
+    assert texts.celex_uri("12007L/TXT") == "<" + texts.CELEX_URI + "12007L%2FTXT>"
+    assert texts.manifestations(OfficialAliases(), [german, dutch]) == {
+        german: {"pdf": "http://example.org/german"}}
