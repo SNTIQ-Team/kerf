@@ -56,9 +56,13 @@ def test_native_json_types_survive_parquet_and_empty_release(tmp_path):
     assert list(empty) == [] and empty.features == legacy.features
 
 
-def test_late_columns_use_the_whole_release_schema(tmp_path, monkeypatch):
+@pytest.mark.parametrize("before,after", [
+    ({"id": 1}, {"id": 3, "late": "verified"}),
+    ({"id": 1, "detail": {"a": 1}}, {"id": 3, "detail": {"a": 2, "late": "verified"}}),
+])
+def test_late_columns_use_the_whole_release_schema(tmp_path, monkeypatch, before, after):
     datasets = pytest.importorskip("datasets")
-    pq = pytest.importorskip("pyarrow.parquet")
+    pytest.importorskip("pyarrow.parquet")
     original = datasets.load_dataset
     chunks = []
     def small_first_chunk(*args, **kwargs):
@@ -66,9 +70,12 @@ def test_late_columns_use_the_whole_release_schema(tmp_path, monkeypatch):
         return original(*args, **kwargs)
     monkeypatch.setattr(datasets, "load_dataset", small_first_chunk)
     raw = tmp_path / "records.jsonl"
-    raw.write_text('{"id":1}\n' * 20 + '{"id":3,"late":"verified"}\n')
+    raw.write_text((json.dumps(before) + "\n") * 20 + json.dumps(after) + "\n")
     dst = tmp_path / "records.parquet"
     features = viewer.convert(raw, dst, tmp_path/"cache", None)
     assert len(chunks) == 2 and chunks[1] > raw.stat().st_size
-    assert [field["name"] for field in features] == ["id", "late"]
-    assert pq.read_table(dst).to_pylist()[-1] == {"id": 3, "late": "verified"}
+    assert [field["name"] for field in features] == list(after)
+    restored = datasets.Dataset.from_parquet(
+        str(dst), features=datasets.Features._from_yaml_list(features), cache_dir=str(tmp_path/"roundtrip")
+    )
+    assert restored[-1] == after
