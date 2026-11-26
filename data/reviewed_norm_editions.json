@@ -1,0 +1,329 @@
+{
+  "schema": "kerf-reviewed-norm-editions/1",
+  "norms": {
+    "de/bund/sgb_8/para/42": {
+      "act_id": "fed_sgb_8",
+      "label": "§ 42",
+      "title": "Inobhutnahme von Kindern und Jugendlichen",
+      "known_from": "2026-11-26T08:45:50Z",
+      "verified_through": "2026-11-26",
+      "editions": [
+        {
+          "valid_from": "1998-07-01",
+          "valid_until_exclusive": "2005-10-01",
+          "text": "(1) Inobhutnahme eines Kindes oder eines Jugendlichen ist die vorläufige Unterbringung des Kindes oder des Jugendlichen bei 1. einer geeigneten Person oder 2. in einer Einrichtung oder 3. in einer sonstigen betreuten Wohnform. Während der Inobhutnahme sind der notwendige Unterhalt des Kindes oder des Jugendlichen und die Krankenhilfe sicherzustellen. Mit der Inobhutnahme ist dem Kind oder dem Jugendlichen unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Während der Inobhutnahme übt das Jugendamt das Recht der Beaufsichtigung, Erziehung und Aufenthaltsbestimmung aus; der mutmaßliche Wille des Personensorgeberechtigten oder des Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. Es hat für das Wohl des Kindes oder des Jugendlichen zu sorgen, das Kind oder den Jugendlichen in seiner gegenwärtigen Lage zu beraten und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. (2) Das Jugendamt ist verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn das Kind oder der Jugendliche um Obhut bittet. Das Jugendamt hat den Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten. Widerspricht der Personensorge- oder Erziehungsberechtigte der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen dem Personensorge- oder Erziehungsberechtigten zu übergeben oder 2. eine Entscheidung des Familiengerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Ist der Personensorge- oder Erziehungsberechtigte nicht erreichbar, so gilt Satz 3 Nr. 2 entsprechend. (3) Das Jugendamt ist verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert. Freiheitsentziehende Maßnahmen sind dabei nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. Absatz 2 Satz 2 bis 4 gilt entsprechend.",
+          "text_sha256": "4d68837a7ed62341bf27d10e7e93e12ce4a2421d3ffc9c19d80dcf7f700d6edc",
+          "sources": [
+            {
+              "role": "wording",
+              "locator": "BGBl. 1998 I S. 3546, 3558, § 42",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl198s3546.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "3e11c2882fa0f40d61598819a507c1ae072011b650914c99b442b0ebf735df0c"
+            },
+            {
+              "role": "commencement",
+              "locator": "BGBl. 1998 I S. 1188, Art. 4 Abs. 3",
+              "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl198s1188.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+              "sha256": "bd9b6e0b57db79f2c2d7caa699cab7874368bab2cf59227de7d9050f01027e13"
+            },
+            {
+              "role": "amendment_inventory",
+              "locator": "BGBl. 2006 I S. 3134, Nrn. 1–18",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl106s3134.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "f320808fd25acb80e5035a02256ffe0df9f3773bed3eeaacff9e1a94f87212f2"
+            }
+          ]
+        },
+        {
+          "valid_from": "2005-10-01",
+          "valid_until_exclusive": "2012-01-01",
+          "text": "(1) Das Jugendamt ist berechtigt und verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn 1. das Kind oder der Jugendliche um Obhut bittet oder 2. eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert und a) die Personensorgeberechtigten nicht widersprechen oder b) eine familiengerichtliche Entscheidung nicht rechtzeitig eingeholt werden kann oder 3. ein ausländisches Kind oder ein ausländischer Jugendlicher unbegleitet nach Deutschland kommt und sich weder Personensorge- noch Erziehungsberechtigte im Inland aufhalten. Die Inobhutnahme umfasst die Befugnis, ein Kind oder einen Jugendlichen bei einer geeigneten Person, in einer geeigneten Einrichtung oder in einer sonstigen Wohnform vorläufig unterzubringen; im Fall von Satz 1 Nr. 2 auch ein Kind oder einen Jugendlichen von einer anderen Person wegzunehmen. (2) Das Jugendamt hat während der Inobhutnahme die Situation, die zur Inobhutnahme geführt hat, zusammen mit dem Kind oder dem Jugendlichen zu klären und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. Dem Kind oder dem Jugendlichen ist unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Das Jugendamt hat während der Inobhutnahme für das Wohl des Kindes oder des Jugendlichen zu sorgen und dabei den notwendigen Unterhalt und die Krankenhilfe sicherzustellen. Das Jugendamt ist während der Inobhutnahme berechtigt, alle Rechtshandlungen vorzunehmen, die zum Wohl des Kindes oder Jugendlichen notwendig sind; der mutmaßliche Wille der Personensorge- oder der Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. (3) Das Jugendamt hat im Fall des Absatzes 1 Satz 1 Nr. 1 und 2 die Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten und mit ihnen das Gefährdungsrisiko abzuschätzen. Widersprechen die Personensorge- oder Erziehungsberechtigten der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen den Personensorge- oder Erziehungsberechtigten zu übergeben, sofern nach der Einschätzung des Jugendamts eine Gefährdung des Kindeswohls nicht besteht oder die Personensorge- oder Erziehungsberechtigten bereit und in der Lage sind, die Gefährdung abzuwenden oder 2. eine Entscheidung des Familiengerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Sind die Personensorge- oder Erziehungsberechtigten nicht erreichbar, so gilt Satz 2 Nr. 2 entsprechend. Im Fall des Absatzes 1 Satz 1 Nr. 3 ist unverzüglich die Bestellung eines Vormunds oder Pflegers zu veranlassen. Widersprechen die Personensorgeberechtigten der Inobhutnahme nicht, so ist unverzüglich ein Hilfeplanverfahren zur Gewährung einer Hilfe einzuleiten. (4) Die Inobhutnahme endet mit 1. der Übergabe des Kindes oder Jugendlichen an die Personensorge- oder Erziehungsberechtigten, 2. der Entscheidung über die Gewährung von Hilfen nach dem Sozialgesetzbuch. (5) Freiheitsentziehende Maßnahmen im Rahmen der Inobhutnahme sind nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. (6) Ist bei der Inobhutnahme die Anwendung unmittelbaren Zwangs erforderlich, so sind die dazu befugten Stellen hinzuzuziehen.",
+          "text_sha256": "f92e64946b45f921cbfc6990a09cbad1249831aa7e4b77bc7d4ab4ba679c412d",
+          "sources": [
+            {
+              "role": "wording",
+              "locator": "BGBl. 2005 I S. 2729, Art. 1 Nr. 19; Art. 4",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl105s2729.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "b2e1149a46d565d20aef17a5582e3d0cd6c1660c45534d743744c2677a295829"
+            },
+            {
+              "role": "republication",
+              "locator": "BGBl. 2006 I S. 3134, § 42",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl106s3134.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "f320808fd25acb80e5035a02256ffe0df9f3773bed3eeaacff9e1a94f87212f2"
+            },
+            {
+              "role": "next_amendment",
+              "locator": "BGBl. 2011 I S. 2975, Art. 2 Nr. 10; Art. 6",
+              "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl111s2975.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+              "sha256": "23bd1f7dc6a2fde229c67d97c56f5505ac183b746ebf661af7c2ec766d0258e6"
+            },
+            {
+              "role": "amendment_inventory",
+              "locator": "BGBl. 2012 I S. 2022, Nrn. 1–9",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl112s2022.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "0d761631e2ffcbfbc7c2bc31c820d23d2d0ffe8aa326797bc0ca606277dec7bd"
+            }
+          ]
+        },
+        {
+          "valid_from": "2012-01-01",
+          "valid_until_exclusive": "2017-07-29",
+          "text": "(1) Das Jugendamt ist berechtigt und verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn 1. das Kind oder der Jugendliche um Obhut bittet oder 2. eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert und a) die Personensorgeberechtigten nicht widersprechen oder b) eine familiengerichtliche Entscheidung nicht rechtzeitig eingeholt werden kann oder 3. ein ausländisches Kind oder ein ausländischer Jugendlicher unbegleitet nach Deutschland kommt und sich weder Personensorge- noch Erziehungsberechtigte im Inland aufhalten. Die Inobhutnahme umfasst die Befugnis, ein Kind oder einen Jugendlichen bei einer geeigneten Person, in einer geeigneten Einrichtung oder in einer sonstigen Wohnform vorläufig unterzubringen; im Fall von Satz 1 Nummer 2 auch ein Kind oder einen Jugendlichen von einer anderen Person wegzunehmen. (2) Das Jugendamt hat während der Inobhutnahme die Situation, die zur Inobhutnahme geführt hat, zusammen mit dem Kind oder dem Jugendlichen zu klären und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. Dem Kind oder dem Jugendlichen ist unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Das Jugendamt hat während der Inobhutnahme für das Wohl des Kindes oder des Jugendlichen zu sorgen und dabei den notwendigen Unterhalt und die Krankenhilfe sicherzustellen; § 39 Absatz 4 Satz 2 gilt entsprechend. Das Jugendamt ist während der Inobhutnahme berechtigt, alle Rechtshandlungen vorzunehmen, die zum Wohl des Kindes oder Jugendlichen notwendig sind; der mutmaßliche Wille der Personensorge- oder der Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. (3) Das Jugendamt hat im Fall des Absatzes 1 Satz 1 Nummer 1 und 2 die Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten und mit ihnen das Gefährdungsrisiko abzuschätzen. Widersprechen die Personensorge- oder Erziehungsberechtigten der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen den Personensorge- oder Erziehungsberechtigten zu übergeben, sofern nach der Einschätzung des Jugendamts eine Gefährdung des Kindeswohls nicht besteht oder die Personensorge- oder Erziehungsberechtigten bereit und in der Lage sind, die Gefährdung abzuwenden oder 2. eine Entscheidung des Familiengerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Sind die Personensorge- oder Erziehungsberechtigten nicht erreichbar, so gilt Satz 2 Nummer 2 entsprechend. Im Fall des Absatzes 1 Satz 1 Nummer 3 ist unverzüglich die Bestellung eines Vormunds oder Pflegers zu veranlassen. Widersprechen die Personensorgeberechtigten der Inobhutnahme nicht, so ist unverzüglich ein Hilfeplanverfahren zur Gewährung einer Hilfe einzuleiten. (4) Die Inobhutnahme endet mit 1. der Übergabe des Kindes oder Jugendlichen an die Personensorge- oder Erziehungsberechtigten, 2. der Entscheidung über die Gewährung von Hilfen nach dem Sozialgesetzbuch. (5) Freiheitsentziehende Maßnahmen im Rahmen der Inobhutnahme sind nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. (6) Ist bei der Inobhutnahme die Anwendung unmittelbaren Zwangs erforderlich, so sind die dazu befugten Stellen hinzuzuziehen.",
+          "text_sha256": "efbb8157a5db25b264ec3825b40dd0f9c296f1cec608010af8c8e1387a9e5f78",
+          "sources": [
+            {
+              "role": "wording",
+              "locator": "Deutsche Rentenversicherung, § 42 SGB VIII",
+              "url": "https://rvrecht.deutsche-rentenversicherung.de/SharedDocs/rvRecht/05_Normen_und_Vertraege/01_Sozialgesetzbuch/08_SGB_VIII/0042/0042_2012_01_01.html",
+              "sha256": "044a2290fd27415bfabf414ed234321d0d83503394a0c54e376e33428099aeae"
+            },
+            {
+              "role": "republication",
+              "locator": "BGBl. 2012 I S. 2022, § 42",
+              "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl112s2022.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+              "sha256": "0d761631e2ffcbfbc7c2bc31c820d23d2d0ffe8aa326797bc0ca606277dec7bd"
+            }
+          ]
+        },
+        {
+          "valid_from": "2017-07-29",
+          "valid_until_exclusive": "2021-06-10",
+          "text": "(1) Das Jugendamt ist berechtigt und verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn 1. das Kind oder der Jugendliche um Obhut bittet oder 2. eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert und a) die Personensorgeberechtigten nicht widersprechen oder b) eine familiengerichtliche Entscheidung nicht rechtzeitig eingeholt werden kann oder 3. ein ausländisches Kind oder ein ausländischer Jugendlicher unbegleitet nach Deutschland kommt und sich weder Personensorge- noch Erziehungsberechtigte im Inland aufhalten. Die Inobhutnahme umfasst die Befugnis, ein Kind oder einen Jugendlichen bei einer geeigneten Person, in einer geeigneten Einrichtung oder in einer sonstigen Wohnform vorläufig unterzubringen; im Fall von Satz 1 Nummer 2 auch ein Kind oder einen Jugendlichen von einer anderen Person wegzunehmen. (2) Das Jugendamt hat während der Inobhutnahme die Situation, die zur Inobhutnahme geführt hat, zusammen mit dem Kind oder dem Jugendlichen zu klären und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. Dem Kind oder dem Jugendlichen ist unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Das Jugendamt hat während der Inobhutnahme für das Wohl des Kindes oder des Jugendlichen zu sorgen und dabei den notwendigen Unterhalt und die Krankenhilfe sicherzustellen; § 39 Absatz 4 Satz 2 gilt entsprechend. Das Jugendamt ist während der Inobhutnahme berechtigt, alle Rechtshandlungen vorzunehmen, die zum Wohl des Kindes oder Jugendlichen notwendig sind; der mutmaßliche Wille der Personensorge- oder der Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. Im Fall des Absatzes 1 Satz 1 Nummer 3 gehört zu den Rechtshandlungen nach Satz 4, zu denen das Jugendamt verpflichtet ist, insbesondere die unverzügliche Stellung eines Asylantrags für das Kind oder den Jugendlichen in Fällen, in denen Tatsachen die Annahme rechtfertigen, dass das Kind oder der Jugendliche internationalen Schutz im Sinne des § 1 Absatz 1 Nummer 2 des Asylgesetzes benötigt; dabei ist das Kind oder der Jugendliche zu beteiligen. (3) Das Jugendamt hat im Fall des Absatzes 1 Satz 1 Nummer 1 und 2 die Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten und mit ihnen das Gefährdungsrisiko abzuschätzen. Widersprechen die Personensorge- oder Erziehungsberechtigten der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen den Personensorge- oder Erziehungsberechtigten zu übergeben, sofern nach der Einschätzung des Jugendamts eine Gefährdung des Kindeswohls nicht besteht oder die Personensorge- oder Erziehungsberechtigten bereit und in der Lage sind, die Gefährdung abzuwenden oder 2. eine Entscheidung des Familiengerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Sind die Personensorge- oder Erziehungsberechtigten nicht erreichbar, so gilt Satz 2 Nummer 2 entsprechend. Im Fall des Absatzes 1 Satz 1 Nummer 3 ist unverzüglich die Bestellung eines Vormunds oder Pflegers zu veranlassen. Widersprechen die Personensorgeberechtigten der Inobhutnahme nicht, so ist unverzüglich ein Hilfeplanverfahren zur Gewährung einer Hilfe einzuleiten. (4) Die Inobhutnahme endet mit 1. der Übergabe des Kindes oder Jugendlichen an die Personensorge- oder Erziehungsberechtigten, 2. der Entscheidung über die Gewährung von Hilfen nach dem Sozialgesetzbuch. (5) Freiheitsentziehende Maßnahmen im Rahmen der Inobhutnahme sind nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. (6) Ist bei der Inobhutnahme die Anwendung unmittelbaren Zwangs erforderlich, so sind die dazu befugten Stellen hinzuzuziehen.",
+          "text_sha256": "4939138a730e362bfb71b4c0d3f7d27bf42f3eb566c8a3a69fbef64cd152588a",
+          "sources": [
+            {
+              "role": "wording",
+              "locator": "Deutsche Rentenversicherung, § 42 SGB VIII",
+              "url": "https://rvrecht.deutsche-rentenversicherung.de/SharedDocs/rvRecht/05_Normen_und_Vertraege/01_Sozialgesetzbuch/08_SGB_VIII/0042/0042_2017_07_29.html",
+              "sha256": "b80cc6ed8aeba6c02a25bcf8edf141853698fccd8c223c65ee84493466d03ed5"
+            },
+            {
+              "role": "amendment",
+              "locator": "BGBl. 2017 I S. 2780, Art. 3",
+              "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl117s2780.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+              "sha256": "290646c001c354533c9d370cf9931f18840d1bdc6982b985969480cba1757d15"
+            }
+          ]
+        },
+        {
+          "valid_from": "2021-06-10",
+          "valid_until_exclusive": "2026-06-12",
+          "text": "(1) Das Jugendamt ist berechtigt und verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn 1. das Kind oder der Jugendliche um Obhut bittet oder 2. eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert und a) die Personensorgeberechtigten nicht widersprechen oder b) eine familiengerichtliche Entscheidung nicht rechtzeitig eingeholt werden kann oder 3. ein ausländisches Kind oder ein ausländischer Jugendlicher unbegleitet nach Deutschland kommt und sich weder Personensorge- noch Erziehungsberechtigte im Inland aufhalten. Die Inobhutnahme umfasst die Befugnis, ein Kind oder einen Jugendlichen bei einer geeigneten Person, in einer geeigneten Einrichtung oder in einer sonstigen Wohnform vorläufig unterzubringen; im Fall von Satz 1 Nummer 2 auch ein Kind oder einen Jugendlichen von einer anderen Person wegzunehmen. (2) Das Jugendamt hat während der Inobhutnahme unverzüglich das Kind oder den Jugendlichen umfassend und in einer verständlichen, nachvollziehbaren und wahrnehmbaren Form über diese Maßnahme aufzuklären, die Situation, die zur Inobhutnahme geführt hat, zusammen mit dem Kind oder dem Jugendlichen zu klären und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. Dem Kind oder dem Jugendlichen ist unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Das Jugendamt hat während der Inobhutnahme für das Wohl des Kindes oder des Jugendlichen zu sorgen und dabei den notwendigen Unterhalt und die Krankenhilfe sicherzustellen; § 39 Absatz 4 Satz 2 gilt entsprechend. Das Jugendamt ist während der Inobhutnahme berechtigt, alle Rechtshandlungen vorzunehmen, die zum Wohl des Kindes oder Jugendlichen notwendig sind; der mutmaßliche Wille der Personensorge- oder der Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. Im Fall des Absatzes 1 Satz 1 Nummer 3 gehört zu den Rechtshandlungen nach Satz 4, zu denen das Jugendamt verpflichtet ist, insbesondere die unverzügliche Stellung eines Asylantrags für das Kind oder den Jugendlichen in Fällen, in denen Tatsachen die Annahme rechtfertigen, dass das Kind oder der Jugendliche internationalen Schutz im Sinne des § 1 Absatz 1 Nummer 2 des Asylgesetzes benötigt; dabei ist das Kind oder der Jugendliche zu beteiligen. (3) Das Jugendamt hat im Fall des Absatzes 1 Satz 1 Nummer 1 und 2 die Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten, sie in einer verständlichen, nachvollziehbaren und wahrnehmbaren Form umfassend über diese Maßnahme aufzuklären und mit ihnen das Gefährdungsrisiko abzuschätzen. Widersprechen die Personensorge- oder Erziehungsberechtigten der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen den Personensorge- oder Erziehungsberechtigten zu übergeben, sofern nach der Einschätzung des Jugendamts eine Gefährdung des Kindeswohls nicht besteht oder die Personensorge- oder Erziehungsberechtigten bereit und in der Lage sind, die Gefährdung abzuwenden oder 2. eine Entscheidung des Familiengerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Sind die Personensorge- oder Erziehungsberechtigten nicht erreichbar, so gilt Satz 2 Nummer 2 entsprechend. Im Fall des Absatzes 1 Satz 1 Nummer 3 ist unverzüglich die Bestellung eines Vormunds oder Pflegers zu veranlassen. Widersprechen die Personensorgeberechtigten der Inobhutnahme nicht, so ist unverzüglich ein Hilfeplanverfahren zur Gewährung einer Hilfe einzuleiten. (4) Die Inobhutnahme endet mit 1. der Übergabe des Kindes oder Jugendlichen an die Personensorge- oder Erziehungsberechtigten, 2. der Entscheidung über die Gewährung von Hilfen nach dem Sozialgesetzbuch. (5) Freiheitsentziehende Maßnahmen im Rahmen der Inobhutnahme sind nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. (6) Ist bei der Inobhutnahme die Anwendung unmittelbaren Zwangs erforderlich, so sind die dazu befugten Stellen hinzuzuziehen.",
+          "text_sha256": "e1450bb8864f09422f9cadd18c297b08d55852da334177151cf18f4981dab5bb",
+          "sources": [
+            {
+              "role": "wording",
+              "locator": "Deutsche Rentenversicherung, § 42 SGB VIII",
+              "url": "https://rvrecht.deutsche-rentenversicherung.de/SharedDocs/rvRecht/05_Normen_und_Vertraege/01_Sozialgesetzbuch/08_SGB_VIII/0042/0042_2021_06_10.html",
+              "sha256": "49d48a75c0acfc6d8d6d32bdd606917c20c6ba300519d6e975d4afc920099896"
+            },
+            {
+              "role": "amendment",
+              "locator": "BGBl. 2021 I S. 1444, Art. 1",
+              "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl121s1444.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+              "sha256": "26e083595ff900eb03d8f4f3e4934c7f62fb005785432874de02811f01ea0885"
+            }
+          ]
+        },
+        {
+          "valid_from": "2026-06-12",
+          "valid_until_exclusive": null,
+          "text": "(1) Das Jugendamt ist berechtigt und verpflichtet, ein Kind oder einen Jugendlichen in seine Obhut zu nehmen, wenn 1. das Kind oder der Jugendliche um Obhut bittet oder 2. eine dringende Gefahr für das Wohl des Kindes oder des Jugendlichen die Inobhutnahme erfordert und a) die Personensorgeberechtigten nicht widersprechen oder b) eine familiengerichtliche Entscheidung nicht rechtzeitig eingeholt werden kann oder 3. ein ausländisches Kind oder ein ausländischer Jugendlicher unbegleitet nach Deutschland kommt und sich weder Personensorge- noch Erziehungsberechtigte im Inland aufhalten. Die Inobhutnahme umfasst die Befugnis, ein Kind oder einen Jugendlichen bei einer geeigneten Person, in einer geeigneten Einrichtung oder in einer sonstigen Wohnform vorläufig unterzubringen; im Fall von Satz 1 Nummer 2 auch ein Kind oder einen Jugendlichen von einer anderen Person wegzunehmen. (2) Das Jugendamt hat während der Inobhutnahme unverzüglich das Kind oder den Jugendlichen umfassend und in einer verständlichen, nachvollziehbaren und wahrnehmbaren Form über diese Maßnahme aufzuklären, die Situation, die zur Inobhutnahme geführt hat, zusammen mit dem Kind oder dem Jugendlichen zu klären und Möglichkeiten der Hilfe und Unterstützung aufzuzeigen. Dem Kind oder dem Jugendlichen ist unverzüglich Gelegenheit zu geben, eine Person seines Vertrauens zu benachrichtigen. Das Jugendamt hat während der Inobhutnahme für das Wohl des Kindes oder des Jugendlichen zu sorgen und dabei den notwendigen Unterhalt und die Krankenhilfe sicherzustellen; § 39 Absatz 4 Satz 2 gilt entsprechend. Das Jugendamt ist während der Inobhutnahme berechtigt, alle Rechtshandlungen vorzunehmen, die zum Wohl des Kindes oder Jugendlichen notwendig sind; der mutmaßliche Wille der Personensorge- oder der Erziehungsberechtigten ist dabei angemessen zu berücksichtigen. Im Fall des Absatzes 1 Satz 1 Nummer 3 gehört zu den Rechtshandlungen nach Satz 4, zu denen das Jugendamt verpflichtet ist, insbesondere die unverzügliche Einreichung eines Asylantrags für das Kind oder den Jugendlichen in Fällen, in denen Tatsachen die Annahme rechtfertigen, dass das Kind oder der Jugendliche internationalen Schutz im Sinne des § 1 Absatz 1 Nummer 2 des Asylgesetzes benötigt; dabei ist das Kind oder der Jugendliche zu beteiligen. (3) Das Jugendamt hat im Fall des Absatzes 1 Satz 1 Nummer 1 und 2 die Personensorge- oder Erziehungsberechtigten unverzüglich von der Inobhutnahme zu unterrichten, sie in einer verständlichen, nachvollziehbaren und wahrnehmbaren Form umfassend über diese Maßnahme aufzuklären und mit ihnen das Gefährdungsrisiko abzuschätzen. Widersprechen die Personensorge- oder Erziehungsberechtigten der Inobhutnahme, so hat das Jugendamt unverzüglich 1. das Kind oder den Jugendlichen den Personensorge- oder Erziehungsberechtigten zu übergeben, sofern nach der Einschätzung des Jugendamts eine Gefährdung des Kindeswohls nicht besteht oder die Personensorge- oder Erziehungsberechtigten bereit und in der Lage sind, die Gefährdung abzuwenden oder 2. eine Entscheidung des Familiengerichts über die erforderlichen Maßnahmen zum Wohl des Kindes oder des Jugendlichen herbeizuführen. Sind die Personensorge- oder Erziehungsberechtigten nicht erreichbar, so gilt Satz 2 Nummer 2 entsprechend. Im Fall des Absatzes 1 Satz 1 Nummer 3 ist unverzüglich die Bestellung eines Vormunds oder Pflegers zu veranlassen. Widersprechen die Personensorgeberechtigten der Inobhutnahme nicht, so ist unverzüglich ein Hilfeplanverfahren zur Gewährung einer Hilfe einzuleiten. (4) Die Inobhutnahme endet mit 1. der Übergabe des Kindes oder Jugendlichen an die Personensorge- oder Erziehungsberechtigten, 2. der Entscheidung über die Gewährung von Hilfen nach dem Sozialgesetzbuch. (5) Freiheitsentziehende Maßnahmen im Rahmen der Inobhutnahme sind nur zulässig, wenn und soweit sie erforderlich sind, um eine Gefahr für Leib oder Leben des Kindes oder des Jugendlichen oder eine Gefahr für Leib oder Leben Dritter abzuwenden. Die Freiheitsentziehung ist ohne gerichtliche Entscheidung spätestens mit Ablauf des Tages nach ihrem Beginn zu beenden. (6) Ist bei der Inobhutnahme die Anwendung unmittelbaren Zwangs erforderlich, so sind die dazu befugten Stellen hinzuzuziehen.",
+          "text_sha256": "5a570ea38ff4c1229a3a3e51c2a08ca8457c6667bdf14815d13d13e10605f789",
+          "sources": [
+            {
+              "role": "wording",
+              "locator": "Deutsche Rentenversicherung, § 42 SGB VIII",
+              "url": "https://rvrecht.deutsche-rentenversicherung.de/SharedDocs/rvRecht/05_Normen_und_Vertraege/01_Sozialgesetzbuch/08_SGB_VIII/0042/0042_2026_06_12.html",
+              "sha256": "9e3b98c7aa1d3c6d521199c3e4445a70400c810fd4870dd83e641abd1bd221ab"
+            },
+            {
+              "role": "amendment",
+              "locator": "BGBl. 2026 I Nr. 111",
+              "url": "https://www.recht.bund.de/bgbl/1/2026/111/VO.html",
+              "sha256": "6ad22e70448c22a448a47c7a778b131a7ac662f99780c5fd982c6b63b930cb29"
+            }
+          ]
+        }
+      ],
+      "reviewed_instructions": [
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl100s1426.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "8baee1e61b0e54a33e08da898fe1e1cf4e78951e202f8541e3b3a532d8822bd7",
+          "article": "3",
+          "subdivision": null,
+          "instruction_sha256": "24658a1248787c157623db2a97576d2da3f1d055d9bfc623870d0c43cc695c9a"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl100s1479.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "8cbe39a1e6e3f7bb8a0b674606afe913789040c1bab9bad80899f17d168be5b0",
+          "article": "3",
+          "subdivision": null,
+          "instruction_sha256": "e42be0f8155496727f99e89ff0653455e938c67187e3a8e4b695a7dddf5dfc78"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl101s0266.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "1a7be3c8d3e40242272576c2b1be887a7c674b8fb2bd28b8432e64e9dde2940a",
+          "article": "3",
+          "subdivision": "§ 55",
+          "instruction_sha256": "ea7f5c00ecc7fb97ad5dde0906976428de603a87263dfa7ac204fe31cfaba347"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl101s1046.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "067f66cef3059d659cb4cb409e13ae6a96928f7283f89faf7d0ecb3b96365e15",
+          "article": "8",
+          "subdivision": null,
+          "instruction_sha256": "33728f0fc14a14ae0bb0024f4de7bb30a85cc764fc2a9278d63c9f66b5cf4e80"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl101s1206.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "e57095d7240740af618d3855c3cae39584e9f3b181dc55246516085906d55803",
+          "article": "2",
+          "subdivision": "31",
+          "instruction_sha256": "61d052df1ce2d6fd865f711e776c3e180f43fffa243ef71f93009c0f407478c3"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl101s2950.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "74c36472279d4429cd9fccec99cf9a517bbdb45c2767edec768b94595c18fb64",
+          "article": "4",
+          "subdivision": "6",
+          "instruction_sha256": "8304da674a35cadbf469a717f063f3fe03c936d80c96830fba1784eda3950591"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl101s3762.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "b898fdb1a77971610a2741f7a22890a92a979155fff923b94b71617b928d82b6",
+          "article": "8c",
+          "subdivision": null,
+          "instruction_sha256": "7f3e8c1ca9e1f54d6823ea9bd1c5f122daa53d89c7a975971f070ab3c4a9975a"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl102s1239.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "e93122d98749f098f6f0fcb923d517a183ec7844589532c94de8b67330b0d522",
+          "article": "3",
+          "subdivision": null,
+          "instruction_sha256": "6b7ff64a49a9846b6a3829e69fd406a47c4f3f006bd4f44aaa2ef247f59e8708"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl103s2547.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "269fc5a2418ef0a7630da1d33a978fdea32dec00c4cd0cd553580687612a3d1d",
+          "article": "2",
+          "subdivision": null,
+          "instruction_sha256": "6c3e1345ac5a0135922f4279bc3ea2c70f953005074bd311e01c77fcda386301"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl103s2848.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "2eae8df2eb8d9ffad9f71200d561630cb071caeb5183b82138c02dba03fefb98",
+          "article": "7",
+          "subdivision": null,
+          "instruction_sha256": "a8e3e94057400f7ecb9e06e1b26fd3ced01d65254bb16632f31d86aecc97761a"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl103s2954.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "855935b72c159fae2de91cb6002f08d6094fa25a8300f37ba9dc9898c33846bb",
+          "article": "8",
+          "subdivision": null,
+          "instruction_sha256": "4b5112b4e663ea061385561d3a70866b2858e111efe06bd9b95d44ff64468fc8"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl103s3022.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "dfcaad14e41f46c4c1d4116e3a65b9864d607a48838628ac8f56182b4616069e",
+          "article": "7",
+          "subdivision": null,
+          "instruction_sha256": "b420f97bbfdda786ed2cc54b760d6a4d51f273909a5328d25f4e0c6d2640b722"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl104s2014.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "89ed9b483ec728aebd60c185fd2cdf0a993f84554bcb7ea49170f75e86907c8d",
+          "article": "7",
+          "subdivision": null,
+          "instruction_sha256": "3661051d18ddef3cb9db95e0b0954989fb9c0819513a2e3b1d44acded0cf39fd"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl104s3852.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "188618104d876f007c78747397eefbe888117b2e96d9826bb8e5c3e1bb0dad6c",
+          "article": "1",
+          "subdivision": null,
+          "instruction_sha256": "4213fd93e2455b1f0e5ce62dad00f40c15708708ba218d615758098e466083f6"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl105s0818.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "780c86a82bd56c9887d45376ce62ea154f522e9eb64f6473dc2aa357cb620f35",
+          "article": "7",
+          "subdivision": null,
+          "instruction_sha256": "60cb08a5de1f75373b59d8bea6fa03d17681e4e2e9c54444e64f6c7366a01569"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl105s2477.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "bcc672330b277eb5d020fd431ea36ed5343a2bec2d6af032fb459ff9db2d0d82",
+          "article": "2",
+          "subdivision": "6",
+          "instruction_sha256": "d1bdbd6d1bee930fbe81e0e695a2d59ddab8b462ab63a4d5a5c0c2d02efa3d51"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/text.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl105s2729.pdf%27%5D&bk=Bundesanzeiger_BGBl&skin=pdf",
+          "pdf_sha256": "b2e1149a46d565d20aef17a5582e3d0cd6c1660c45534d743744c2677a295829",
+          "article": "1",
+          "subdivision": null,
+          "instruction_sha256": "83150a912079336f7f3bd24e2158ae5ccee249e89e6d7b6de2b27fa7854b189a"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl111s2975.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "23bd1f7dc6a2fde229c67d97c56f5505ac183b746ebf661af7c2ec766d0258e6",
+          "article": "2",
+          "subdivision": null,
+          "instruction_sha256": "86dbcb955a4d1df14cc3cc9424c66ab7bb7538f232d7486084c71a17067a56b0"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl107s0122.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "c3dafeba0303f4c0015a6bf79adbcef5195806ab4bf04282a92c4c73a4a71239",
+          "article": "2",
+          "subdivision": "23",
+          "instruction_sha256": "a0a14fb2753cad5fdd822361c1daae3bab9f0bba05c018f46caaba796de7f825"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl108s2149.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "536b179246fd0639a64d00301807f011c99e22ac324f16378ed6f21f5bd6265b",
+          "article": "3",
+          "subdivision": "3",
+          "instruction_sha256": "02972c8aa47503cc1d3137e6874e86f6b4aebc38caa1cb84ccc10228a58f6cdd"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl108s2403.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "a565816f3aad38df841d0204f35207a6fe5054688ea96ca2ebedc45aeafbb068",
+          "article": "1",
+          "subdivision": null,
+          "instruction_sha256": "e68aa77fb45062468d87bd17e5785171dc6093acda4f846b9e21b093fd5babd2"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl108s2586.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "6de6f5c369c39f78bb95b162c6e8009571d9a47056409d9f875b8c71dac0fc83",
+          "article": "105",
+          "subdivision": null,
+          "instruction_sha256": "5bd173d7fb7a101464621976b0cf140aca49fd7f174a35e1aec30eb30bbcf6e6"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl109s1696.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "93c75e0ca456bc0afe38d098ccd10c8674354ac3ecf08bfb907c953836d5098b",
+          "article": "12",
+          "subdivision": null,
+          "instruction_sha256": "9725d463807c29b167044f2115389839e4deb5220df036518d2c507041855302"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl111s0453.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "91e5762d92eb7a688fff137b90b2f9e7fef9db0851b4d445f72f1bd583e76fc3",
+          "article": "3a",
+          "subdivision": null,
+          "instruction_sha256": "6eaf8bc43ed1187f94731822f256006704a0e277065a6095243de499e4cce735"
+        },
+        {
+          "url": "https://www.bgbl.de/xaver/bgbl/start.xav?start=%2F%2F%2A%5B%40attr_id%3D%27bgbl111s1306.pdf%27%5D&startbk=Bundesanzeiger_BGBl",
+          "pdf_sha256": "3fed6c942ce2e1fb07918648d8b11bede206bd8ed271c15d18b41bd1ee256c8c",
+          "article": "2",
+          "subdivision": null,
+          "instruction_sha256": "1ca63aa1fca84f7485d01bf28f991c74d4f67a33e6c846699e8240a6334da57f"
+        }
+      ]
+    }
+  }
+}

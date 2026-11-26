@@ -2078,6 +2078,14 @@ def main() -> int:
         sizes["eu_index.json"] = dump("eu_index.json", eu_index)
     else:
         (WEB / "eu_index.json").unlink(missing_ok=True)
+    from api.reviewed_norm_editions import FILENAME as editions_file, validate as validate_editions
+    source = ROOT / "data" / editions_file
+    if source.is_file():
+        reviewed = json.loads(source.read_bytes())
+        validate_editions(reviewed)
+        sizes[editions_file] = dump(editions_file, reviewed)
+    else:
+        (WEB / editions_file).unlink(missing_ok=True)
     # The API reads per-norm official links from the same release as the acts.
     # A data-only publication can precede deployment of a new API package.
     toc_size = publish_gii_toc(ROOT / "api" / "data" / "gii_toc.json", WEB / "gii_toc.json")
