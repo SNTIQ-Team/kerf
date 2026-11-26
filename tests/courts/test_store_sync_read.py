@@ -895,3 +895,18 @@ def test_sole_docket_match_respects_an_explicit_conflicting_form(conn):
     assert [r[1] for r in rows] == [doc, None, doc, doc, doc, doc, doc]
     assert all(word in row[0] for word, row in zip(words, rows))
     assert relink(conn) == 0
+
+def test_rekey_checks_each_paragraph_and_recomputes_the_document_signature(conn):
+    import hashlib
+    from courts.store import rekey_decision, store_decision
+
+    parsed = _doc("he", "K1", ["Erste Zeile.", "Zweite Zeile."], labels=["1", "2"])
+    old, _ = store_decision(conn, parsed, content_hash="capture", capture_path="-", media_type="x")
+    new = old + "~other"
+    rekey_decision(conn, old, new)
+    signature = hashlib.sha256(f"{new}#rn-1\tErste Zeile.\n␞\n{new}#rn-2\tZweite Zeile.".encode()).hexdigest()
+    assert conn.execute("SELECT text_hash FROM decisions WHERE id=?", (new,)).fetchone()[0] == signature
+    conn.execute("UPDATE paragraphs SET text='Changed' WHERE decision_id=? AND ordinal=1", (new,))
+    with pytest.raises(ValueError, match="paragraph integrity"):
+        rekey_decision(conn, new, old)
+    assert conn.execute("SELECT text_hash FROM decisions WHERE id=?", (new,)).fetchone()[0] == signature
