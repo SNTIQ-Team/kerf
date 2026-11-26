@@ -57,6 +57,33 @@ def _published(tmp_path, *, missing_successor=False):
     return public
 
 
+def test_indexed_norm_reads_the_complete_edition_for_the_selected_date(tmp_path, monkeypatch):
+    from tools import build_law_history
+    _published(tmp_path)
+    _, manifest, _ = _inputs()
+    path = tmp_path / "acts/fed_gg.json"
+    act = json.loads(path.read_bytes())
+    act["official_states"] = manifest["observations"]
+    path.write_text(json.dumps(act))
+    assert build_law_history.main(["--data-dir", str(tmp_path), "--documents", str(tmp_path/"none")]) == 0
+    monkeypatch.setattr(main, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(main, "_CACHE", {})
+    monkeypatch.setattr(main, "_NORM_STORES", {})
+    monkeypatch.setattr(main, "_RETROSPECTIVE_MANIFEST", None)
+    monkeypatch.setattr(main, "_RETROSPECTIVE_SOURCE", None)
+    with TestClient(main.app) as client:
+        path = "/norms/de/bund/gg/art/143h"
+        for day in ("2020-10-07", "2021-01-01", "2025-03-24"):
+            missing = client.get(path+"/at", params={"date": day})
+            assert missing.status_code == 404 and "complete edition" in missing.text
+        for day, marker in [("2020-12-31", "Gewerbesteuer"), ("2025-03-25", "Infrastruktur")]:
+            present = client.get(path+"/at", params={"date": day})
+            assert marker in present.json()["evidence"][0]["text"]
+        change = client.get(path+"/diff", params={"from":"2020-12-31","to":"2025-03-25"})
+        assert change.status_code == 200 and "Gewerbesteuer" in change.text and "Infrastruktur" in change.text
+        assert client.get(path+"/blame", params={"date":"2021-01-01"}).status_code == 404
+        assert client.get(path+"/log").status_code == 200
+
 def test_basic_law_dates_and_addresses_through_the_reader(tmp_path, monkeypatch):
     public = _published(tmp_path)
     monkeypatch.setattr(main, "DATA_DIR", tmp_path)
@@ -178,3 +205,35 @@ def test_later_observations_do_not_bridge_an_intervening_change():
     earlier, *_, latest = artifact["reconstructions"]
     assert earlier["observed_at"] == latest["observed_at"] == "2026-11-26"
     assert latest["anchor_verified_through"] == "2026-11-27"
+
+
+def test_publisher_replays_source_metadata_and_rejects_substitutions(tmp_path):
+    from verified_editions import validate_published_editions
+    artifact, manifest, states = _inputs()
+    anchor, meta = store_state_object(tmp_path / "federal_states", next(iter(states.values())))
+    manifest["objects"] = {anchor: meta}
+    add_reviewed_editions(artifact, manifest, states)
+    valid = validate_published_editions(tmp_path, manifest, artifact)
+    assert valid == set(artifact["state_objects"]) and len(valid) == 8
+    for record, field, value in [
+        ("row", "effective_from", "2017-07-21"),
+        ("row", "source_exact", True),
+        ("row", "evidence", []),
+        ("row", "successor_state_sha256", "d"*64),
+        ("meta", "anchor_state_sha256", "f"*64),
+    ]:
+        defective = copy.deepcopy(artifact)
+        row = defective["reconstructions"][0]
+        target = row if record == "row" else defective["object_metadata"][row["state_sha256"]]
+        target[field] = value
+        with pytest.raises(ReconstructionError):
+            validate_published_editions(tmp_path, manifest, defective)
+
+    extra = copy.deepcopy(artifact)
+    extra["reconstructions"].append({**extra["reconstructions"][0], "id": "a-different-claim"})
+    with pytest.raises(ReconstructionError):
+        validate_published_editions(tmp_path, manifest, extra)
+    partial = copy.deepcopy(artifact)
+    del partial["object_metadata"][next(iter(valid))]
+    with pytest.raises(ReconstructionError):
+        validate_published_editions(tmp_path, manifest, partial)

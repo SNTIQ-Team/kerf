@@ -99,8 +99,8 @@ def create_router(data_dir: Callable[[], Path],
                                     "reason": "integrity_check_failed"}]
             ) from exc
 
-    def context(norm_id: str, as_of: str | None):
-        return _context(store(), norm_id, as_of, history())
+    def context(norm_id: str, as_of: str | None, selector: str | None = None):
+        return _context(store(), norm_id, as_of, history(), selector=selector)
 
     def run(operation: str, request: Request, norm_id: str | None,
             handler: Callable[..., dict[str, Any]]):
@@ -196,7 +196,7 @@ def create_router(data_dir: Callable[[], Path],
                     "date) or version=<version_id> (that exact version)")
             as_of = _as_of(params.get("as_of"))
             structure = _bool(params.get("structure"), True)
-            resolved, chain, versions = context(norm_id, as_of)
+            resolved, chain, versions = context(norm_id, as_of, params.get("date") or params.get("version"))
             if params.get("version"):
                 version, picked = _pick(versions, params["version"], chain)
                 on = (version.first_state.valid_from or
@@ -269,9 +269,10 @@ def create_router(data_dir: Callable[[], Path],
                     "invalid_argument",
                     "diff needs from= and to= (YYYY-MM-DD, a version id, a "
                     "content hash prefix, or 'head')")
-            resolved, chain, versions = context(norm_id, as_of)
+            resolved, chain, versions = context(norm_id, as_of, params["from"])
             left, left_res = _pick(versions, params["from"], chain)
-            right, right_res = _pick(versions, params["to"], chain)
+            _, right_chain, right_versions = context(norm_id, as_of, params["to"])
+            right, right_res = _pick(right_versions, params["to"], right_chain)
             statuses = {left_res["status"], right_res["status"]}
             status = "ok" if statuses == {"ok"} else "temporally_unresolved"
             ops = sentence_diff(left.text, right.text,
@@ -314,7 +315,7 @@ def create_router(data_dir: Callable[[], Path],
         def handler():
             params = request.query_params
             as_of = _as_of(params.get("as_of"))
-            resolved, chain, versions = context(norm_id, as_of)
+            resolved, chain, versions = context(norm_id, as_of, params.get("date"))
             status = "ok"
             resolution: dict[str, Any] = {"resolution": "latest_version"}
             target = versions[-1]
@@ -657,11 +658,24 @@ def _bool(value: str | None, default: bool) -> bool:
 
 
 def _context(store: NormHistoryStore, norm_id: str, as_of: str | None,
-             history: LawHistoryStore | None = None
+             history: LawHistoryStore | None = None, *, selector: str | None = None
              ) -> tuple[dict[str, Any], ActChain, list[NormVersion]]:
     resolved = store.resolve(norm_id)
     act_id = str(resolved["act_id"])
     if history is not None and as_of is None and history.covers(act_id):
+        if (selector and re.fullmatch(r"\d{4}-\d{2}-\d{2}", selector)
+                and history.has_verified_federal_state(act_id, selector)):
+            dated = store.chain(act_id, as_of=as_of)
+            if any(state.interval_id and not state.gaps and state.valid_from
+                   and state.valid_from_status == "official_verified" and state.valid_from <= selector
+                   and (not state.valid_until or selector < state.valid_until)
+                   for state in dated.states):
+                source_versions = dated.versions_of(resolved["norm_id"])
+                if source_versions:
+                    return resolved, dated, source_versions
+                raise EnvelopeError("not_in_corpus",
+                                    f"The complete edition for {selector} contains no {resolved['norm_id']}.",
+                                    searched=_searched(dated))
         chain, versions, changes = norm_chain(history, resolved,
                                               resolved["act"])
         chain.change_records = changes  # type: ignore[attr-defined]

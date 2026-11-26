@@ -24,6 +24,7 @@ import sqlite3
 from pathlib import Path
 
 from .paragraphs import split_paragraph_id
+from . import paragraph_ranges
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS corrections(
@@ -90,14 +91,33 @@ def record(conn: sqlite3.Connection, *, target: str, kind: str, new, evidence: s
         if new["assessment"] not in STORED_ASSESSMENTS:
             raise CorrectionError(f"assessment must be one of {sorted(STORED_ASSESSMENTS)}")
         field = target_id
+    elif kind == "paragraph_boundary" and isinstance(new, dict):
+        key = split_paragraph_id(target)
+        if not key or not isinstance(new.get("anchor"), str) or not quote or paragraph_ranges.text_hash(quote) != new.get("fragment_sha256"):
+            raise CorrectionError("a former paragraph range requires its full earlier text")
+        row = conn.execute("""SELECT p.anchor, p.text, lower(hex(p.text_hash)) AS text_hash, d.content_hash
+                             FROM paragraphs p JOIN decisions d ON d.id=p.decision_id
+                             WHERE p.decision_id=? AND p.anchor=?""", (decision_id, new.get("anchor"))).fetchone()
+        if not paragraph_ranges.valid_range(new, row, key[1]):
+            raise CorrectionError("former range differs from the source capture or canonical paragraph")
+        existing = conn.execute("SELECT text FROM paragraphs WHERE decision_id=? AND anchor=?", key).fetchone()
+        if existing is not None and existing["text"] != quote:
+            raise CorrectionError("earlier address currently identifies different text")
+        field = paragraph_ranges.FIELD
+        prior = conn.execute("SELECT id,new,fixture FROM corrections WHERE target=? AND kind=? AND field=? ORDER BY id DESC LIMIT 1",
+                             (target, kind, field)).fetchone()
+        if prior and json.loads(prior["new"]) == new:
+            return {"id": prior["id"], "target": target, "kind": kind, "field": field,
+                    "old": None, "new": new, "fixture": prior["fixture"]}
     elif kind == "paragraph_boundary":
         if not quote or not isinstance(new, str):
             raise CorrectionError("paragraph_boundary needs --quote and the correct paragraph id suffix as new")
         field = quote
     elif kind == "relation" and not target_id:
         raise CorrectionError("relation corrections need --target-id")
-    fixture = _write_fixture(conn, decision, kind=kind, field=field, new=new, target=target, home=home) \
-        if write_fixture else None
+    ranged = kind == "paragraph_boundary" and isinstance(new, dict)
+    fixture = _write_fixture(conn, decision, kind=kind, field=quote if ranged else field,
+                             new=new["anchor"] if ranged else new, target=target, home=home) if write_fixture else None
     cur = conn.execute("""INSERT INTO corrections(target, kind, field, old, new, evidence, author, created_at,
                                                   fixture)
                           VALUES(?,?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%S+00:00','now'),?)""",
