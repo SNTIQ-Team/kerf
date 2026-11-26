@@ -33,6 +33,7 @@ metadata, relations and ``editions`` (``articles``: ``enbez``/``titel``/``text``
 
 Usage:
     python3 pipeline/fetch_eu_texts.py [--acts 32016R0679,12016E] [--offline]
+    python3 pipeline/fetch_eu_texts.py --treaty-edition 02016E/TXT-20160901 --article 15
 """
 from __future__ import annotations
 
@@ -572,7 +573,10 @@ def _formex_reading_tree(data: bytes) -> ET.Element:
 
 def parse_formex(data: bytes) -> dict[str, Any]:
     """Articles of one Formex 4 act (OJ ``ACT`` or consolidated ``CONS.ACT``)."""
-    root = _formex_reading_tree(data)
+    return _render_formex(_formex_reading_tree(data))
+
+
+def _render_formex(root: ET.Element) -> dict[str, Any]:
     articles, annexes = [], 0
     for article in _formex_articles(root):
         label = _clean("".join(article.find("TI.ART").itertext())) if article.find("TI.ART") is not None else ""
@@ -961,11 +965,114 @@ def fetch_act(cellar: Cellar, spec: dict[str, Any], *, lisbon: dict[str, Any] | 
     }
 
 
+_TREATY_EDITION = re.compile(r"02016([ME])/TXT-(\d{8})")
+_MAIN_TREATIES = {
+    "M": ("Konsolidierte Fassung des Vertrags über die Europäische Union", 55),
+    "E": ("Konsolidierte Fassung des Vertrags über die Arbeitsweise der Europäischen Union", 358),
+}
+
+
+def _treaty_id(celex: str) -> tuple[str, str, int]:
+    match = _TREATY_EDITION.fullmatch(celex)
+    if not match:
+        raise ValueError("Expected a complete TEU or TFEU consolidation CELEX")
+    day = datetime.strptime(match[2], "%Y%m%d").date().isoformat()
+    title, size = _MAIN_TREATIES[match[1]]
+    return day, title, size
+
+
+def parse_treaty_edition(data: bytes, celex: str) -> dict[str, Any]:
+    """Read the verified main German treaty and the dates printed in its own Formex header."""
+    day, title, size = _treaty_id(celex)
+    if data.startswith(b"PK"):
+        import io
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            files = [n for n in archive.namelist() if n.endswith(".xml") and not n.endswith((".doc.xml", ".toc.xml"))]
+            if len(files) != 1:
+                raise ValueError("Expected one complete treaty XML in the Formex archive")
+            data = archive.read(files[0])
+    root = _formex_reading_tree(data)
+    header = root.find("INFO.CONSLEG")
+    if root.tag != "CONS.OTH" or header is None or _iso(header.get("START.DATE")) != day:
+        raise ValueError(f"Formex consolidation date does not identify {celex}")
+    sections = [n.find("ENACTING.TERMS") for n in root.iter("CONS.DOC.GEN")
+                if n.find("TITLE") is not None and _formex_text(n.find("TITLE")) == title]
+    if len(sections) != 1 or sections[0] is None:
+        raise ValueError(f"Missing or ambiguous main treaty in {celex}")
+    articles = _render_formex(sections[0])["articles"]
+    if [a["enbez"] for a in articles] != [f"Art. {i}" for i in range(1, size + 1)]:
+        raise ValueError(f"Incomplete article set for {celex}")
+    corrections = []
+    for note in root.iter("CORRIG"):
+        issued = note.find(".//BIB.INSTANCE.CONS/DATE")
+        corrections.append({"celex": note.findtext(".//NO.CELEX"),
+                            "date": _iso(issued.get("ISO")) if issued is not None else None})
+    return {"celex": celex, "language": "de", "title": title, "article_count": size,
+            "consolidation_date": day, "formex_report_date": _iso(header.get("CONSLEG.DATE")),
+            "formex_last_modification": _iso(header.get("DATE.LAST.MOD")),
+            "corrigenda": corrections, "articles": articles}
+
+
+def fetch_treaty_edition(cellar: Cellar, celex: str, article: int | None = None) -> dict[str, Any]:
+    """Resolve an exact edition. Record the supplying item to allow an offline replay."""
+    _, _, size = _treaty_id(celex)
+    if article is not None and not 1 <= article <= size:
+        raise ValueError(f"Article {article} is outside this treaty")
+    receipt = cellar.cache / "treaty_editions" / (celex.replace("/", "_") + ".json")
+    if cellar.offline:
+        previous = json.loads(receipt.read_bytes())
+        urls = [previous["url"]]
+    else:
+        fmt = manifestations(cellar, [celex]).get(celex, {}).get("fmx4")
+        if not fmt:
+            raise ValueError(f"No German Formex manifestation for {celex}")
+        urls = manifestation_items(cellar, fmt)
+    results = []
+    for url in urls:
+        item = cellar.get(url)
+        if cellar.offline and item["sha256"] != previous["sha256"]:
+            raise ValueError(f"Source item SHA-256 differs from the receipt for {celex}")
+        raw = item["bytes"]
+        if not raw.startswith(b"PK") and not raw.lstrip().startswith((b"<", b"\xef\xbb\xbf<")):
+            continue
+        if not raw.startswith(b"PK") and ET.fromstring(raw).tag != "CONS.OTH":
+            continue
+        result = parse_treaty_edition(raw, celex)
+        result["source"] = {key: item[key] for key in ("url", "sha256", "retrieved_at")}
+        results.append(result)
+    if len(results) != 1:
+        raise ValueError(f"Expected one German main treaty source for {celex}, found {len(results)}")
+    result = results[0]
+    if not cellar.offline:
+        from tempfile import NamedTemporaryFile
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        with NamedTemporaryFile(mode="w", dir=receipt.parent, delete=False) as handle:
+            json.dump(result["source"], handle)
+        Path(handle.name).replace(receipt)
+    if article is not None:
+        result["article"] = result.pop("articles")[article - 1]
+    return result
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--acts", help="probe these comma-separated CELEX IDs in a separate snapshot")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--treaty-edition", help="read a complete German treaty consolidation by CELEX")
+    parser.add_argument("--article", type=int, help="select one main article of --treaty-edition")
+    selection.add_argument("--acts", help="probe these comma-separated CELEX IDs in a separate snapshot")
     parser.add_argument("--offline", action="store_true", help="cache only (no network)")
     args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.treaty_edition is not None:
+        try:
+            result = fetch_treaty_edition(Cellar(offline=args.offline), args.treaty_edition, args.article)
+        except (OSError, ValueError, RuntimeError, ET.ParseError) as exc:
+            print(f"[err] {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    if args.article is not None:
+        parser.error("--article requires --treaty-edition")
     sys.path.insert(0, str(ROOT / "pipeline"))
     from common import snapshot_dir, write_jsonl
 
